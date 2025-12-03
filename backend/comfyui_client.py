@@ -382,6 +382,32 @@ class ComfyUIClient:
         except Exception:
             return {"queue_running": [], "queue_pending": []}
 
+    def get_execution_time(self, prompt_id: str) -> Optional[float]:
+        """Get the total execution time in seconds for a completed prompt."""
+        status = self.get_prompt_status(prompt_id)
+        if status.get("status") != "completed":
+            return None
+        
+        data = status.get("data") or {}
+        
+        # ComfyUI stores execution time in status.execution_time or status.execution_cached
+        # The structure varies by version, so we check multiple locations
+        status_info = data.get("status", {})
+        
+        # Try to get execution time from status
+        exec_time = status_info.get("execution_time")
+        if exec_time is not None:
+            return float(exec_time)
+        
+        # Alternative: calculate from prompt timestamps if available
+        prompt_info = data.get("prompt", [])
+        if len(prompt_info) >= 2:
+            # prompt_info[0] is the prompt number, prompt_info[1] is the prompt_id
+            # Some versions include timestamps
+            pass
+        
+        return None
+
     def get_output_images(self, prompt_id: str) -> List[str]:
         """Get output media URLs (images, videos, gifs) for a completed prompt."""
         status = self.get_prompt_status(prompt_id)

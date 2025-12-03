@@ -2,9 +2,14 @@
 
 import sqlite3
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
+
+
+def utc_now_iso():
+    """Return current UTC time as ISO string with Z suffix for proper browser parsing."""
+    return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 DATABASE_PATH = "comfyui_queue.db"
 
@@ -61,6 +66,7 @@ def init_db():
                 end_frame_url TEXT,
                 video_path TEXT,
                 comfyui_prompt_id TEXT,
+                execution_time REAL,
                 error_message TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 completed_at TIMESTAMP,
@@ -173,11 +179,11 @@ def update_job_status(
 
         if status == "running":
             updates.append("started_at = ?")
-            params.append(datetime.now().isoformat())
+            params.append(utc_now_iso())
 
         if status in ("completed", "failed"):
             updates.append("completed_at = ?")
-            params.append(datetime.now().isoformat())
+            params.append(utc_now_iso())
 
         if error_message is not None:
             updates.append("error_message = ?")
@@ -325,7 +331,8 @@ def update_segment_status(
     comfyui_prompt_id: Optional[str] = None,
     end_frame_url: Optional[str] = None,
     video_path: Optional[str] = None,
-    error_message: Optional[str] = None
+    error_message: Optional[str] = None,
+    execution_time: Optional[float] = None
 ):
     """Update a segment's status and related fields."""
     with get_connection() as conn:
@@ -336,7 +343,7 @@ def update_segment_status(
         
         if status == "completed":
             updates.append("completed_at = ?")
-            params.append(datetime.now().isoformat())
+            params.append(utc_now_iso())
         
         if comfyui_prompt_id is not None:
             updates.append("comfyui_prompt_id = ?")
@@ -353,6 +360,10 @@ def update_segment_status(
         if error_message is not None:
             updates.append("error_message = ?")
             params.append(error_message)
+        
+        if execution_time is not None:
+            updates.append("execution_time = ?")
+            params.append(execution_time)
         
         params.extend([job_id, segment_index])
         

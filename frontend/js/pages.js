@@ -126,7 +126,7 @@ const renderJobDetail = function(container) {
   
   updateJobDetail(jobId);
   
-  // Auto-refresh every 3 seconds only if job is active
+  // Auto-refresh every 3 seconds only if job is active (but NOT when awaiting_prompt to preserve textarea focus)
   if (AppState.jobDetailInterval) {
     clearInterval(AppState.jobDetailInterval);
   }
@@ -134,14 +134,25 @@ const renderJobDetail = function(container) {
     if (AppState.currentPage === 'job-detail') {
       try {
         const job = await API.getJob(jobId);
-        // Only refresh if job is active
-        if (['running', 'queued', 'awaiting_prompt'].includes(job.status)) {
+        // Only refresh if job is running (NOT awaiting_prompt - that would steal focus from textarea)
+        if (['running', 'queued'].includes(job.status)) {
           updateJobDetail(jobId);
+        } else if (job.status === 'awaiting_prompt') {
+          // Don't refresh UI when awaiting prompt - user is typing
+          // Just check if status changed (e.g., user submitted prompt in another tab)
+          if (AppState.lastJobStatus !== 'awaiting_prompt') {
+            updateJobDetail(jobId);
+            // Send browser notification when segment completes and needs prompt
+            const segments = await API.getSegments(jobId);
+            const completedCount = segments.filter(s => s.status === 'completed').length;
+            notifySegmentAwaitingPrompt(job.name, completedCount + 1);
+          }
         } else {
           // Job completed/errored, stop auto-refresh
           clearInterval(AppState.jobDetailInterval);
           updateJobDetail(jobId); // One final update
         }
+        AppState.lastJobStatus = job.status;
       } catch (err) {
         console.error('Failed to check job status:', err);
       }
@@ -219,11 +230,17 @@ async function updateDashboard() {
     }
     
     if (status.reachable) {
-      dot.className = 'status-dot green';
-      text.textContent = 'Connected';
+      // Check if ComfyUI is running a job or idle
+      if (status.queue && (status.queue.queue_running > 0 || status.queue.queue_pending > 0)) {
+        dot.className = 'status-dot blue';
+        text.textContent = 'Connected - Running...';
+      } else {
+        dot.className = 'status-dot green';
+        text.textContent = 'Connected - Idle';
+      }
     } else {
       dot.className = 'status-dot red';
-      text.textContent = 'Disconnected';
+      text.textContent = 'Not Connected';
     }
     
     // Update jobs
@@ -323,10 +340,10 @@ async function updateJobDetail(jobId) {
     
     document.getElementById('job-detail-name').textContent = job.name;
     
-    // Show completed banner if job is completed
-    let completedBanner = '';
+    // Show status banner - always visible with appropriate state
+    let statusBanner = '';
     if (job.status === 'completed' && job.completed_at) {
-      completedBanner = `
+      statusBanner = `
         <div style="background: #e8f5e9; border: 1px solid #4caf50; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
           <strong style="color: #2e7d32;">Completed</strong>
           <span style="color: #666; margin-left: 8px;">${formatDate(job.completed_at)}</span>
@@ -342,17 +359,25 @@ async function updateJobDetail(jobId) {
         </div>
       `;
     } else if (job.status === 'failed') {
-      completedBanner = `
+      statusBanner = `
         <div style="background: #ffebee; border: 1px solid #f44336; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
           <strong style="color: #c62828;">Failed</strong>
           ${job.error_message ? `<span style="color: #666; margin-left: 8px;">${job.error_message}</span>` : ''}
+        </div>
+      `;
+    } else {
+      // Show placeholder for pending/running/awaiting_prompt jobs
+      statusBanner = `
+        <div style="background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+          <strong style="color: #666;">Completed</strong>
+          <span style="color: #999; margin-left: 8px;">--</span>
         </div>
       `;
     }
     
     const metaContainer = document.getElementById('job-detail-meta');
     metaContainer.innerHTML = `
-      ${completedBanner}
+      ${statusBanner}
       <div class="detail-meta-item">
         <label>Status</label>
         <div class="value"><span class="chip ${getChipClass(job.status)}">${job.status}</span></div>
@@ -407,27 +432,26 @@ async function updateJobDetail(jobId) {
               <strong>Segment ${seg.segment_index + 1}</strong>
               <span class="chip ${getChipClass(seg.status)}" style="margin-left: 8px;">${seg.status}</span>
               ${seg.status === 'running' ? '<span class="spinner"></span>' : ''}
+              ${seg.execution_time ? `<span style="margin-left: 8px; color: #666; font-size: 12px;">(${Math.round(seg.execution_time)}s)</span>` : ''}
             </div>
           </div>
           <div style="display: flex; gap: 16px; align-items: flex-start; margin-top: 12px;">
             <div>
               <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Start Image</div>
-              ${seg.start_image_url ? `<img src="${seg.start_image_url}" style="width: 120px; height: 120px; border-radius: 4px; object-fit: cover; border: 2px solid #e0e0e0; cursor: pointer;" onclick="openImageLightbox('${seg.start_image_url}')" onerror="this.style.display='none'" title="Click to view full size">` : '<div style="width: 120px; height: 120px; border-radius: 4px; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; background: #f5f5f5; color: #999; font-size: 11px;">Waiting...</div>'}
+              ${seg.start_image_url ? `<img src="${seg.start_image_url}" style="width: 120px; height: 120px; border-radius: 4px; object-fit: cover; border: 2px solid #e0e0e0; cursor: pointer;" onclick="openImageLightbox('${seg.start_image_url}')" onerror="this.style.display='none'" title="Click to view full size">` : '<div style="width: 120px; height: 120px; border-radius: 4px; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; background: #f5f5f5; color: #999; font-size: 11px;">Pending</div>'}
             </div>
             <div style="flex: 1;">
               <div class="segment-prompt"><strong>Prompt:</strong> ${seg.prompt || 'No prompt yet'}</div>
             </div>
             <div>
+              <div style="font-size: 12px; color: #666; margin-bottom: 4px;">End Image</div>
               ${seg.status === 'completed' && seg.end_frame_url ? `
-                <div style="font-size: 12px; color: #666; margin-bottom: 4px;">End Frame</div>
                 <img src="${seg.end_frame_url}" style="width: 120px; height: 120px; border-radius: 4px; object-fit: cover; border: 2px solid #4caf50; cursor: pointer;" onclick="openImageLightbox('${seg.end_frame_url}')" onerror="this.style.display='none'" title="Click to view full size">
               ` : seg.status === 'running' ? `
-                <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Generating...</div>
                 <div style="width: 120px; height: 120px; border-radius: 4px; border: 2px dashed #1976d2; display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
                   <span class="spinner" style="margin: 0;"></span>
                 </div>
               ` : `
-                <div style="font-size: 12px; color: #666; margin-bottom: 4px;">End Frame</div>
                 <div style="width: 120px; height: 120px; border-radius: 4px; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; background: #f5f5f5; color: #999; font-size: 11px;">Pending</div>
               `}
             </div>

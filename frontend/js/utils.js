@@ -29,13 +29,17 @@ function showToast(message, type = 'info', title = '') {
 }
 
 function getChipClass(status) {
+  // Color coordination: green=success, blue=in progress, red=failure/error
   const map = {
-    'completed': 'success',
-    'running': 'primary',
-    'error': 'error',
-    'awaiting_prompt': 'warning',
-    'queued': 'default',
-    'processing': 'primary'
+    'completed': 'success',      // green
+    'running': 'primary',        // blue
+    'processing': 'primary',     // blue
+    'queued': 'primary',         // blue (in progress)
+    'pending': 'default',        // gray
+    'awaiting_prompt': 'warning', // orange/yellow
+    'error': 'error',            // red
+    'failed': 'error',           // red
+    'cancelled': 'error'         // red
   };
   return map[status] || 'default';
 }
@@ -84,6 +88,31 @@ function hideModal(modalId) {
 }
 
 // Image lightbox for viewing full-size images
+// Browser notifications for segment completion
+function requestNotificationPermission() {
+  if (!('Notification' in window)) {
+    console.log('Browser does not support notifications');
+    return;
+  }
+  if (Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function notifySegmentAwaitingPrompt(jobName, segmentIndex) {
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  
+  // Only notify if tab is not focused
+  if (!document.hidden) return;
+  
+  new Notification('Segment Ready for Prompt', {
+    body: `${jobName}: Segment ${segmentIndex} completed. Please enter the next prompt.`,
+    icon: '/static/favicon.ico',
+    tag: `segment-${segmentIndex}` // Prevent duplicate notifications
+  });
+}
+
 function openImageLightbox(url) {
   // Create overlay
   const overlay = document.createElement('div');

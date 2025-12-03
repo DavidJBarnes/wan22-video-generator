@@ -200,8 +200,9 @@ class QueueManager:
             success = self._process_segment(job_id, job, segment, client)
             
             if not success:
+                # Use 1-based segment number for user-facing error message
                 print(f"[QueueManager] Segment {segment_index} failed, stopping job")
-                update_job_status(job_id, "failed", error_message=f"Segment {segment_index} failed")
+                update_job_status(job_id, "failed", error_message=f"Segment {segment_index + 1} failed")
                 self._notify_update(job_id, "failed")
                 return
             
@@ -331,11 +332,15 @@ class QueueManager:
                                 # Build the URL for the uploaded frame
                                 end_frame_url = f"{comfyui_url}/view?filename={uploaded_filename}&subfolder=&type=input"
                                 
-                                # Update segment with video path and end frame URL
+                                # Get execution time from ComfyUI history
+                                exec_time = client.get_execution_time(prompt_id)
+                                
+                                # Update segment with video path, end frame URL, and execution time
                                 update_segment_status(
                                     job_id, segment_index, "completed",
                                     video_path=video_path,
-                                    end_frame_url=end_frame_url
+                                    end_frame_url=end_frame_url,
+                                    execution_time=exec_time
                                 )
                                 
                                 # Update the next segment's start image
