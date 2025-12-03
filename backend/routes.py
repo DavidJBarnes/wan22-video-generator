@@ -201,21 +201,15 @@ async def retry_job(job_id: int):
 async def get_job_thumbnail(job_id: int):
     """Get thumbnail for a job.
     
-    Priority:
-    1. First output image/video (if job completed)
-    2. Input/start image (while job is pending/running)
-    3. 404 if neither exists
+    For video generation jobs, always use the input/start image as thumbnail
+    since output_images contains video files (MP4) which can't be displayed as images.
     """
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # First, try output images (for completed jobs)
-    images = job.get("output_images") or []
-    if images:
-        return RedirectResponse(images[0])
-
-    # Fallback to input/start image (for pending/running jobs)
+    # For video jobs, always use the input image as thumbnail
+    # (output_images contains MP4 files which can't be displayed as images)
     input_image = job.get("input_image")
     if input_image:
         comfyui_url = get_setting("comfyui_url", COMFYUI_SERVER_URL)

@@ -80,19 +80,18 @@ const renderQueue = function(container) {
     <table>
       <thead>
         <tr>
-          <th>Queue</th>
-          <th>Thumbnail</th>
+          <th></th>
           <th>Job Name</th>
           <th>Created</th>
           <th>Status</th>
           <th>Segments</th>
           <th>Progress</th>
-          <th>Actions</th>
+          <th></th>
         </tr>
       </thead>
       <tbody id="jobs-table">
         <tr>
-          <td colspan="8" style="text-align: center; color: #999;">Loading...</td>
+          <td colspan="7" style="text-align: center; color: #999;">Loading...</td>
         </tr>
       </tbody>
     </table>
@@ -231,7 +230,10 @@ async function updateDashboard() {
     
     if (status.reachable) {
       // Check if ComfyUI is running a job or idle
-      if (status.queue && (status.queue.queue_running > 0 || status.queue.queue_pending > 0)) {
+      // queue_running and queue_pending are arrays, so check their length
+      const queueRunning = status.queue?.queue_running?.length || 0;
+      const queuePending = status.queue?.queue_pending?.length || 0;
+      if (queueRunning > 0 || queuePending > 0) {
         dot.className = 'status-dot blue';
         text.textContent = 'Connected - Running...';
       } else {
@@ -287,11 +289,6 @@ async function updateJobsTable() {
         
         return `
         <tr style="cursor: pointer;" onclick="navigate('job-detail', {currentJobId: '${job.id}'})">
-          <td>
-            ${job.queue_position !== null && job.queue_position !== undefined ? 
-              `<span style="font-weight: bold; color: ${job.queue_position === 0 ? '#1976d2' : '#666'};">#${job.queue_position === 0 ? 'Running' : job.queue_position}</span>` : 
-              '-'}
-          </td>
           <td><img class="thumbnail" src="${API.getJobThumbnail(job.id)}" onerror="this.style.display='none'"></td>
           <td>${job.name}</td>
           <td>${formatDate(job.created_at)}</td>
@@ -316,7 +313,7 @@ async function updateJobsTable() {
         </tr>
       `}).join('');
     } else {
-      jobsTable.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #999;">No jobs yet</td></tr>';
+      jobsTable.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #999;">No jobs yet</td></tr>';
     }
   } catch (err) {
     console.error('Jobs table update error:', err);
@@ -340,63 +337,93 @@ async function updateJobDetail(jobId) {
     
     document.getElementById('job-detail-name').textContent = job.name;
     
-    // Show status banner - always visible with appropriate state
-    let statusBanner = '';
+    // Build Final Output section - shown above segments when job is completed
+    let finalOutputSection = '';
     if (job.status === 'completed' && job.completed_at) {
-      statusBanner = `
-        <div style="background: #e8f5e9; border: 1px solid #4caf50; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
-          <strong style="color: #2e7d32;">Completed</strong>
-          <span style="color: #666; margin-left: 8px;">${formatDate(job.completed_at)}</span>
-          <div style="margin-top: 16px;">
-            <video controls style="width: 100%; max-width: 640px; border-radius: 8px;" poster="${API.getJobThumbnail(jobId)}">
-              <source src="${API.getJobVideo(jobId)}" type="video/mp4">
-              Your browser does not support the video tag.
-            </video>
-            <div style="margin-top: 8px;">
-              <a href="${API.getJobVideo(jobId)}" download="job_${jobId}_final.mp4" class="btn btn-secondary" style="display: inline-block;">Download Video</a>
+      finalOutputSection = `
+        <div class="card" style="margin-bottom: 24px;">
+          <h2 style="margin-top: 0; margin-bottom: 16px;">Final Output</h2>
+          <div style="display: flex; gap: 24px; align-items: flex-start;">
+            <div style="flex-shrink: 0;">
+              <video controls style="width: 400px; max-width: 100%; border-radius: 8px;" poster="${API.getJobThumbnail(jobId)}">
+                <source src="${API.getJobVideo(jobId)}" type="video/mp4">
+                Your browser does not support the video tag.
+              </video>
+            </div>
+            <div style="flex: 1;">
+              <div class="detail-meta-item">
+                <label>Completed</label>
+                <div class="value">${formatDate(job.completed_at)}</div>
+              </div>
+              <div class="detail-meta-item">
+                <label>Segments</label>
+                <div class="value">${completedSegments}/${totalSegments}</div>
+              </div>
+              <div class="detail-meta-item">
+                <label>Duration</label>
+                <div class="value">${totalDuration}s</div>
+              </div>
+              <div style="margin-top: 16px;">
+                <a href="${API.getJobVideo(jobId)}" download="job_${jobId}_final.mp4" class="btn btn-primary" style="display: inline-block;">Download Video</a>
+              </div>
             </div>
           </div>
         </div>
       `;
     } else if (job.status === 'failed') {
-      statusBanner = `
-        <div style="background: #ffebee; border: 1px solid #f44336; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
-          <strong style="color: #c62828;">Failed</strong>
-          ${job.error_message ? `<span style="color: #666; margin-left: 8px;">${job.error_message}</span>` : ''}
+      finalOutputSection = `
+        <div class="card" style="margin-bottom: 24px; border-left: 4px solid #f44336;">
+          <h2 style="margin-top: 0; margin-bottom: 16px;">Final Output</h2>
+          <div class="detail-meta-item">
+            <label>Status</label>
+            <div class="value"><span class="chip error">Failed</span></div>
+          </div>
+          ${job.error_message ? `
+          <div class="detail-meta-item">
+            <label>Error</label>
+            <div class="value" style="color: #c62828;">${job.error_message}</div>
+          </div>
+          ` : ''}
         </div>
       `;
     } else {
       // Show placeholder for pending/running/awaiting_prompt jobs
-      statusBanner = `
-        <div style="background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
-          <strong style="color: #666;">Completed</strong>
-          <span style="color: #999; margin-left: 8px;">--</span>
+      finalOutputSection = `
+        <div class="card" style="margin-bottom: 24px;">
+          <h2 style="margin-top: 0; margin-bottom: 16px;">Final Output</h2>
+          <div class="detail-meta-item">
+            <label>Completed</label>
+            <div class="value" style="color: #999;">--</div>
+          </div>
         </div>
       `;
     }
     
     const metaContainer = document.getElementById('job-detail-meta');
     metaContainer.innerHTML = `
-      ${statusBanner}
-      <div class="detail-meta-item">
-        <label>Status</label>
-        <div class="value"><span class="chip ${getChipClass(job.status)}">${job.status}</span></div>
-      </div>
-      <div class="detail-meta-item">
-        <label>Progress</label>
-        <div class="value">${completedSegments}/${totalSegments} segments (${progressPercent}%)</div>
-      </div>
-      <div class="detail-meta-item">
-        <label>Dimensions</label>
-        <div class="value">${width}x${height}</div>
-      </div>
-      <div class="detail-meta-item">
-        <label>Duration</label>
-        <div class="value">${totalDuration}s (${segmentDuration}s/segment)</div>
-      </div>
-      <div class="detail-meta-item">
-        <label>Created</label>
-        <div class="value">${formatDate(job.created_at)}</div>
+      ${finalOutputSection}
+      <div class="card" style="margin-bottom: 24px;">
+        <h2 style="margin-top: 0; margin-bottom: 16px;">Job Details</h2>
+        <div class="detail-meta-item">
+          <label>Status</label>
+          <div class="value"><span class="chip ${getChipClass(job.status)}">${job.status}</span></div>
+        </div>
+        <div class="detail-meta-item">
+          <label>Progress</label>
+          <div class="value">${completedSegments}/${totalSegments} segments (${progressPercent}%)</div>
+        </div>
+        <div class="detail-meta-item">
+          <label>Dimensions</label>
+          <div class="value">${width}x${height}</div>
+        </div>
+        <div class="detail-meta-item">
+          <label>Duration</label>
+          <div class="value">${totalDuration}s (${segmentDuration}s/segment)</div>
+        </div>
+        <div class="detail-meta-item">
+          <label>Created</label>
+          <div class="value">${formatDate(job.created_at)}</div>
+        </div>
       </div>
     `;
     
