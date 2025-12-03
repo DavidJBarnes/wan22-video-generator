@@ -173,6 +173,17 @@ const API = {
         return `${this.baseUrl}/jobs/${jobId}/segments/${segmentIndex}/frame`;
     },
 
+    async submitSegmentPrompt(jobId, segmentIndex, prompt) {
+        // Submit a prompt for a specific segment (used when job is awaiting_prompt)
+        const formData = new FormData();
+        formData.append('prompt', prompt);
+        
+        return this.request(`/jobs/${jobId}/segments/${segmentIndex}/prompt`, {
+            method: 'POST',
+            body: formData
+        });
+    },
+
     // ============== Image Upload ==============
 
     async uploadImage(file) {

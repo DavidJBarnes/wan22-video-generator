@@ -706,11 +706,16 @@ async function submitNextPrompt(jobId, segmentIndex) {
   }
   
   try {
-    // This would call an API endpoint to submit the next segment prompt
-    // For now, show a placeholder message
-    showToast('Prompt submitted (API endpoint not yet implemented)', 'info');
+    const result = await API.submitSegmentPrompt(jobId, segmentIndex, prompt);
+    showToast(`Prompt submitted for segment ${segmentIndex + 1}. Job resuming...`, 'success');
+    
+    // Clear the input
+    if (promptInput) promptInput.value = '';
+    
+    // Refresh the job detail view to show updated status
+    updateJobDetail(jobId);
   } catch (err) {
     console.error('Failed to submit prompt:', err);
-    showToast('Failed to submit prompt', 'error');
+    showToast('Failed to submit prompt: ' + err.message, 'error');
   }
 }
