@@ -120,20 +120,29 @@ class QueueManager:
 
             # Build the workflow
             params = job.get("parameters") or {}
+            
+            # Calculate frames for video generation (fps * segment_duration)
+            fps = int(get_setting("default_fps", "16"))
+            segment_duration = int(params.get("segment_duration", 5))
+            frames = fps * segment_duration + 1  # +1 for the start frame
+            
             workflow = client.build_workflow(
                 workflow_type=job.get("workflow_type", "txt2img"),
                 prompt=job.get("prompt", ""),
-                negative_prompt=job.get("negative_prompt", ""),
+                negative_prompt=job.get("negative_prompt", get_setting("default_negative_prompt", "")),
                 checkpoint=params.get("checkpoint", get_setting("default_checkpoint", "v1-5-pruned.safetensors")),
                 steps=int(params.get("steps", get_setting("default_steps", "20"))),
                 cfg=float(params.get("cfg", get_setting("default_cfg", "7.0"))),
                 sampler=params.get("sampler", get_setting("default_sampler", "euler")),
                 scheduler=params.get("scheduler", get_setting("default_scheduler", "normal")),
-                width=int(params.get("width", get_setting("default_width", "512"))),
-                height=int(params.get("height", get_setting("default_height", "512"))),
+                width=int(params.get("width", get_setting("default_width", "640"))),
+                height=int(params.get("height", get_setting("default_height", "640"))),
                 seed=params.get("seed"),
                 denoise=float(params.get("denoise", 0.75)),
-                input_image=job.get("input_image")
+                input_image=job.get("input_image"),
+                frames=frames,
+                high_noise_model=get_setting("high_noise_model", "wan2.2_i2v_high_noise_14B_fp16.safetensors"),
+                low_noise_model=get_setting("low_noise_model", "wan2.2_i2v_low_noise_14B_fp16.safetensors"),
             )
 
             # Queue the prompt

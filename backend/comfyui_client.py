@@ -4,8 +4,12 @@ import httpx
 import json
 import uuid
 import base64
+import os
 from typing import Optional, Dict, Any, List, Tuple
 from pathlib import Path
+
+# Path to the Wan2.2 i2v workflow template
+WAN_I2V_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflows", "video_wan2_2_14B_i2v.json")
 
 # Default workflow templates
 WORKFLOW_TEMPLATES = {
@@ -207,6 +211,144 @@ class ComfyUIClient:
             print(f"Image upload error: {e}")
             return None
 
+    def build_wan_i2v_workflow(
+        self,
+        prompt: str,
+        negative_prompt: str = "",
+        width: int = 640,
+        height: int = 640,
+        frames: int = 81,
+        start_image_filename: str = "",
+        high_noise_model: str = "wan2.2_i2v_high_noise_14B_fp16.safetensors",
+        low_noise_model: str = "wan2.2_i2v_low_noise_14B_fp16.safetensors",
+    ) -> Dict[str, Any]:
+        """Build a Wan2.2 i2v workflow from the template JSON file.
+        
+        Loads the workflow JSON, converts to ComfyUI API format, and overrides
+        the relevant parameters (prompt, image, dimensions, models).
+        """
+        # Load the workflow template
+        if not os.path.exists(WAN_I2V_WORKFLOW_PATH):
+            raise FileNotFoundError(f"Wan2.2 i2v workflow template not found at {WAN_I2V_WORKFLOW_PATH}")
+        
+        with open(WAN_I2V_WORKFLOW_PATH, "r", encoding="utf-8") as f:
+            workflow = json.load(f)
+        
+        nodes = workflow.get("nodes", [])
+        links = workflow.get("links", [])
+        
+        # Build link lookup: link_id -> (source_node_id, source_slot)
+        link_map = {}
+        for link in links:
+            link_id, source_node, source_slot, target_node, target_slot, link_type = link
+            link_map[link_id] = (source_node, source_slot)
+        
+        # Override parameters in nodes before conversion
+        for node in nodes:
+            node_type = node.get("type", "")
+            title = node.get("title", "")
+            mode = node.get("mode", 0)
+            widgets = node.get("widgets_values", [])
+            
+            # Skip bypassed nodes (mode 4)
+            if mode == 4:
+                continue
+            
+            # Override start image filename
+            if node_type == "LoadImage" and len(widgets) >= 1:
+                widgets[0] = start_image_filename
+                print(f"[Workflow] Set LoadImage to: {start_image_filename}")
+            
+            # Override positive prompt
+            if node_type == "CLIPTextEncode" and "Positive" in title and len(widgets) >= 1:
+                widgets[0] = prompt
+                print(f"[Workflow] Set positive prompt: {prompt[:50]}...")
+            
+            # Override negative prompt
+            if node_type == "CLIPTextEncode" and "Negative" in title and len(widgets) >= 1:
+                widgets[0] = negative_prompt
+                print(f"[Workflow] Set negative prompt: {negative_prompt[:50]}...")
+            
+            # Override video dimensions and frames
+            if node_type == "WanImageToVideo" and len(widgets) >= 3:
+                widgets[0] = width
+                widgets[1] = height
+                widgets[2] = frames
+                print(f"[Workflow] Set WanImageToVideo: {width}x{height}, {frames} frames")
+            
+            # Override UNET model names (handle fp8 vs fp16)
+            if node_type == "UNETLoader" and len(widgets) >= 1:
+                current_model = widgets[0]
+                if "high_noise" in current_model:
+                    widgets[0] = high_noise_model
+                    print(f"[Workflow] Set high noise model: {high_noise_model}")
+                elif "low_noise" in current_model:
+                    widgets[0] = low_noise_model
+                    print(f"[Workflow] Set low noise model: {low_noise_model}")
+        
+        # Convert to ComfyUI API format
+        api_workflow = self._convert_to_api_format(nodes, link_map)
+        
+        return api_workflow
+    
+    def _convert_to_api_format(self, nodes: List[Dict], link_map: Dict) -> Dict[str, Any]:
+        """Convert ComfyUI nodes+links format to API format.
+        
+        ComfyUI API expects: {node_id: {class_type, inputs}}
+        where inputs maps input names to either values or [source_node_id, source_slot]
+        """
+        # Widget name mappings for each node type
+        # These map widget index to input name for the API format
+        widget_mappings = {
+            "CLIPLoader": ["clip_name", "type", "device"],
+            "VAELoader": ["vae_name"],
+            "UNETLoader": ["unet_name", "weight_dtype"],
+            "LoadImage": ["image", "upload"],
+            "CLIPTextEncode": ["text"],
+            "WanImageToVideo": ["width", "height", "length", "batch_size"],
+            "ModelSamplingSD3": ["shift"],
+            "KSamplerAdvanced": ["add_noise", "seed", "control_after_generate", "steps", "cfg", "sampler_name", "scheduler", "start_at_step", "end_at_step", "return_with_leftover_noise"],
+            "LoraLoaderModelOnly": ["lora_name", "strength_model"],
+            "CreateVideo": ["frame_rate"],
+            "SaveVideo": ["filename_prefix", "format", "codec"],
+        }
+        
+        api_workflow = {}
+        
+        for node in nodes:
+            node_id = str(node["id"])
+            node_type = node.get("type", "")
+            mode = node.get("mode", 0)
+            
+            # Skip bypassed nodes (mode 4)
+            if mode == 4:
+                continue
+            
+            inputs = {}
+            
+            # Map widget values to input names
+            widgets = node.get("widgets_values", [])
+            if node_type in widget_mappings:
+                mapping = widget_mappings[node_type]
+                for i, value in enumerate(widgets):
+                    if i < len(mapping):
+                        inputs[mapping[i]] = value
+            
+            # Process input connections (these override widget values)
+            for inp in node.get("inputs", []):
+                inp_name = inp["name"]
+                link_id = inp.get("link")
+                if link_id is not None and link_id in link_map:
+                    source_node, source_slot = link_map[link_id]
+                    inputs[inp_name] = [str(source_node), source_slot]
+            
+            api_workflow[node_id] = {
+                "class_type": node_type,
+                "inputs": inputs
+            }
+        
+        return api_workflow
+
     def build_workflow(
         self,
         workflow_type: str,
@@ -221,18 +363,30 @@ class ComfyUIClient:
         height: int = 512,
         seed: Optional[int] = None,
         denoise: float = 0.75,
-        input_image: Optional[str] = None
+        input_image: Optional[str] = None,
+        frames: int = 81,
+        high_noise_model: str = "wan2.2_i2v_high_noise_14B_fp16.safetensors",
+        low_noise_model: str = "wan2.2_i2v_low_noise_14B_fp16.safetensors",
     ) -> Dict[str, Any]:
         """Build a workflow from template with given parameters."""
         import copy
         import random
 
-        # Map i2v to img2img for now (temporary until proper Wan2.2 i2v workflow is implemented)
-        if workflow_type == "i2v":
-            workflow_type = "img2img"
-            print(f"Note: workflow_type 'i2v' mapped to 'img2img' (Wan2.2 video workflow not yet implemented)")
+        # Use Wan2.2 i2v workflow for video generation
+        if workflow_type in ("i2v", "wan_i2v", "wan_video"):
+            print(f"[Workflow] Building Wan2.2 i2v workflow")
+            return self.build_wan_i2v_workflow(
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                width=width,
+                height=height,
+                frames=frames,
+                start_image_filename=input_image or "",
+                high_noise_model=high_noise_model,
+                low_noise_model=low_noise_model,
+            )
 
-        # Get base template
+        # Get base template for simple workflows
         if workflow_type not in WORKFLOW_TEMPLATES:
             workflow_type = "txt2img"
 
