@@ -14,7 +14,12 @@ from database import (
     update_job_status,
     get_all_settings,
     get_setting,
-    update_settings
+    update_settings,
+    create_segments_for_job,
+    get_job_segments as db_get_job_segments,
+    update_segment_prompt,
+    get_segment,
+    delete_job_segments
 )
 from comfyui_client import ComfyUIClient
 from queue_manager import queue_manager
@@ -92,7 +97,7 @@ async def get_job_details(job_id: int):
 
 @router.post("/jobs", response_model=JobResponse)
 async def create_new_job(job: JobCreate):
-    """Create a new job."""
+    """Create a new job and its segments."""
     job_id = create_job(
         name=job.name,
         prompt=job.prompt,
@@ -101,6 +106,23 @@ async def create_new_job(job: JobCreate):
         parameters=job.parameters,
         input_image=job.input_image
     )
+    
+    # Create segments for the job
+    params = job.parameters or {}
+    total_segments = int(params.get("total_segments", 1))
+    
+    # Build start image URL for segment 1
+    start_image_url = None
+    if job.input_image:
+        comfyui_url = get_setting("comfyui_url", COMFYUI_SERVER_URL)
+        if job.input_image.startswith("http"):
+            start_image_url = job.input_image
+        else:
+            start_image_url = f"{comfyui_url}/view?filename={job.input_image}&subfolder=&type=input"
+    
+    # Create segment records
+    create_segments_for_job(job_id, total_segments, job.prompt, start_image_url)
+    
     return get_job(job_id)
 
 
@@ -183,27 +205,56 @@ async def get_job_thumbnail(job_id: int):
 
 
 @router.get("/jobs/{job_id}/segments")
-async def get_job_segments(job_id: int):
-    """Get segments for a job (stub implementation based on job parameters)."""
+async def get_job_segments_endpoint(job_id: int):
+    """Get segments for a job from the database."""
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    params = job.get("parameters") or {}
-    total_segments = int(params.get("total_segments", 1))
-
-    # Create stub segments based on job parameters
-    segments = []
-    for i in range(total_segments):
-        segments.append({
-            "segment_index": i,
-            "status": job["status"] if i == 0 else "pending",
-            "prompt": job.get("prompt", ""),
-            "start_frame_url": None,
-            "end_frame_url": None,
-        })
+    # Get real segments from database
+    segments = db_get_job_segments(job_id)
+    
+    # If no segments exist yet (legacy jobs), create stub data
+    if not segments:
+        params = job.get("parameters") or {}
+        total_segments = int(params.get("total_segments", 1))
+        
+        # Build start image URL
+        start_image_url = None
+        if job.get("input_image"):
+            comfyui_url = get_setting("comfyui_url", COMFYUI_SERVER_URL)
+            input_image = job["input_image"]
+            if input_image.startswith("http"):
+                start_image_url = input_image
+            else:
+                start_image_url = f"{comfyui_url}/view?filename={input_image}&subfolder=&type=input"
+        
+        segments = []
+        for i in range(total_segments):
+            segments.append({
+                "segment_index": i,
+                "status": job["status"] if i == 0 else "pending",
+                "prompt": job.get("prompt", ""),
+                "start_image_url": start_image_url if i == 0 else None,
+                "end_frame_url": None,
+            })
 
     return segments
+
+
+@router.post("/jobs/{job_id}/segments/{segment_index}/prompt")
+async def update_segment_prompt_endpoint(job_id: int, segment_index: int, prompt: str = Form(...)):
+    """Update the prompt for a specific segment."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    segment = get_segment(job_id, segment_index)
+    if not segment:
+        raise HTTPException(status_code=404, detail="Segment not found")
+    
+    update_segment_prompt(job_id, segment_index, prompt)
+    return {"status": "updated", "job_id": job_id, "segment_index": segment_index}
 
 
 # ============== Settings Endpoints ==============

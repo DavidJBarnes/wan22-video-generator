@@ -49,6 +49,26 @@ def init_db():
             )
         """)
 
+        # Job segments table - tracks each segment of a multi-segment video job
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS job_segments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id INTEGER NOT NULL,
+                segment_index INTEGER NOT NULL,
+                status TEXT DEFAULT 'pending',
+                prompt TEXT,
+                start_image_url TEXT,
+                end_frame_url TEXT,
+                video_path TEXT,
+                comfyui_prompt_id TEXT,
+                error_message TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP,
+                FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+                UNIQUE(job_id, segment_index)
+            )
+        """)
+
         # Settings table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -236,3 +256,141 @@ def update_settings(settings: Dict[str, str]):
                 "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
                 (key, value)
             )
+
+
+# ============== Segment Functions ==============
+
+def create_segments_for_job(job_id: int, total_segments: int, initial_prompt: str, start_image_url: str):
+    """Create segment records for a job."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        for i in range(total_segments):
+            # First segment uses the uploaded image and initial prompt
+            # Subsequent segments start with pending status and no start image yet
+            if i == 0:
+                cursor.execute("""
+                    INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url)
+                    VALUES (?, ?, 'pending', ?, ?)
+                """, (job_id, i, initial_prompt, start_image_url))
+            else:
+                cursor.execute("""
+                    INSERT INTO job_segments (job_id, segment_index, status, prompt)
+                    VALUES (?, ?, 'pending', ?)
+                """, (job_id, i, initial_prompt))
+
+
+def get_job_segments(job_id: int) -> List[Dict[str, Any]]:
+    """Get all segments for a job, ordered by segment_index."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM job_segments WHERE job_id = ? ORDER BY segment_index ASC",
+            (job_id,)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_segment(job_id: int, segment_index: int) -> Optional[Dict[str, Any]]:
+    """Get a specific segment by job_id and segment_index."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM job_segments WHERE job_id = ? AND segment_index = ?",
+            (job_id, segment_index)
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_next_pending_segment(job_id: int) -> Optional[Dict[str, Any]]:
+    """Get the next pending segment for a job."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM job_segments WHERE job_id = ? AND status = 'pending' ORDER BY segment_index ASC LIMIT 1",
+            (job_id,)
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def update_segment_status(
+    job_id: int,
+    segment_index: int,
+    status: str,
+    comfyui_prompt_id: Optional[str] = None,
+    end_frame_url: Optional[str] = None,
+    video_path: Optional[str] = None,
+    error_message: Optional[str] = None
+):
+    """Update a segment's status and related fields."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        
+        updates = ["status = ?"]
+        params = [status]
+        
+        if status == "completed":
+            updates.append("completed_at = ?")
+            params.append(datetime.now().isoformat())
+        
+        if comfyui_prompt_id is not None:
+            updates.append("comfyui_prompt_id = ?")
+            params.append(comfyui_prompt_id)
+        
+        if end_frame_url is not None:
+            updates.append("end_frame_url = ?")
+            params.append(end_frame_url)
+        
+        if video_path is not None:
+            updates.append("video_path = ?")
+            params.append(video_path)
+        
+        if error_message is not None:
+            updates.append("error_message = ?")
+            params.append(error_message)
+        
+        params.extend([job_id, segment_index])
+        
+        cursor.execute(
+            f"UPDATE job_segments SET {', '.join(updates)} WHERE job_id = ? AND segment_index = ?",
+            params
+        )
+
+
+def update_segment_prompt(job_id: int, segment_index: int, prompt: str):
+    """Update a segment's prompt."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE job_segments SET prompt = ? WHERE job_id = ? AND segment_index = ?",
+            (prompt, job_id, segment_index)
+        )
+
+
+def update_segment_start_image(job_id: int, segment_index: int, start_image_url: str):
+    """Update a segment's start image URL."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE job_segments SET start_image_url = ? WHERE job_id = ? AND segment_index = ?",
+            (start_image_url, job_id, segment_index)
+        )
+
+
+def get_completed_segments_count(job_id: int) -> int:
+    """Get the count of completed segments for a job."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM job_segments WHERE job_id = ? AND status = 'completed'",
+            (job_id,)
+        )
+        return cursor.fetchone()[0]
+
+
+def delete_job_segments(job_id: int):
+    """Delete all segments for a job."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM job_segments WHERE job_id = ?", (job_id,))

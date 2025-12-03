@@ -378,27 +378,30 @@ async function updateJobDetail(jobId) {
             <div>
               <strong>Segment ${seg.segment_index + 1}</strong>
               <span class="chip ${getChipClass(seg.status)}" style="margin-left: 8px;">${seg.status}</span>
-              ${seg.status === 'processing' ? '<span class="spinner"></span>' : ''}
+              ${seg.status === 'running' ? '<span class="spinner"></span>' : ''}
             </div>
           </div>
           <div style="display: flex; gap: 16px; align-items: flex-start; margin-top: 12px;">
             <div>
               <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Start Image</div>
-              ${seg.start_frame_path ? `<img src="/api/frames/${seg.start_frame_path.split('/').pop()}" style="width: 120px; height: 120px; border-radius: 4px; object-fit: cover; border: 2px solid #e0e0e0;" onerror="this.style.display='none'">` : ''}
+              ${seg.start_image_url ? `<img src="${seg.start_image_url}" style="width: 120px; height: 120px; border-radius: 4px; object-fit: cover; border: 2px solid #e0e0e0;" onerror="this.style.display='none'">` : '<div style="width: 120px; height: 120px; border-radius: 4px; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; background: #f5f5f5; color: #999; font-size: 11px;">Waiting...</div>'}
             </div>
             <div style="flex: 1;">
-              <div class="segment-prompt"><strong>Prompt:</strong> ${seg.prompt}</div>
+              <div class="segment-prompt"><strong>Prompt:</strong> ${seg.prompt || 'No prompt yet'}</div>
             </div>
             <div>
-              ${seg.status === 'completed' && seg.end_frame_path ? `
+              ${seg.status === 'completed' && seg.end_frame_url ? `
                 <div style="font-size: 12px; color: #666; margin-bottom: 4px;">End Frame</div>
-                <img src="${API.getSegmentFrame(jobId, seg.segment_index)}" style="width: 120px; height: 120px; border-radius: 4px; object-fit: cover; border: 2px solid #4caf50;" onerror="this.style.display='none'">
-              ` : seg.status === 'processing' ? `
+                <img src="${seg.end_frame_url}" style="width: 120px; height: 120px; border-radius: 4px; object-fit: cover; border: 2px solid #4caf50;" onerror="this.style.display='none'">
+              ` : seg.status === 'running' ? `
                 <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Generating...</div>
                 <div style="width: 120px; height: 120px; border-radius: 4px; border: 2px dashed #1976d2; display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
                   <span class="spinner" style="margin: 0;"></span>
                 </div>
-              ` : ''}
+              ` : `
+                <div style="font-size: 12px; color: #666; margin-bottom: 4px;">End Frame</div>
+                <div style="width: 120px; height: 120px; border-radius: 4px; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; background: #f5f5f5; color: #999; font-size: 11px;">Pending</div>
+              `}
             </div>
           </div>
         </div>
@@ -415,10 +418,10 @@ async function updateJobDetail(jobId) {
               <strong>Segment ${nextSegmentIndex + 1}</strong>
               <span class="chip warning">Awaiting Prompt</span>
             </div>
-            ${lastSegment && lastSegment.end_frame_path ? `
+            ${lastSegment && lastSegment.end_frame_url ? `
               <div style="margin: 12px 0;">
                 <label style="font-size: 12px; color: #666;">Last frame from previous segment:</label>
-                <img src="${API.getSegmentFrame(jobId, nextSegmentIndex - 1)}" style="width: 100%; max-width: 400px; border-radius: 4px; margin-top: 8px;">
+                <img src="${lastSegment.end_frame_url}" style="width: 100%; max-width: 400px; border-radius: 4px; margin-top: 8px;">
               </div>
             ` : ''}
             <div class="form-group" style="margin-top: 12px;">
