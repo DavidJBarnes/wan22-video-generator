@@ -391,10 +391,12 @@ async function updateJobDetail(jobId) {
 
 async function loadSettings() {
   try {
-    const settings = await API.getSettings();
+    const response = await API.getSettings();
+    const settings = response.settings || response;
     AppState.settings = settings;
     
-    document.getElementById('setting-server-url').value = settings.comfyui_server_url || 'http://3090.zero:8188';
+    // Use comfyui_url (the actual key in the backend)
+    document.getElementById('setting-server-url').value = settings.comfyui_url || 'http://3090.zero:8188';
     document.getElementById('setting-width').value = settings.default_width || 640;
     document.getElementById('setting-height').value = settings.default_height || 640;
     document.getElementById('setting-fps').value = settings.default_fps || 16;
@@ -408,5 +410,160 @@ async function loadSettings() {
   } catch (err) {
     console.error('Failed to load settings:', err);
     showToast('Failed to load settings', 'error');
+  }
+}
+
+// Save settings to backend
+async function saveSettings() {
+  try {
+    const serverUrl = document.getElementById('setting-server-url').value.trim();
+    const width = parseInt(document.getElementById('setting-width').value, 10) || 640;
+    const height = parseInt(document.getElementById('setting-height').value, 10) || 640;
+    const fps = parseInt(document.getElementById('setting-fps').value, 10) || 16;
+    const negativePrompt = document.getElementById('setting-negative-prompt').value.trim();
+    const jsonText = document.getElementById('setting-json').value;
+    
+    // Parse advanced JSON config
+    let advanced;
+    try {
+      advanced = JSON.parse(jsonText || '{}');
+    } catch (e) {
+      showToast('Invalid JSON in advanced configuration', 'error');
+      return;
+    }
+    
+    const settingsPayload = {
+      comfyui_url: serverUrl || 'http://3090.zero:8188',
+      default_width: String(width),
+      default_height: String(height),
+      default_fps: String(fps),
+      default_negative_prompt: negativePrompt
+    };
+    
+    await API.updateSettings(settingsPayload);
+    showToast('Settings saved successfully', 'success');
+    
+    // Refresh dashboard status
+    if (typeof updateDashboard === 'function') {
+      updateDashboard();
+    }
+  } catch (err) {
+    console.error('Failed to save settings:', err);
+    showToast('Failed to save settings', 'error');
+  }
+}
+
+// Open create job modal
+function openCreateJobModal() {
+  const container = document.getElementById('modals-container');
+  container.innerHTML = `
+    <div class="modal active" id="create-job-modal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
+      <div class="modal-content" style="background: white; padding: 24px; border-radius: 8px; max-width: 500px; width: 90%;">
+        <h2 style="margin-top: 0;">Create New Job</h2>
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; margin-bottom: 4px; font-weight: 500;">Job Name</label>
+          <input id="new-job-name" type="text" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" placeholder="My Video Job">
+        </div>
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; margin-bottom: 4px; font-weight: 500;">Prompt</label>
+          <textarea id="new-job-prompt" rows="4" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" placeholder="Describe what you want to generate..."></textarea>
+        </div>
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; margin-bottom: 4px; font-weight: 500;">Workflow Type</label>
+          <select id="new-job-workflow" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            <option value="txt2img">Text to Image</option>
+            <option value="img2img">Image to Image</option>
+            <option value="i2v">Image to Video</option>
+          </select>
+        </div>
+        <div style="text-align: right; margin-top: 24px;">
+          <button class="btn btn-secondary" onclick="closeCreateJobModal()" style="padding: 8px 16px; margin-right: 8px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">Cancel</button>
+          <button class="btn btn-primary" onclick="createJobFromModal()" style="padding: 8px 16px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer;">Create Job</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Close create job modal
+function closeCreateJobModal() {
+  document.getElementById('modals-container').innerHTML = '';
+}
+
+// Create job from modal form
+async function createJobFromModal() {
+  const name = document.getElementById('new-job-name').value.trim();
+  const prompt = document.getElementById('new-job-prompt').value.trim();
+  const workflowType = document.getElementById('new-job-workflow').value;
+  
+  if (!name) {
+    showToast('Please enter a job name', 'error');
+    return;
+  }
+  
+  if (!prompt) {
+    showToast('Please enter a prompt', 'error');
+    return;
+  }
+  
+  try {
+    const jobData = {
+      name: name,
+      prompt: prompt,
+      workflow_type: workflowType,
+      negative_prompt: AppState.settings?.default_negative_prompt || ''
+    };
+    
+    await API.createJob(jobData);
+    showToast('Job created successfully', 'success');
+    closeCreateJobModal();
+    
+    // Refresh the jobs table
+    if (typeof updateJobsTable === 'function') {
+      updateJobsTable();
+    }
+  } catch (err) {
+    console.error('Failed to create job:', err);
+    showToast('Failed to create job', 'error');
+  }
+}
+
+// Delete a job
+async function deleteJob(jobId) {
+  if (!confirm('Are you sure you want to delete this job?')) {
+    return;
+  }
+  
+  try {
+    await API.deleteJob(jobId);
+    showToast('Job deleted', 'success');
+    
+    // Refresh the jobs table
+    if (typeof updateJobsTable === 'function') {
+      updateJobsTable();
+    }
+  } catch (err) {
+    console.error('Failed to delete job:', err);
+    showToast('Failed to delete job', 'error');
+  }
+}
+
+// Submit next prompt for a job segment
+async function submitNextPrompt(jobId, segmentIndex) {
+  const promptInput = document.getElementById('next-prompt-input');
+  const prompt = promptInput?.value.trim();
+  
+  if (!prompt) {
+    showToast('Please enter a prompt', 'error');
+    return;
+  }
+  
+  try {
+    // This would call an API endpoint to submit the next segment prompt
+    // For now, show a placeholder message
+    showToast('Prompt submitted (API endpoint not yet implemented)', 'info');
+  } catch (err) {
+    console.error('Failed to submit prompt:', err);
+    showToast('Failed to submit prompt', 'error');
   }
 }

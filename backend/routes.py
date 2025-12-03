@@ -17,6 +17,15 @@ from database import (
 )
 from comfyui_client import ComfyUIClient
 from queue_manager import queue_manager
+from config import (
+    COMFYUI_SERVER_URL,
+    DEFAULT_WIDTH,
+    DEFAULT_HEIGHT,
+    DEFAULT_FPS,
+    MODELS,
+    GENERATION_PARAMS,
+    DEFAULT_NEGATIVE_PROMPT
+)
 
 # Create router
 router = APIRouter()
@@ -141,8 +150,18 @@ async def retry_job(job_id: int):
 
 @router.get("/settings")
 async def get_settings():
-    """Get all settings."""
+    """Get all settings, merged with config.py defaults."""
     settings = get_all_settings()
+    
+    # Merge in config.py defaults for fields that may not be in DB
+    settings.setdefault("comfyui_url", COMFYUI_SERVER_URL)
+    settings.setdefault("default_width", str(DEFAULT_WIDTH))
+    settings.setdefault("default_height", str(DEFAULT_HEIGHT))
+    settings.setdefault("default_fps", str(DEFAULT_FPS))
+    settings.setdefault("default_negative_prompt", DEFAULT_NEGATIVE_PROMPT)
+    settings.setdefault("models", MODELS)
+    settings.setdefault("generation_params", GENERATION_PARAMS)
+    
     return {"settings": settings}
 
 
@@ -170,7 +189,7 @@ async def get_queue_status():
     from database import get_pending_jobs
 
     # Check ComfyUI connection
-    comfyui_url = get_setting("comfyui_url", "http://127.0.0.1:8188")
+    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
     client = ComfyUIClient(comfyui_url)
     connected, message = client.check_connection()
     client.close()
