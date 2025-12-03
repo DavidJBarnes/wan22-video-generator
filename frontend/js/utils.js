@@ -99,18 +99,18 @@ function requestNotificationPermission() {
   }
 }
 
-function notifySegmentAwaitingPrompt(jobName, segmentIndex) {
+function notifySegmentAwaitingPrompt(jobName, completedSegmentIndex, nextSegmentIndex) {
   if (!('Notification' in window)) return;
-  
+
   // Only notify if tab is not focused
   if (!document.hidden) return;
-  
+
   // Helper function to send the notification
   const sendNotification = () => {
     new Notification('Prompt input required!', {
-      body: `${jobName}: Segment ${segmentIndex} completed. Enter the next prompt to continue.`,
+      body: `${jobName}: Segment ${completedSegmentIndex} completed. Please enter a prompt for Segment ${nextSegmentIndex}.`,
       icon: '/static/favicon.ico',
-      tag: `segment-${segmentIndex}` // Prevent duplicate notifications
+      tag: `segment-${nextSegmentIndex}` // Prevent duplicate notifications
     });
   };
   

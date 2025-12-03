@@ -199,7 +199,9 @@ const renderJobDetail = function(container) {
             // Send browser notification when segment completes and needs prompt
             const segments = await API.getSegments(jobId);
             const completedCount = segments.filter(s => s.status === 'completed').length;
-            notifySegmentAwaitingPrompt(job.name, completedCount + 1);
+            // completedCount is the number of completed segments (0-indexed last completed = completedCount - 1)
+            // Next segment needing prompt is at index completedCount
+            notifySegmentAwaitingPrompt(job.name, completedCount, completedCount + 1);
           }
         } else if (TERMINAL_STATUSES.includes(job.status)) {
           // Job completed/failed/cancelled - stop auto-refresh
