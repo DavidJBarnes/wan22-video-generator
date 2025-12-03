@@ -48,6 +48,8 @@ class JobCreate(BaseModel):
     workflow_type: Optional[str] = "txt2img"
     parameters: Optional[Dict[str, Any]] = None
     input_image: Optional[str] = None  # Base64 encoded or ComfyUI filename
+    high_lora: Optional[str] = None  # Optional LoRA for high noise path
+    low_lora: Optional[str] = None  # Optional LoRA for low noise path
 
 
 class JobResponse(BaseModel):
@@ -148,8 +150,15 @@ async def create_new_job(job: JobCreate):
         else:
             start_image_url = f"{comfyui_url}/view?filename={job.input_image}&subfolder=&type=input"
     
-    # Create segment records
-    create_segments_for_job(job_id, total_segments, job.prompt, start_image_url)
+    # Create segment records with LoRA selections for segment 1
+    create_segments_for_job(
+        job_id,
+        total_segments,
+        job.prompt,
+        start_image_url,
+        high_lora=job.high_lora,
+        low_lora=job.low_lora
+    )
     
     return get_job(job_id)
 
@@ -322,8 +331,14 @@ async def get_job_segments_endpoint(job_id: int):
 
 
 @router.post("/jobs/{job_id}/segments/{segment_index}/prompt")
-async def update_segment_prompt_endpoint(job_id: int, segment_index: int, prompt: str = Form(...)):
-    """Update the prompt for a specific segment and resume job processing."""
+async def update_segment_prompt_endpoint(
+    job_id: int,
+    segment_index: int,
+    prompt: str = Form(...),
+    high_lora: Optional[str] = Form(None),
+    low_lora: Optional[str] = Form(None)
+):
+    """Update the prompt and LoRA selections for a specific segment and resume job processing."""
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -332,8 +347,8 @@ async def update_segment_prompt_endpoint(job_id: int, segment_index: int, prompt
     if not segment:
         raise HTTPException(status_code=404, detail="Segment not found")
     
-    # Update the segment's prompt
-    update_segment_prompt(job_id, segment_index, prompt)
+    # Update the segment's prompt and LoRA selections
+    update_segment_prompt(job_id, segment_index, prompt, high_lora=high_lora, low_lora=low_lora)
     
     # If job was waiting for prompt, set it back to pending so queue manager picks it up
     if job.get("status") == "awaiting_prompt":
@@ -451,6 +466,16 @@ async def get_schedulers():
     schedulers = client.get_schedulers()
     client.close()
     return {"schedulers": schedulers}
+
+
+@router.get("/comfyui/loras")
+async def get_loras():
+    """Get available LoRA models from ComfyUI."""
+    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+    client = ComfyUIClient(comfyui_url)
+    loras = client.get_loras()
+    client.close()
+    return {"loras": loras}
 
 
 @router.get("/comfyui/status")

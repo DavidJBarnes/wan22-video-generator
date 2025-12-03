@@ -141,7 +141,7 @@ WAN_I2V_API_WORKFLOW = {
         "inputs": {
             "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
             "strength_model": 1.0,
-            "model": ["95", 0]
+            "model": ["118", 0]  # Takes model from High LoRA node
         }
     },
     "102": {
@@ -149,7 +149,7 @@ WAN_I2V_API_WORKFLOW = {
         "inputs": {
             "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
             "strength_model": 1.0,
-            "model": ["96", 0]
+            "model": ["119", 0]  # Takes model from Low LoRA node
         }
     },
     "103": {
@@ -175,7 +175,36 @@ WAN_I2V_API_WORKFLOW = {
             "video": ["94", 0]
         }
     },
+    # User-selectable LoRA nodes (optional per segment)
+    # Default to NSFW LoRAs if user doesn't select any
+    "118": {
+        "class_type": "LoraLoaderModelOnly",
+        "inputs": {
+            "lora_name": "wan2.2/NSFW-22-H-e8.safetensors",  # Default high noise LoRA
+            "strength_model": 1.0,
+            "model": ["95", 0]  # Takes model from UNET high noise loader
+        },
+        "_meta": {
+            "title": "High Lora"
+        }
+    },
+    "119": {
+        "class_type": "LoraLoaderModelOnly",
+        "inputs": {
+            "lora_name": "wan2.2/NSFW-22-L-e8.safetensors",  # Default low noise LoRA
+            "strength_model": 1.0,
+            "model": ["96", 0]  # Takes model from UNET low noise loader
+        },
+        "_meta": {
+            "title": "Low Lora"
+        }
+    },
 }
+
+
+# Default LoRA names (used when user doesn't select any)
+DEFAULT_HIGH_LORA = "wan2.2/NSFW-22-H-e8.safetensors"
+DEFAULT_LOW_LORA = "wan2.2/NSFW-22-L-e8.safetensors"
 
 
 def build_wan_i2v_workflow(
@@ -188,6 +217,8 @@ def build_wan_i2v_workflow(
     high_noise_model: str = "wan2.2_i2v_high_noise_14B_fp16.safetensors",
     low_noise_model: str = "wan2.2_i2v_low_noise_14B_fp16.safetensors",
     seed: Optional[int] = None,
+    high_lora: Optional[str] = None,
+    low_lora: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build a Wan2.2 i2v workflow by injecting values into the pre-converted template.
     
@@ -201,6 +232,8 @@ def build_wan_i2v_workflow(
         high_noise_model: UNET model for high noise pass
         low_noise_model: UNET model for low noise pass
         seed: Random seed (auto-generated if not provided)
+        high_lora: Optional LoRA for high noise path (None = use default)
+        low_lora: Optional LoRA for low noise path (None = use default)
     
     Returns:
         ComfyUI API workflow dict ready to submit
@@ -240,5 +273,15 @@ def build_wan_i2v_workflow(
     # Set random seed (node 86 - KSamplerAdvanced for high noise pass)
     workflow["86"]["inputs"]["noise_seed"] = seed
     print(f"[Workflow] Set seed: {seed}")
+    
+    # Override LoRA selections (nodes 118 and 119)
+    # Use default LoRAs if user doesn't select any
+    high_lora_name = high_lora if high_lora else DEFAULT_HIGH_LORA
+    low_lora_name = low_lora if low_lora else DEFAULT_LOW_LORA
+    
+    workflow["118"]["inputs"]["lora_name"] = high_lora_name
+    workflow["119"]["inputs"]["lora_name"] = low_lora_name
+    print(f"[Workflow] Set high LoRA: {high_lora_name}")
+    print(f"[Workflow] Set low LoRA: {low_lora_name}")
     
     return workflow

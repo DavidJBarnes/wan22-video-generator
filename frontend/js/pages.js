@@ -551,9 +551,25 @@ async function updateJobDetail(jobId) {
                 <label>Enter prompt for this segment:</label>
                 <textarea id="next-prompt-input" rows="3" placeholder="Describe what happens in this segment..."></textarea>
               </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 12px 0;">
+                <div class="form-group">
+                  <label style="font-size: 12px; color: #666;">High Noise LoRA (optional)</label>
+                  <select id="next-segment-high-lora" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="">-- Use Default --</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label style="font-size: 12px; color: #666;">Low Noise LoRA (optional)</label>
+                  <select id="next-segment-low-lora" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="">-- Use Default --</option>
+                  </select>
+                </div>
+              </div>
               <button class="btn btn-primary" id="submit-next-prompt-btn" onclick="submitNextPrompt('${jobId}', ${nextSegmentIndex})">Submit Prompt</button>
             </div>
           `;
+          // Load LoRA options for segment prompt form
+          loadSegmentLoraOptions();
         }
       }
     } else {
@@ -684,6 +700,21 @@ function openCreateJobModal() {
           <div id="image-preview" style="margin-top: 8px;"></div>
         </div>
         
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+          <div class="form-group">
+            <label style="display: block; margin-bottom: 4px; font-weight: 500;">High Noise LoRA (optional)</label>
+            <select id="new-job-high-lora" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+              <option value="">-- Use Default --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="display: block; margin-bottom: 4px; font-weight: 500;">Low Noise LoRA (optional)</label>
+            <select id="new-job-low-lora" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+              <option value="">-- Use Default --</option>
+            </select>
+          </div>
+        </div>
+        
         <div id="job-summary" style="background: #f5f5f5; padding: 12px; border-radius: 4px; margin-bottom: 16px; font-size: 14px;">
           <strong>Summary:</strong> <span id="summary-text">30 second video = 6 segments of 5 seconds each</span>
         </div>
@@ -724,6 +755,49 @@ function openCreateJobModal() {
       reader.readAsDataURL(file);
     }
   });
+  
+  // Load available LoRAs from ComfyUI
+  loadLoraOptions();
+}
+
+// Load LoRA options into dropdowns for job creation modal
+async function loadLoraOptions() {
+  try {
+    const response = await API.getLoras();
+    const loras = response.loras || [];
+    
+    const highLoraSelect = document.getElementById('new-job-high-lora');
+    const lowLoraSelect = document.getElementById('new-job-low-lora');
+    
+    if (highLoraSelect && lowLoraSelect) {
+      loras.forEach(lora => {
+        highLoraSelect.innerHTML += `<option value="${lora}">${lora}</option>`;
+        lowLoraSelect.innerHTML += `<option value="${lora}">${lora}</option>`;
+      });
+    }
+  } catch (err) {
+    console.error('Failed to load LoRAs:', err);
+  }
+}
+
+// Load LoRA options into dropdowns for segment prompt form
+async function loadSegmentLoraOptions() {
+  try {
+    const response = await API.getLoras();
+    const loras = response.loras || [];
+    
+    const highLoraSelect = document.getElementById('next-segment-high-lora');
+    const lowLoraSelect = document.getElementById('next-segment-low-lora');
+    
+    if (highLoraSelect && lowLoraSelect) {
+      loras.forEach(lora => {
+        highLoraSelect.innerHTML += `<option value="${lora}">${lora}</option>`;
+        lowLoraSelect.innerHTML += `<option value="${lora}">${lora}</option>`;
+      });
+    }
+  } catch (err) {
+    console.error('Failed to load LoRAs for segment:', err);
+  }
 }
 
 // Close create job modal
@@ -741,6 +815,8 @@ async function createJobFromModal() {
   const prompt = document.getElementById('new-job-prompt').value.trim();
   const imageInput = document.getElementById('new-job-image');
   const imageFile = imageInput.files[0];
+  const highLora = document.getElementById('new-job-high-lora')?.value || null;
+  const lowLora = document.getElementById('new-job-low-lora')?.value || null;
   
   if (!name) {
     showToast('Please enter a job name', 'error');
@@ -776,6 +852,8 @@ async function createJobFromModal() {
       workflow_type: 'i2v',
       negative_prompt: AppState.settings?.default_negative_prompt || '',
       input_image: uploadResult.filename,
+      high_lora: highLora || null,
+      low_lora: lowLora || null,
       parameters: {
         width: width,
         height: height,
@@ -823,6 +901,8 @@ async function deleteJob(jobId) {
 async function submitNextPrompt(jobId, segmentIndex) {
   const promptInput = document.getElementById('next-prompt-input');
   const prompt = promptInput?.value.trim();
+  const highLora = document.getElementById('next-segment-high-lora')?.value || null;
+  const lowLora = document.getElementById('next-segment-low-lora')?.value || null;
   
   if (!prompt) {
     showToast('Please enter a prompt', 'error');
@@ -830,7 +910,7 @@ async function submitNextPrompt(jobId, segmentIndex) {
   }
   
   try {
-    const result = await API.submitSegmentPrompt(jobId, segmentIndex, prompt);
+    const result = await API.submitSegmentPrompt(jobId, segmentIndex, prompt, highLora, lowLora);
     showToast(`Prompt submitted for segment ${segmentIndex + 1}. Job resuming...`, 'success');
     
     // Clear the input
