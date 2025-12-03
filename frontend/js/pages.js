@@ -512,8 +512,8 @@ async function updateJobDetail(jobId) {
             </div>
             <div style="flex: 1;">
               <div class="segment-prompt">
-                <div><strong>Prompt:</strong> ${seg.prompt || 'No prompt yet'}</div>
-                <div style="margin-top: 8px;"><strong>High lora:</strong> ${seg.high_lora || 'N/A'}</div>
+                <div><strong>Prompt:</strong> ${seg.prompt || 'TBD'}</div>
+                <div><strong>High lora:</strong> ${seg.high_lora || 'N/A'}</div>
                 <div><strong>Low lora:</strong> ${seg.low_lora || 'N/A'}</div>
               </div>
             </div>
