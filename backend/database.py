@@ -118,15 +118,16 @@ def create_job(
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO jobs (name, prompt, negative_prompt, workflow_type, parameters, input_image)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO jobs (name, prompt, negative_prompt, workflow_type, parameters, input_image, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (
             name,
             prompt,
             negative_prompt,
             workflow_type,
             json.dumps(parameters) if parameters else None,
-            input_image
+            input_image,
+            utc_now_iso()
         ))
         return cursor.lastrowid
 

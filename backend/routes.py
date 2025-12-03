@@ -185,7 +185,7 @@ async def cancel_job(job_id: int):
 
 @router.post("/jobs/{job_id}/retry")
 async def retry_job(job_id: int):
-    """Retry a failed job."""
+    """Retry a failed job by resetting all segments and job status."""
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -193,6 +193,27 @@ async def retry_job(job_id: int):
     if job["status"] not in ("failed", "cancelled"):
         raise HTTPException(status_code=400, detail="Only failed or cancelled jobs can be retried")
 
+    # Delete existing segments and recreate them
+    delete_job_segments(job_id)
+    
+    # Recreate segments
+    params = job.get("parameters") or {}
+    total_segments = int(params.get("total_segments", 1))
+    
+    # Build start image URL for segment 1
+    start_image_url = None
+    if job.get("input_image"):
+        comfyui_url = get_setting("comfyui_url", COMFYUI_SERVER_URL)
+        input_image = job["input_image"]
+        if input_image.startswith("http"):
+            start_image_url = input_image
+        else:
+            start_image_url = f"{comfyui_url}/view?filename={input_image}&subfolder=&type=input"
+    
+    # Create fresh segment records
+    create_segments_for_job(job_id, total_segments, job.get("prompt", ""), start_image_url)
+    
+    # Reset job status to pending and clear error message
     update_job_status(job_id, "pending", error_message=None)
     return {"status": "pending", "id": job_id}
 
