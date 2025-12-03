@@ -58,15 +58,16 @@ def init_db():
         """)
 
         # Insert default settings if not exist
+        # Note: comfyui_url should match config.py COMFYUI_SERVER_URL
         default_settings = {
-            "comfyui_url": "http://127.0.0.1:8188",
+            "comfyui_url": "http://3090.zero:8188",
             "default_checkpoint": "v1-5-pruned.safetensors",
             "default_steps": "20",
             "default_cfg": "7.0",
             "default_sampler": "euler",
             "default_scheduler": "normal",
-            "default_width": "512",
-            "default_height": "512",
+            "default_width": "640",
+            "default_height": "640",
             "auto_start_queue": "true"
         }
 

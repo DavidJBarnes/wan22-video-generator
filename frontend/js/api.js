@@ -114,6 +114,16 @@ const API = {
         return this.request('/comfyui/status');
     },
 
+    async checkComfyStatus() {
+        // Wrapper that returns { reachable: boolean } for pages.js compatibility
+        try {
+            const status = await this.request('/comfyui/status');
+            return { reachable: status.connected, ...status };
+        } catch (error) {
+            return { reachable: false, error: error.message };
+        }
+    },
+
     async getCheckpoints() {
         return this.request('/comfyui/checkpoints');
     },
@@ -124,6 +134,29 @@ const API = {
 
     async getSchedulers() {
         return this.request('/comfyui/schedulers');
+    },
+
+    // ============== Job Segments & Frames ==============
+
+    async getSegments(jobId) {
+        // Get segments for a job - returns empty array if endpoint doesn't exist
+        try {
+            return await this.request(`/jobs/${jobId}/segments`);
+        } catch (error) {
+            // Segments endpoint may not exist yet, return empty array
+            console.warn('Segments endpoint not available:', error);
+            return [];
+        }
+    },
+
+    getJobThumbnail(jobId) {
+        // Return URL for job thumbnail
+        return `${this.baseUrl}/jobs/${jobId}/thumbnail`;
+    },
+
+    getSegmentFrame(jobId, segmentIndex) {
+        // Return URL for segment end frame
+        return `${this.baseUrl}/jobs/${jobId}/segments/${segmentIndex}/frame`;
     },
 
     // ============== Image Upload ==============

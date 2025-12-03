@@ -211,7 +211,7 @@ async def stop_queue():
 @router.get("/comfyui/checkpoints")
 async def get_checkpoints():
     """Get available checkpoint models from ComfyUI."""
-    comfyui_url = get_setting("comfyui_url", "http://127.0.0.1:8188")
+    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
     client = ComfyUIClient(comfyui_url)
     checkpoints = client.get_checkpoints()
     client.close()
@@ -221,7 +221,7 @@ async def get_checkpoints():
 @router.get("/comfyui/samplers")
 async def get_samplers():
     """Get available samplers from ComfyUI."""
-    comfyui_url = get_setting("comfyui_url", "http://127.0.0.1:8188")
+    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
     client = ComfyUIClient(comfyui_url)
     samplers = client.get_samplers()
     client.close()
@@ -231,7 +231,7 @@ async def get_samplers():
 @router.get("/comfyui/schedulers")
 async def get_schedulers():
     """Get available schedulers from ComfyUI."""
-    comfyui_url = get_setting("comfyui_url", "http://127.0.0.1:8188")
+    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
     client = ComfyUIClient(comfyui_url)
     schedulers = client.get_schedulers()
     client.close()
@@ -268,7 +268,7 @@ async def upload_image(file: UploadFile = File(...)):
     content = await file.read()
 
     # Upload to ComfyUI
-    comfyui_url = get_setting("comfyui_url", "http://127.0.0.1:8188")
+    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
     client = ComfyUIClient(comfyui_url)
 
     filename = client.upload_image(content, file.filename)
@@ -292,7 +292,7 @@ async def upload_image_base64(image_data: str = Form(...), filename: str = Form(
         raise HTTPException(status_code=400, detail=f"Invalid base64 data: {e}")
 
     # Upload to ComfyUI
-    comfyui_url = get_setting("comfyui_url", "http://127.0.0.1:8188")
+    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
     client = ComfyUIClient(comfyui_url)
 
     result_filename = client.upload_image(content, filename)
