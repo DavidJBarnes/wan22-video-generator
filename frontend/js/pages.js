@@ -71,10 +71,29 @@ const renderDashboard = function(container) {
 };
 
 const renderQueue = function(container) {
+  // Initialize status filter if not set (default: show all)
+  if (!AppState.queueStatusFilter) {
+    AppState.queueStatusFilter = new Set(['pending', 'queued', 'running', 'awaiting_prompt', 'completed', 'failed', 'cancelled']);
+  }
+  
   container.innerHTML = `
-    <div class="page-header">
+    <div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
       <h1>Job Queue</h1>
-      <button class="btn btn-primary" onclick="openCreateJobModal()">+ New Job</button>
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <div class="filter-dropdown" style="position: relative;">
+          <button class="btn btn-outlined" onclick="toggleStatusFilter()" id="status-filter-btn">Status: All</button>
+          <div id="status-filter-panel" class="filter-panel" style="display: none; position: absolute; right: 0; top: 100%; background: white; border: 1px solid #ddd; border-radius: 8px; padding: 12px; min-width: 180px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100;">
+            <label style="display: block; padding: 4px 0; cursor: pointer;"><input type="checkbox" value="pending" onchange="onStatusFilterChange()" checked> Pending</label>
+            <label style="display: block; padding: 4px 0; cursor: pointer;"><input type="checkbox" value="queued" onchange="onStatusFilterChange()" checked> Queued</label>
+            <label style="display: block; padding: 4px 0; cursor: pointer;"><input type="checkbox" value="running" onchange="onStatusFilterChange()" checked> Running</label>
+            <label style="display: block; padding: 4px 0; cursor: pointer;"><input type="checkbox" value="awaiting_prompt" onchange="onStatusFilterChange()" checked> Awaiting Prompt</label>
+            <label style="display: block; padding: 4px 0; cursor: pointer;"><input type="checkbox" value="completed" onchange="onStatusFilterChange()" checked> Completed</label>
+            <label style="display: block; padding: 4px 0; cursor: pointer;"><input type="checkbox" value="failed" onchange="onStatusFilterChange()" checked> Failed</label>
+            <label style="display: block; padding: 4px 0; cursor: pointer;"><input type="checkbox" value="cancelled" onchange="onStatusFilterChange()" checked> Cancelled</label>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="openCreateJobModal()">+ New Job</button>
+      </div>
     </div>
 
     <table>
@@ -97,7 +116,26 @@ const renderQueue = function(container) {
     </table>
   `;
   
+  // Restore checkbox states from AppState
+  const panel = document.getElementById('status-filter-panel');
+  if (panel) {
+    panel.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.checked = AppState.queueStatusFilter.has(cb.value);
+    });
+  }
+  updateStatusFilterLabel();
+  
   updateJobsTable();
+  
+  // Add polling for Job Queue - refresh every 3 seconds
+  if (AppState.jobsInterval) {
+    clearInterval(AppState.jobsInterval);
+  }
+  AppState.jobsInterval = setInterval(() => {
+    if (AppState.currentPage === 'queue') {
+      updateJobsTable();
+    }
+  }, 3000);
 };
 
 const renderJobDetail = function(container) {
@@ -129,16 +167,22 @@ const renderJobDetail = function(container) {
   if (AppState.jobDetailInterval) {
     clearInterval(AppState.jobDetailInterval);
   }
+  
+  // Define status categories
+  const ACTIVE_STATUSES = ['pending', 'queued', 'running'];
+  const TERMINAL_STATUSES = ['completed', 'failed', 'cancelled'];
+  
   AppState.jobDetailInterval = setInterval(async () => {
     if (AppState.currentPage === 'job-detail') {
       try {
         const job = await API.getJob(jobId);
-        // Only refresh if job is running (NOT awaiting_prompt - that would steal focus from textarea)
-        if (['running', 'queued'].includes(job.status)) {
+        
+        if (ACTIVE_STATUSES.includes(job.status)) {
+          // Job is active (pending/queued/running) - keep polling and updating UI
           updateJobDetail(jobId);
         } else if (job.status === 'awaiting_prompt') {
           // Don't refresh UI when awaiting prompt - user is typing
-          // Just check if status changed (e.g., user submitted prompt in another tab)
+          // But check if status just changed to awaiting_prompt (to send notification)
           if (AppState.lastJobStatus !== 'awaiting_prompt') {
             updateJobDetail(jobId);
             // Send browser notification when segment completes and needs prompt
@@ -146,8 +190,8 @@ const renderJobDetail = function(container) {
             const completedCount = segments.filter(s => s.status === 'completed').length;
             notifySegmentAwaitingPrompt(job.name, completedCount + 1);
           }
-        } else {
-          // Job completed/errored, stop auto-refresh
+        } else if (TERMINAL_STATUSES.includes(job.status)) {
+          // Job completed/failed/cancelled - stop auto-refresh
           clearInterval(AppState.jobDetailInterval);
           updateJobDetail(jobId); // One final update
         }
@@ -276,8 +320,13 @@ async function updateDashboard() {
 
 async function updateJobsTable() {
   try {
-    const jobs = await API.getJobs();
-    AppState.jobs = jobs;
+    const allJobs = await API.getJobs();
+    AppState.jobs = allJobs;
+    
+    // Filter jobs based on status filter
+    const jobs = AppState.queueStatusFilter 
+      ? allJobs.filter(job => AppState.queueStatusFilter.has(job.status))
+      : allJobs;
     
     const jobsTable = document.getElementById('jobs-table');
     if (jobs.length > 0) {
@@ -354,13 +403,14 @@ async function updateJobDetail(jobId) {
         </div>
       `;
     } else if (job.status === 'failed') {
-      // Show error state
+      // Show error state with retry button
       finalOutputSection = `
         <div class="card" style="margin-bottom: 24px;">
           <h2 style="margin-top: 0; margin-bottom: 16px;">Final Output</h2>
           <div style="width: 100%; max-width: 640px; height: 360px; border: 2px dashed #f44336; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #ffebee;">
             <span style="color: #c62828; font-size: 16px; font-weight: 500;">Generation Failed</span>
-            ${job.error_message ? `<span style="color: #666; font-size: 14px; margin-top: 8px;">${job.error_message}</span>` : ''}
+            ${job.error_message ? `<span style="color: #666; font-size: 14px; margin-top: 8px; text-align: center; padding: 0 16px;">${job.error_message}</span>` : ''}
+            <button class="btn btn-primary" style="margin-top: 16px;" onclick="retryJob('${jobId}')">Retry Job</button>
           </div>
         </div>
       `;
@@ -780,5 +830,72 @@ async function submitNextPrompt(jobId, segmentIndex) {
   } catch (err) {
     console.error('Failed to submit prompt:', err);
     showToast('Failed to submit prompt: ' + err.message, 'error');
+  }
+}
+
+// Status filter dropdown functions
+function toggleStatusFilter() {
+  const panel = document.getElementById('status-filter-panel');
+  if (panel) {
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  }
+}
+
+function onStatusFilterChange() {
+  const panel = document.getElementById('status-filter-panel');
+  if (!panel) return;
+  
+  const checkboxes = panel.querySelectorAll('input[type="checkbox"]');
+  AppState.queueStatusFilter = new Set();
+  checkboxes.forEach(cb => {
+    if (cb.checked) {
+      AppState.queueStatusFilter.add(cb.value);
+    }
+  });
+  
+  updateStatusFilterLabel();
+  updateJobsTable();
+}
+
+function updateStatusFilterLabel() {
+  const btn = document.getElementById('status-filter-btn');
+  if (!btn || !AppState.queueStatusFilter) return;
+  
+  const allStatuses = ['pending', 'queued', 'running', 'awaiting_prompt', 'completed', 'failed', 'cancelled'];
+  const selectedCount = AppState.queueStatusFilter.size;
+  
+  if (selectedCount === allStatuses.length) {
+    btn.textContent = 'Status: All';
+  } else if (selectedCount === 0) {
+    btn.textContent = 'Status: None';
+  } else if (selectedCount === 1) {
+    btn.textContent = `Status: ${[...AppState.queueStatusFilter][0]}`;
+  } else {
+    btn.textContent = `Status: ${selectedCount} selected`;
+  }
+}
+
+// Close filter dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('status-filter-panel');
+  const btn = document.getElementById('status-filter-btn');
+  if (panel && btn && !panel.contains(e.target) && e.target !== btn) {
+    panel.style.display = 'none';
+  }
+});
+
+// Retry job function
+async function retryJob(jobId) {
+  if (!confirm('Are you sure you want to retry this job? This will reset all segments and start from the beginning.')) {
+    return;
+  }
+  
+  try {
+    await API.retryJob(jobId);
+    showToast('Job has been reset and will restart processing.', 'success');
+    updateJobDetail(jobId);
+  } catch (err) {
+    console.error('Failed to retry job:', err);
+    showToast('Failed to retry job: ' + err.message, 'error');
   }
 }
