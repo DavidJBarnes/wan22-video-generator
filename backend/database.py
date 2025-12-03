@@ -68,12 +68,24 @@ def init_db():
                 comfyui_prompt_id TEXT,
                 execution_time REAL,
                 error_message TEXT,
+                high_lora TEXT,
+                low_lora TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 completed_at TIMESTAMP,
                 FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
                 UNIQUE(job_id, segment_index)
             )
         """)
+        
+        # Add high_lora and low_lora columns if they don't exist (migration for existing DBs)
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN high_lora TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN low_lora TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
         # Settings table
         cursor.execute("""
@@ -267,21 +279,28 @@ def update_settings(settings: Dict[str, str]):
 
 # ============== Segment Functions ==============
 
-def create_segments_for_job(job_id: int, total_segments: int, initial_prompt: str, start_image_url: str):
+def create_segments_for_job(
+    job_id: int,
+    total_segments: int,
+    initial_prompt: str,
+    start_image_url: str,
+    high_lora: Optional[str] = None,
+    low_lora: Optional[str] = None
+):
     """Create segment records for a job.
     
-    Only segment 0 gets the initial prompt and start image.
+    Only segment 0 gets the initial prompt, start image, and LoRA selections.
     Subsequent segments are created with no prompt - user must provide one after each segment completes.
     """
     with get_connection() as conn:
         cursor = conn.cursor()
         for i in range(total_segments):
             if i == 0:
-                # First segment uses the uploaded image and initial prompt
+                # First segment uses the uploaded image, initial prompt, and LoRA selections
                 cursor.execute("""
-                    INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url)
-                    VALUES (?, ?, 'pending', ?, ?)
-                """, (job_id, i, initial_prompt, start_image_url))
+                    INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora)
+                    VALUES (?, ?, 'pending', ?, ?, ?, ?)
+                """, (job_id, i, initial_prompt, start_image_url, high_lora, low_lora))
             else:
                 # Subsequent segments start with no prompt - user provides after previous segment completes
                 cursor.execute("""
@@ -374,13 +393,33 @@ def update_segment_status(
         )
 
 
-def update_segment_prompt(job_id: int, segment_index: int, prompt: str):
-    """Update a segment's prompt."""
+def update_segment_prompt(
+    job_id: int,
+    segment_index: int,
+    prompt: str,
+    high_lora: Optional[str] = None,
+    low_lora: Optional[str] = None
+):
+    """Update a segment's prompt and optionally its LoRA selections."""
     with get_connection() as conn:
         cursor = conn.cursor()
+        
+        updates = ["prompt = ?"]
+        params = [prompt]
+        
+        if high_lora is not None:
+            updates.append("high_lora = ?")
+            params.append(high_lora)
+        
+        if low_lora is not None:
+            updates.append("low_lora = ?")
+            params.append(low_lora)
+        
+        params.extend([job_id, segment_index])
+        
         cursor.execute(
-            "UPDATE job_segments SET prompt = ? WHERE job_id = ? AND segment_index = ?",
-            (prompt, job_id, segment_index)
+            f"UPDATE job_segments SET {', '.join(updates)} WHERE job_id = ? AND segment_index = ?",
+            params
         )
 
 

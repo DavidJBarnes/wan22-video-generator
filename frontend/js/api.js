@@ -150,6 +150,10 @@ const API = {
         return this.request('/comfyui/schedulers');
     },
 
+    async getLoras() {
+        return this.request('/comfyui/loras');
+    },
+
     // ============== Job Segments & Frames ==============
 
     async getSegments(jobId) {
@@ -178,10 +182,17 @@ const API = {
         return `${this.baseUrl}/jobs/${jobId}/video`;
     },
 
-    async submitSegmentPrompt(jobId, segmentIndex, prompt) {
+    async submitSegmentPrompt(jobId, segmentIndex, prompt, highLora = null, lowLora = null) {
         // Submit a prompt for a specific segment (used when job is awaiting_prompt)
+        // Optionally includes LoRA selections for this segment
         const formData = new FormData();
         formData.append('prompt', prompt);
+        if (highLora) {
+            formData.append('high_lora', highLora);
+        }
+        if (lowLora) {
+            formData.append('low_lora', lowLora);
+        }
         
         return this.request(`/jobs/${jobId}/segments/${segmentIndex}/prompt`, {
             method: 'POST',

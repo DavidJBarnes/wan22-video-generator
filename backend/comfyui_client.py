@@ -192,6 +192,19 @@ class ComfyUIClient:
         except Exception:
             return ["normal", "karras", "exponential", "simple"]
 
+    def get_loras(self) -> List[str]:
+        """Get list of available LoRA models from ComfyUI."""
+        try:
+            response = self.client.get(f"{self.base_url}/models/loras")
+            if response.status_code == 200:
+                loras = response.json()
+                if isinstance(loras, list):
+                    return sorted(loras)
+            return []
+        except Exception as e:
+            print(f"[ComfyUI] Error fetching LoRAs: {e}")
+            return []
+
     def upload_image(self, image_data: bytes, filename: str) -> Optional[str]:
         """Upload an image to ComfyUI and return the filename."""
         try:
@@ -221,6 +234,8 @@ class ComfyUIClient:
         high_noise_model: str = "wan2.2_i2v_high_noise_14B_fp16.safetensors",
         low_noise_model: str = "wan2.2_i2v_low_noise_14B_fp16.safetensors",
         seed: Optional[int] = None,
+        high_lora: Optional[str] = None,
+        low_lora: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Build a Wan2.2 i2v workflow using the pre-converted API template.
         
@@ -237,6 +252,8 @@ class ComfyUIClient:
             high_noise_model=high_noise_model,
             low_noise_model=low_noise_model,
             seed=seed,
+            high_lora=high_lora,
+            low_lora=low_lora,
         )
 
     def build_workflow(
