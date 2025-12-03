@@ -383,25 +383,34 @@ class ComfyUIClient:
             return {"queue_running": [], "queue_pending": []}
 
     def get_output_images(self, prompt_id: str) -> List[str]:
-        """Get output image URLs for a completed prompt."""
+        """Get output media URLs (images, videos, gifs) for a completed prompt."""
         status = self.get_prompt_status(prompt_id)
         if status.get("status") != "completed":
             return []
 
-        images = []
-        outputs = status.get("data", {}).get("outputs", {})
+        media_urls = []
+        
+        # Handle both possible response structures
+        data = status.get("data") or status
+        outputs = data.get("outputs", {})
+        
+        print(f"[ComfyUI] get_output_images: outputs keys = {list(outputs.keys())}")
 
         for node_id, node_output in outputs.items():
-            if "images" in node_output:
-                for img in node_output["images"]:
-                    filename = img.get("filename")
-                    subfolder = img.get("subfolder", "")
-                    img_type = img.get("type", "output")
-                    if filename:
-                        url = f"{self.base_url}/view?filename={filename}&subfolder={subfolder}&type={img_type}"
-                        images.append(url)
+            # Check for images, videos, and gifs (different node types use different keys)
+            for media_key in ("images", "videos", "gifs"):
+                if media_key in node_output:
+                    print(f"[ComfyUI] Found {media_key} in node {node_id}: {len(node_output[media_key])} items")
+                    for media in node_output[media_key]:
+                        filename = media.get("filename")
+                        subfolder = media.get("subfolder", "")
+                        media_type = media.get("type", "output")
+                        if filename:
+                            url = f"{self.base_url}/view?filename={filename}&subfolder={subfolder}&type={media_type}"
+                            media_urls.append(url)
+                            print(f"[ComfyUI] Added media URL: {url}")
 
-        return images
+        return media_urls
 
     def close(self):
         """Close the HTTP client."""
