@@ -257,14 +257,14 @@ async function updateDashboard() {
     const recentTable = document.getElementById('recent-jobs-table');
     if (jobs.length > 0) {
       recentTable.innerHTML = jobs.slice(0, 5).map(job => {
-        const params = job.parameters || {};
-        const totalSegments = job.total_segments ?? params.total_segments ?? 0;
-        const currentSegment = job.current_segment ?? params.current_segment ?? 0;
+        // Use completed_segments from API (computed from job_segments table)
+        const totalSegments = job.total_segments ?? 0;
+        const completedSegments = job.completed_segments ?? 0;
         return `
         <tr onclick="navigate('job-detail', {currentJobId: '${job.id}'})">
           <td>${job.name}</td>
           <td><span class="chip ${getChipClass(job.status)}">${job.status}</span></td>
-          <td>${currentSegment}/${totalSegments}</td>
+          <td>${completedSegments}/${totalSegments}</td>
           <td>${formatDate(job.created_at)}</td>
         </tr>
       `}).join('');
@@ -337,63 +337,41 @@ async function updateJobDetail(jobId) {
     
     document.getElementById('job-detail-name').textContent = job.name;
     
-    // Build Final Output section - shown above segments when job is completed
+    // Build Final Output section - dashed placeholder until video is ready
     let finalOutputSection = '';
     if (job.status === 'completed' && job.completed_at) {
+      // Show completed video with download button
       finalOutputSection = `
         <div class="card" style="margin-bottom: 24px;">
           <h2 style="margin-top: 0; margin-bottom: 16px;">Final Output</h2>
-          <div style="display: flex; gap: 24px; align-items: flex-start;">
-            <div style="flex-shrink: 0;">
-              <video controls style="width: 400px; max-width: 100%; border-radius: 8px;" poster="${API.getJobThumbnail(jobId)}">
-                <source src="${API.getJobVideo(jobId)}" type="video/mp4">
-                Your browser does not support the video tag.
-              </video>
-            </div>
-            <div style="flex: 1;">
-              <div class="detail-meta-item">
-                <label>Completed</label>
-                <div class="value">${formatDate(job.completed_at)}</div>
-              </div>
-              <div class="detail-meta-item">
-                <label>Segments</label>
-                <div class="value">${completedSegments}/${totalSegments}</div>
-              </div>
-              <div class="detail-meta-item">
-                <label>Duration</label>
-                <div class="value">${totalDuration}s</div>
-              </div>
-              <div style="margin-top: 16px;">
-                <a href="${API.getJobVideo(jobId)}" download="job_${jobId}_final.mp4" class="btn btn-primary" style="display: inline-block;">Download Video</a>
-              </div>
-            </div>
+          <video controls style="width: 100%; max-width: 640px; border-radius: 8px;" poster="${API.getJobThumbnail(jobId)}">
+            <source src="${API.getJobVideo(jobId)}" type="video/mp4">
+            Your browser does not support the video tag.
+          </video>
+          <div style="margin-top: 12px;">
+            <a href="${API.getJobVideo(jobId)}" download="job_${jobId}_final.mp4" class="btn btn-primary" style="display: inline-block;">Download Video</a>
           </div>
         </div>
       `;
     } else if (job.status === 'failed') {
-      finalOutputSection = `
-        <div class="card" style="margin-bottom: 24px; border-left: 4px solid #f44336;">
-          <h2 style="margin-top: 0; margin-bottom: 16px;">Final Output</h2>
-          <div class="detail-meta-item">
-            <label>Status</label>
-            <div class="value"><span class="chip error">Failed</span></div>
-          </div>
-          ${job.error_message ? `
-          <div class="detail-meta-item">
-            <label>Error</label>
-            <div class="value" style="color: #c62828;">${job.error_message}</div>
-          </div>
-          ` : ''}
-        </div>
-      `;
-    } else {
-      // Show placeholder for pending/running/awaiting_prompt jobs
+      // Show error state
       finalOutputSection = `
         <div class="card" style="margin-bottom: 24px;">
           <h2 style="margin-top: 0; margin-bottom: 16px;">Final Output</h2>
-          <div class="detail-meta-item">
-            <label>Completed</label>
-            <div class="value" style="color: #999;">--</div>
+          <div style="width: 100%; max-width: 640px; height: 360px; border: 2px dashed #f44336; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #ffebee;">
+            <span style="color: #c62828; font-size: 16px; font-weight: 500;">Generation Failed</span>
+            ${job.error_message ? `<span style="color: #666; font-size: 14px; margin-top: 8px;">${job.error_message}</span>` : ''}
+          </div>
+        </div>
+      `;
+    } else {
+      // Show dashed blue placeholder with spinner for pending/running/awaiting_prompt jobs
+      finalOutputSection = `
+        <div class="card" style="margin-bottom: 24px;">
+          <h2 style="margin-top: 0; margin-bottom: 16px;">Final Output</h2>
+          <div style="width: 100%; max-width: 640px; height: 360px; border: 2px dashed #1976d2; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #f5f5f5;">
+            <span class="spinner" style="margin-bottom: 12px;"></span>
+            <span style="color: #666; font-size: 14px;">Processing...</span>
           </div>
         </div>
       `;
@@ -401,7 +379,6 @@ async function updateJobDetail(jobId) {
     
     const metaContainer = document.getElementById('job-detail-meta');
     metaContainer.innerHTML = `
-      ${finalOutputSection}
       <div class="card" style="margin-bottom: 24px;">
         <h2 style="margin-top: 0; margin-bottom: 16px;">Job Details</h2>
         <div class="detail-meta-item">
@@ -424,7 +401,12 @@ async function updateJobDetail(jobId) {
           <label>Created</label>
           <div class="value">${formatDate(job.created_at)}</div>
         </div>
+        <div class="detail-meta-item">
+          <label>Completed</label>
+          <div class="value">${job.completed_at ? formatDate(job.completed_at) : '--'}</div>
+        </div>
       </div>
+      ${finalOutputSection}
     `;
     
     const segmentsList = document.getElementById('segments-list');

@@ -106,8 +106,8 @@ function notifySegmentAwaitingPrompt(jobName, segmentIndex) {
   // Only notify if tab is not focused
   if (!document.hidden) return;
   
-  new Notification('Segment Ready for Prompt', {
-    body: `${jobName}: Segment ${segmentIndex} completed. Please enter the next prompt.`,
+  new Notification('Prompt input required!', {
+    body: `${jobName}: Segment ${segmentIndex} completed. Enter the next prompt to continue.`,
     icon: '/static/favicon.ico',
     tag: `segment-${segmentIndex}` // Prevent duplicate notifications
   });
