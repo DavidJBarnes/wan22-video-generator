@@ -173,6 +173,11 @@ const API = {
         return `${this.baseUrl}/jobs/${jobId}/segments/${segmentIndex}/frame`;
     },
 
+    getJobVideo(jobId) {
+        // Return URL for job's final video
+        return `${this.baseUrl}/jobs/${jobId}/video`;
+    },
+
     async submitSegmentPrompt(jobId, segmentIndex, prompt) {
         // Submit a prompt for a specific segment (used when job is awaiting_prompt)
         const formData = new FormData();

@@ -263,11 +263,10 @@ async function updateJobsTable() {
     const jobsTable = document.getElementById('jobs-table');
     if (jobs.length > 0) {
       jobsTable.innerHTML = jobs.map(job => {
-        // Read segment info from job.parameters if not at top level
-        const params = job.parameters || {};
-        const totalSegments = job.total_segments ?? params.total_segments ?? 0;
-        const currentSegment = job.current_segment ?? params.current_segment ?? 0;
-        const progress = calculateProgress(currentSegment, totalSegments);
+        // Use computed segment fields from API
+        const totalSegments = job.total_segments ?? 0;
+        const completedSegments = job.completed_segments ?? 0;
+        const progress = job.progress_percent ?? calculateProgress(completedSegments, totalSegments);
         
         return `
         <tr style="cursor: pointer;" onclick="navigate('job-detail', {currentJobId: '${job.id}'})">
@@ -280,7 +279,7 @@ async function updateJobsTable() {
           <td>${job.name}</td>
           <td>${formatDate(job.created_at)}</td>
           <td><span class="chip ${getChipClass(job.status)}">${job.status}</span></td>
-          <td>${currentSegment}/${totalSegments}</td>
+          <td>${completedSegments}/${totalSegments}</td>
           <td>
             <div class="progress-container">
               <div class="progress-bar">
@@ -315,7 +314,8 @@ async function updateJobDetail(jobId) {
     // Read parameters from job.parameters if not at top level
     const params = job.parameters || {};
     const totalSegments = job.total_segments ?? params.total_segments ?? 0;
-    const currentSegment = job.current_segment ?? params.current_segment ?? 0;
+    const completedSegments = job.completed_segments ?? 0;
+    const progressPercent = job.progress_percent ?? calculateProgress(completedSegments, totalSegments);
     const width = job.width ?? params.width ?? 640;
     const height = job.height ?? params.height ?? 640;
     const totalDuration = job.total_duration ?? params.total_duration ?? 0;
@@ -323,15 +323,43 @@ async function updateJobDetail(jobId) {
     
     document.getElementById('job-detail-name').textContent = job.name;
     
+    // Show completed banner if job is completed
+    let completedBanner = '';
+    if (job.status === 'completed' && job.completed_at) {
+      completedBanner = `
+        <div style="background: #e8f5e9; border: 1px solid #4caf50; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+          <strong style="color: #2e7d32;">Completed</strong>
+          <span style="color: #666; margin-left: 8px;">${formatDate(job.completed_at)}</span>
+          <div style="margin-top: 16px;">
+            <video controls style="width: 100%; max-width: 640px; border-radius: 8px;" poster="${API.getJobThumbnail(jobId)}">
+              <source src="${API.getJobVideo(jobId)}" type="video/mp4">
+              Your browser does not support the video tag.
+            </video>
+            <div style="margin-top: 8px;">
+              <a href="${API.getJobVideo(jobId)}" download="job_${jobId}_final.mp4" class="btn btn-secondary" style="display: inline-block;">Download Video</a>
+            </div>
+          </div>
+        </div>
+      `;
+    } else if (job.status === 'failed') {
+      completedBanner = `
+        <div style="background: #ffebee; border: 1px solid #f44336; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+          <strong style="color: #c62828;">Failed</strong>
+          ${job.error_message ? `<span style="color: #666; margin-left: 8px;">${job.error_message}</span>` : ''}
+        </div>
+      `;
+    }
+    
     const metaContainer = document.getElementById('job-detail-meta');
     metaContainer.innerHTML = `
+      ${completedBanner}
       <div class="detail-meta-item">
         <label>Status</label>
         <div class="value"><span class="chip ${getChipClass(job.status)}">${job.status}</span></div>
       </div>
       <div class="detail-meta-item">
         <label>Progress</label>
-        <div class="value">${currentSegment}/${totalSegments} segments</div>
+        <div class="value">${completedSegments}/${totalSegments} segments (${progressPercent}%)</div>
       </div>
       <div class="detail-meta-item">
         <label>Dimensions</label>
@@ -384,7 +412,7 @@ async function updateJobDetail(jobId) {
           <div style="display: flex; gap: 16px; align-items: flex-start; margin-top: 12px;">
             <div>
               <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Start Image</div>
-              ${seg.start_image_url ? `<img src="${seg.start_image_url}" style="width: 120px; height: 120px; border-radius: 4px; object-fit: cover; border: 2px solid #e0e0e0;" onerror="this.style.display='none'">` : '<div style="width: 120px; height: 120px; border-radius: 4px; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; background: #f5f5f5; color: #999; font-size: 11px;">Waiting...</div>'}
+              ${seg.start_image_url ? `<img src="${seg.start_image_url}" style="width: 120px; height: 120px; border-radius: 4px; object-fit: cover; border: 2px solid #e0e0e0; cursor: pointer;" onclick="openImageLightbox('${seg.start_image_url}')" onerror="this.style.display='none'" title="Click to view full size">` : '<div style="width: 120px; height: 120px; border-radius: 4px; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; background: #f5f5f5; color: #999; font-size: 11px;">Waiting...</div>'}
             </div>
             <div style="flex: 1;">
               <div class="segment-prompt"><strong>Prompt:</strong> ${seg.prompt || 'No prompt yet'}</div>
@@ -392,7 +420,7 @@ async function updateJobDetail(jobId) {
             <div>
               ${seg.status === 'completed' && seg.end_frame_url ? `
                 <div style="font-size: 12px; color: #666; margin-bottom: 4px;">End Frame</div>
-                <img src="${seg.end_frame_url}" style="width: 120px; height: 120px; border-radius: 4px; object-fit: cover; border: 2px solid #4caf50;" onerror="this.style.display='none'">
+                <img src="${seg.end_frame_url}" style="width: 120px; height: 120px; border-radius: 4px; object-fit: cover; border: 2px solid #4caf50; cursor: pointer;" onclick="openImageLightbox('${seg.end_frame_url}')" onerror="this.style.display='none'" title="Click to view full size">
               ` : seg.status === 'running' ? `
                 <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Generating...</div>
                 <div style="width: 120px; height: 120px; border-radius: 4px; border: 2px dashed #1976d2; display: flex; align-items: center; justify-content: center; background: #f5f5f5;">
@@ -407,30 +435,32 @@ async function updateJobDetail(jobId) {
         </div>
       `).join('');
       
-      // Check if waiting for prompt
+      // Check if waiting for prompt - find the first segment without a prompt
       if (job.status === 'awaiting_prompt') {
-        const nextSegmentIndex = currentSegment;
-        const lastSegment = segments[segments.length - 1];
+        const nextSegmentIndex = segments.findIndex(s => !s.prompt && s.status === 'pending');
+        const lastCompletedSegment = segments.filter(s => s.status === 'completed').pop();
         
-        segmentsList.innerHTML += `
-          <div class="segment-item" style="border: 2px solid #ff9800;">
-            <div class="segment-header">
-              <strong>Segment ${nextSegmentIndex + 1}</strong>
-              <span class="chip warning">Awaiting Prompt</span>
-            </div>
-            ${lastSegment && lastSegment.end_frame_url ? `
-              <div style="margin: 12px 0;">
-                <label style="font-size: 12px; color: #666;">Last frame from previous segment:</label>
-                <img src="${lastSegment.end_frame_url}" style="width: 100%; max-width: 400px; border-radius: 4px; margin-top: 8px;">
+        if (nextSegmentIndex >= 0) {
+          segmentsList.innerHTML += `
+            <div class="segment-item" style="border: 2px solid #ff9800;">
+              <div class="segment-header">
+                <strong>Segment ${nextSegmentIndex + 1}</strong>
+                <span class="chip warning">Awaiting Prompt</span>
               </div>
-            ` : ''}
-            <div class="form-group" style="margin-top: 12px;">
-              <label>Enter prompt for this segment:</label>
-              <textarea id="next-prompt-input" rows="3" placeholder="Describe what happens in this segment..."></textarea>
+              ${lastCompletedSegment && lastCompletedSegment.end_frame_url ? `
+                <div style="margin: 12px 0;">
+                  <label style="font-size: 12px; color: #666;">Last frame from previous segment:</label>
+                  <img src="${lastCompletedSegment.end_frame_url}" style="width: 100%; max-width: 400px; border-radius: 4px; margin-top: 8px; cursor: pointer;" onclick="openImageLightbox('${lastCompletedSegment.end_frame_url}')" title="Click to view full size">
+                </div>
+              ` : ''}
+              <div class="form-group" style="margin-top: 12px;">
+                <label>Enter prompt for this segment:</label>
+                <textarea id="next-prompt-input" rows="3" placeholder="Describe what happens in this segment..."></textarea>
+              </div>
+              <button class="btn btn-primary" id="submit-next-prompt-btn" onclick="submitNextPrompt('${jobId}', ${nextSegmentIndex})">Submit Prompt</button>
             </div>
-            <button class="btn btn-primary" id="submit-next-prompt-btn" onclick="submitNextPrompt('${jobId}', ${nextSegmentIndex})">Submit Prompt</button>
-          </div>
-        `;
+          `;
+        }
       }
     } else {
       segmentsList.innerHTML = '<p style="color: #999;">No segments yet - job has not started processing</p>';

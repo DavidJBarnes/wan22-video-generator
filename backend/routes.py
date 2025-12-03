@@ -1,10 +1,11 @@
 """API routes for the ComfyUI Queue Manager."""
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import base64
+import os
 
 from database import (
     get_all_jobs,
@@ -19,7 +20,8 @@ from database import (
     get_job_segments as db_get_job_segments,
     update_segment_prompt,
     get_segment,
-    delete_job_segments
+    delete_job_segments,
+    get_completed_segments_count
 )
 from comfyui_client import ComfyUIClient
 from queue_manager import queue_manager
@@ -63,6 +65,31 @@ class JobResponse(BaseModel):
     created_at: Optional[str]
     started_at: Optional[str]
     completed_at: Optional[str]
+    # Computed segment fields
+    total_segments: Optional[int] = 0
+    completed_segments: Optional[int] = 0
+    progress_percent: Optional[int] = 0
+
+
+def enrich_job_with_segments(job: Dict[str, Any]) -> Dict[str, Any]:
+    """Add computed segment fields to a job dict."""
+    job_id = job["id"]
+    segments = db_get_job_segments(job_id)
+    
+    # Get total segments from actual segments or from parameters
+    if segments:
+        total = len(segments)
+        completed = sum(1 for s in segments if s.get("status") == "completed")
+    else:
+        params = job.get("parameters") or {}
+        total = int(params.get("total_segments", 1))
+        completed = 0
+    
+    job["total_segments"] = total
+    job["completed_segments"] = completed
+    job["progress_percent"] = round((completed / total) * 100) if total > 0 else 0
+    
+    return job
 
 
 class SettingsUpdate(BaseModel):
@@ -81,18 +108,19 @@ class QueueStatus(BaseModel):
 
 @router.get("/jobs", response_model=List[JobResponse])
 async def list_jobs(limit: int = 100, offset: int = 0):
-    """Get all jobs with pagination."""
+    """Get all jobs with pagination, enriched with segment counts."""
     jobs = get_all_jobs(limit=limit, offset=offset)
-    return jobs
+    # Enrich each job with segment counts
+    return [enrich_job_with_segments(job) for job in jobs]
 
 
 @router.get("/jobs/{job_id}", response_model=JobResponse)
 async def get_job_details(job_id: int):
-    """Get a specific job by ID."""
+    """Get a specific job by ID, enriched with segment counts."""
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    return enrich_job_with_segments(job)
 
 
 @router.post("/jobs", response_model=JobResponse)
@@ -202,6 +230,42 @@ async def get_job_thumbnail(job_id: int):
 
     # No thumbnail available
     raise HTTPException(status_code=404, detail="No thumbnail available")
+
+
+@router.get("/jobs/{job_id}/video")
+async def get_job_video(job_id: int):
+    """Get the final stitched video for a completed job.
+    
+    Returns the video file directly for playback in the browser.
+    """
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Check if job has output videos
+    output_images = job.get("output_images") or []
+    if not output_images:
+        raise HTTPException(status_code=404, detail="No video available for this job")
+    
+    # Find the video file (first .mp4 in output_images)
+    video_path = None
+    for path in output_images:
+        if path.endswith('.mp4'):
+            video_path = path
+            break
+    
+    if not video_path:
+        raise HTTPException(status_code=404, detail="No video file found")
+    
+    # Check if file exists
+    if not os.path.exists(video_path):
+        raise HTTPException(status_code=404, detail=f"Video file not found on disk")
+    
+    return FileResponse(
+        video_path,
+        media_type="video/mp4",
+        filename=f"job_{job_id}_final.mp4"
+    )
 
 
 @router.get("/jobs/{job_id}/segments")

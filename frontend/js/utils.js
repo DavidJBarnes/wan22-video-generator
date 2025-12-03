@@ -82,3 +82,56 @@ function showModal(modalId) {
 function hideModal(modalId) {
   document.getElementById(modalId).classList.remove('active');
 }
+
+// Image lightbox for viewing full-size images
+function openImageLightbox(url) {
+  // Create overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'image-lightbox';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    cursor: pointer;
+  `;
+  
+  // Create image
+  const img = document.createElement('img');
+  img.src = url;
+  img.style.cssText = `
+    max-width: 90%;
+    max-height: 90%;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  `;
+  img.onerror = () => {
+    overlay.innerHTML = '<div style="color: white; font-size: 18px;">Failed to load image</div>';
+  };
+  
+  // Close button
+  const closeBtn = document.createElement('div');
+  closeBtn.innerHTML = '&times;';
+  closeBtn.style.cssText = `
+    position: absolute;
+    top: 20px;
+    right: 30px;
+    font-size: 40px;
+    color: white;
+    cursor: pointer;
+  `;
+  
+  overlay.appendChild(img);
+  overlay.appendChild(closeBtn);
+  
+  // Close on click
+  overlay.onclick = () => overlay.remove();
+  
+  document.body.appendChild(overlay);
+}

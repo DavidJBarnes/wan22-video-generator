@@ -9,8 +9,12 @@ import httpx
 
 
 # Output directory for downloaded videos and extracted frames
-OUTPUT_DIR = Path("output")
+# Use absolute path based on the backend directory to avoid CWD issues
+BACKEND_DIR = Path(__file__).resolve().parent
+OUTPUT_DIR = BACKEND_DIR / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
+
+print(f"[VideoUtils] Output directory: {OUTPUT_DIR}")
 
 
 def download_video_from_comfyui(video_url: str, output_path: str) -> bool:
