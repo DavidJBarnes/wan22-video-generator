@@ -491,3 +491,16 @@ tbody tr:hover {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+/* Searchable Select Dropdown */
+.searchable-select {
+  position: relative;
+}
+
+.searchable-select-dropdown {
+  margin-top: -1px;
+}
+
+.searchable-select-dropdown > div {
+  transition: background 0.15s ease;
+}
