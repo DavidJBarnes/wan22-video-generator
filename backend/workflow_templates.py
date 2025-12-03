@@ -98,7 +98,7 @@ WAN_I2V_API_WORKFLOW = {
     "94": {
         "class_type": "CreateVideo",
         "inputs": {
-            "frame_rate": 16,
+            "fps": 16,
             "images": ["87", 0]
         }
     },
