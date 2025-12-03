@@ -29,6 +29,15 @@ const API = {
 
         try {
             const response = await fetch(url, config);
+            
+            // Check if we got HTML instead of JSON (common when accessing from wrong port)
+            const contentType = response.headers.get('content-type') || '';
+            if (contentType.includes('text/html')) {
+                const errorMsg = `API returned HTML instead of JSON. Make sure you're accessing the app via the FastAPI backend (http://localhost:8000/), not a separate static file server.`;
+                console.error(errorMsg);
+                throw new Error(errorMsg);
+            }
+            
             const data = await response.json();
 
             if (!response.ok) {
@@ -37,7 +46,12 @@ const API = {
 
             return data;
         } catch (error) {
-            console.error(`API Error (${endpoint}):`, error);
+            // Add helpful message for common "wrong port" error
+            if (error.message && error.message.includes('Unexpected token')) {
+                console.error(`API Error (${endpoint}): Got HTML instead of JSON. Are you accessing the app at http://localhost:8000/ (FastAPI backend)?`);
+            } else {
+                console.error(`API Error (${endpoint}):`, error);
+            }
             throw error;
         }
     },
