@@ -558,15 +558,17 @@ async function updateJobDetail(jobId) {
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 12px 0;">
                 <div class="form-group">
                   <label style="font-size: 12px; color: #666;">High Noise LoRA (optional)</label>
-                  <select id="next-segment-high-lora" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                    <option value="">-- Use Default --</option>
-                  </select>
+                  <div class="searchable-select" id="next-segment-high-lora-container">
+                    <input type="text" id="next-segment-high-lora" placeholder="Search or select LoRA..." autocomplete="off" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+                    <div class="searchable-select-dropdown" id="next-segment-high-lora-dropdown" style="display: none; position: absolute; max-height: 200px; overflow-y: auto; background: white; border: 1px solid #ddd; border-top: none; border-radius: 0 0 4px 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1000;"></div>
+                  </div>
                 </div>
                 <div class="form-group">
                   <label style="font-size: 12px; color: #666;">Low Noise LoRA (optional)</label>
-                  <select id="next-segment-low-lora" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                    <option value="">-- Use Default --</option>
-                  </select>
+                  <div class="searchable-select" id="next-segment-low-lora-container">
+                    <input type="text" id="next-segment-low-lora" placeholder="Search or select LoRA..." autocomplete="off" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+                    <div class="searchable-select-dropdown" id="next-segment-low-lora-dropdown" style="display: none; position: absolute; max-height: 200px; overflow-y: auto; background: white; border: 1px solid #ddd; border-top: none; border-radius: 0 0 4px 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1000;"></div>
+                  </div>
                 </div>
               </div>
               <button class="btn btn-primary" id="submit-next-prompt-btn" onclick="submitNextPrompt('${jobId}', ${nextSegmentIndex})">Submit Prompt</button>
@@ -707,15 +709,17 @@ function openCreateJobModal() {
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
           <div class="form-group">
             <label style="display: block; margin-bottom: 4px; font-weight: 500;">High Noise LoRA (optional)</label>
-            <select id="new-job-high-lora" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
-              <option value="">-- Use Default --</option>
-            </select>
+            <div class="searchable-select" id="new-job-high-lora-container">
+              <input type="text" id="new-job-high-lora" placeholder="Search or select LoRA..." autocomplete="off" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+              <div class="searchable-select-dropdown" id="new-job-high-lora-dropdown" style="display: none; position: absolute; max-height: 200px; overflow-y: auto; background: white; border: 1px solid #ddd; border-top: none; border-radius: 0 0 4px 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1000;"></div>
+            </div>
           </div>
           <div class="form-group">
             <label style="display: block; margin-bottom: 4px; font-weight: 500;">Low Noise LoRA (optional)</label>
-            <select id="new-job-low-lora" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
-              <option value="">-- Use Default --</option>
-            </select>
+            <div class="searchable-select" id="new-job-low-lora-container">
+              <input type="text" id="new-job-low-lora" placeholder="Search or select LoRA..." autocomplete="off" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+              <div class="searchable-select-dropdown" id="new-job-low-lora-dropdown" style="display: none; position: absolute; max-height: 200px; overflow-y: auto; background: white; border: 1px solid #ddd; border-top: none; border-radius: 0 0 4px 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1000;"></div>
+            </div>
           </div>
         </div>
         
@@ -764,21 +768,88 @@ function openCreateJobModal() {
   loadLoraOptions();
 }
 
+// Helper function to create searchable dropdown for LoRAs
+function createSearchableLoraDropdown(inputId, dropdownId, loras) {
+  const input = document.getElementById(inputId);
+  const dropdown = document.getElementById(dropdownId);
+
+  if (!input || !dropdown) return;
+
+  let selectedValue = '';
+
+  // Render dropdown options
+  function renderOptions(filter = '') {
+    const filterLower = filter.toLowerCase();
+    const filtered = loras.filter(lora =>
+      lora.toLowerCase().includes(filterLower)
+    );
+
+    let html = '<div style="padding: 8px; border-bottom: 1px solid #eee; cursor: pointer; font-size: 13px; color: #666;" data-value="">-- Use Default --</div>';
+
+    filtered.forEach(lora => {
+      html += `<div style="padding: 8px; border-bottom: 1px solid #eee; cursor: pointer; font-size: 13px;" data-value="${lora}">${lora}</div>`;
+    });
+
+    if (filtered.length === 0 && filter) {
+      html += '<div style="padding: 8px; color: #999; font-size: 13px;">No LoRAs found</div>';
+    }
+
+    dropdown.innerHTML = html;
+
+    // Add click handlers to options
+    dropdown.querySelectorAll('[data-value]').forEach(option => {
+      option.addEventListener('mouseenter', () => {
+        option.style.background = '#f0f0f0';
+      });
+      option.addEventListener('mouseleave', () => {
+        option.style.background = 'white';
+      });
+      option.addEventListener('click', () => {
+        selectedValue = option.dataset.value;
+        input.value = selectedValue;
+        input.dataset.selectedValue = selectedValue;
+        dropdown.style.display = 'none';
+      });
+    });
+  }
+
+  // Show dropdown on focus
+  input.addEventListener('focus', () => {
+    renderOptions(input.value);
+    dropdown.style.display = 'block';
+    // Match dropdown width to input
+    dropdown.style.width = input.offsetWidth + 'px';
+  });
+
+  // Filter as user types
+  input.addEventListener('input', () => {
+    renderOptions(input.value);
+    dropdown.style.display = 'block';
+  });
+
+  // Hide dropdown when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+      dropdown.style.display = 'none';
+    }
+  });
+
+  // Initial render
+  renderOptions();
+}
+
 // Load LoRA options into dropdowns for job creation modal
 async function loadLoraOptions() {
   try {
     const response = await API.getLoras();
     const loras = response.loras || [];
-    
-    const highLoraSelect = document.getElementById('new-job-high-lora');
-    const lowLoraSelect = document.getElementById('new-job-low-lora');
-    
-    if (highLoraSelect && lowLoraSelect) {
-      loras.forEach(lora => {
-        highLoraSelect.innerHTML += `<option value="${lora}">${lora}</option>`;
-        lowLoraSelect.innerHTML += `<option value="${lora}">${lora}</option>`;
-      });
-    }
+
+    // Sort LoRAs alphabetically
+    loras.sort((a, b) => a.localeCompare(b));
+
+    // Set up searchable dropdowns
+    createSearchableLoraDropdown('new-job-high-lora', 'new-job-high-lora-dropdown', loras);
+    createSearchableLoraDropdown('new-job-low-lora', 'new-job-low-lora-dropdown', loras);
   } catch (err) {
     console.error('Failed to load LoRAs:', err);
   }
@@ -789,16 +860,13 @@ async function loadSegmentLoraOptions() {
   try {
     const response = await API.getLoras();
     const loras = response.loras || [];
-    
-    const highLoraSelect = document.getElementById('next-segment-high-lora');
-    const lowLoraSelect = document.getElementById('next-segment-low-lora');
-    
-    if (highLoraSelect && lowLoraSelect) {
-      loras.forEach(lora => {
-        highLoraSelect.innerHTML += `<option value="${lora}">${lora}</option>`;
-        lowLoraSelect.innerHTML += `<option value="${lora}">${lora}</option>`;
-      });
-    }
+
+    // Sort LoRAs alphabetically
+    loras.sort((a, b) => a.localeCompare(b));
+
+    // Set up searchable dropdowns
+    createSearchableLoraDropdown('next-segment-high-lora', 'next-segment-high-lora-dropdown', loras);
+    createSearchableLoraDropdown('next-segment-low-lora', 'next-segment-low-lora-dropdown', loras);
   } catch (err) {
     console.error('Failed to load LoRAs for segment:', err);
   }
@@ -819,8 +887,10 @@ async function createJobFromModal() {
   const prompt = document.getElementById('new-job-prompt').value.trim();
   const imageInput = document.getElementById('new-job-image');
   const imageFile = imageInput.files[0];
-  const highLora = document.getElementById('new-job-high-lora')?.value || null;
-  const lowLora = document.getElementById('new-job-low-lora')?.value || null;
+  const highLoraInput = document.getElementById('new-job-high-lora');
+  const lowLoraInput = document.getElementById('new-job-low-lora');
+  const highLora = (highLoraInput?.dataset.selectedValue || highLoraInput?.value || '').trim() || null;
+  const lowLora = (lowLoraInput?.dataset.selectedValue || lowLoraInput?.value || '').trim() || null;
   
   if (!name) {
     showToast('Please enter a job name', 'error');
@@ -905,8 +975,10 @@ async function deleteJob(jobId) {
 async function submitNextPrompt(jobId, segmentIndex) {
   const promptInput = document.getElementById('next-prompt-input');
   const prompt = promptInput?.value.trim();
-  const highLora = document.getElementById('next-segment-high-lora')?.value || null;
-  const lowLora = document.getElementById('next-segment-low-lora')?.value || null;
+  const highLoraInput = document.getElementById('next-segment-high-lora');
+  const lowLoraInput = document.getElementById('next-segment-low-lora');
+  const highLora = (highLoraInput?.dataset.selectedValue || highLoraInput?.value || '').trim() || null;
+  const lowLora = (lowLoraInput?.dataset.selectedValue || lowLoraInput?.value || '').trim() || null;
   
   if (!prompt) {
     showToast('Please enter a prompt', 'error');
