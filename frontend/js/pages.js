@@ -456,26 +456,61 @@ async function saveSettings() {
 // Open create job modal
 function openCreateJobModal() {
   const container = document.getElementById('modals-container');
+  const settings = AppState.settings || {};
+  const defaultWidth = settings.default_width || 640;
+  const defaultHeight = settings.default_height || 640;
+  
   container.innerHTML = `
     <div class="modal active" id="create-job-modal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
-      <div class="modal-content" style="background: white; padding: 24px; border-radius: 8px; max-width: 500px; width: 90%;">
-        <h2 style="margin-top: 0;">Create New Job</h2>
+      <div class="modal-content" style="background: white; padding: 24px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto;">
+        <h2 style="margin-top: 0;">Create New Video Job</h2>
+        
         <div class="form-group" style="margin-bottom: 16px;">
           <label style="display: block; margin-bottom: 4px; font-weight: 500;">Job Name</label>
-          <input id="new-job-name" type="text" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" placeholder="My Video Job">
+          <input id="new-job-name" type="text" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;" placeholder="My Video Job">
         </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+          <div class="form-group">
+            <label style="display: block; margin-bottom: 4px; font-weight: 500;">Width</label>
+            <input id="new-job-width" type="number" value="${defaultWidth}" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+          </div>
+          <div class="form-group">
+            <label style="display: block; margin-bottom: 4px; font-weight: 500;">Height</label>
+            <input id="new-job-height" type="number" value="${defaultHeight}" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+          </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+          <div class="form-group">
+            <label style="display: block; margin-bottom: 4px; font-weight: 500;">Total Video Duration (seconds)</label>
+            <input id="new-job-total-duration" type="number" value="30" min="3" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+          </div>
+          <div class="form-group">
+            <label style="display: block; margin-bottom: 4px; font-weight: 500;">Segment Duration</label>
+            <select id="new-job-segment-duration" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+              <option value="3">3 seconds</option>
+              <option value="4">4 seconds</option>
+              <option value="5" selected>5 seconds</option>
+            </select>
+          </div>
+        </div>
+        
         <div class="form-group" style="margin-bottom: 16px;">
           <label style="display: block; margin-bottom: 4px; font-weight: 500;">Prompt</label>
-          <textarea id="new-job-prompt" rows="4" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" placeholder="Describe what you want to generate..."></textarea>
+          <textarea id="new-job-prompt" rows="4" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;" placeholder="Describe the video scene and action..."></textarea>
         </div>
+        
         <div class="form-group" style="margin-bottom: 16px;">
-          <label style="display: block; margin-bottom: 4px; font-weight: 500;">Workflow Type</label>
-          <select id="new-job-workflow" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-            <option value="txt2img">Text to Image</option>
-            <option value="img2img">Image to Image</option>
-            <option value="i2v">Image to Video</option>
-          </select>
+          <label style="display: block; margin-bottom: 4px; font-weight: 500;">Start Image</label>
+          <input id="new-job-image" type="file" accept="image/*" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+          <div id="image-preview" style="margin-top: 8px;"></div>
         </div>
+        
+        <div id="job-summary" style="background: #f5f5f5; padding: 12px; border-radius: 4px; margin-bottom: 16px; font-size: 14px;">
+          <strong>Summary:</strong> <span id="summary-text">30 second video = 6 segments of 5 seconds each</span>
+        </div>
+        
         <div style="text-align: right; margin-top: 24px;">
           <button class="btn btn-secondary" onclick="closeCreateJobModal()" style="padding: 8px 16px; margin-right: 8px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">Cancel</button>
           <button class="btn btn-primary" onclick="createJobFromModal()" style="padding: 8px 16px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer;">Create Job</button>
@@ -483,6 +518,35 @@ function openCreateJobModal() {
       </div>
     </div>
   `;
+  
+  // Add event listeners for dynamic summary update
+  const totalDurationInput = document.getElementById('new-job-total-duration');
+  const segmentDurationSelect = document.getElementById('new-job-segment-duration');
+  const imageInput = document.getElementById('new-job-image');
+  
+  const updateSummary = () => {
+    const totalDuration = parseInt(totalDurationInput.value) || 30;
+    const segmentDuration = parseInt(segmentDurationSelect.value) || 5;
+    const numSegments = Math.ceil(totalDuration / segmentDuration);
+    document.getElementById('summary-text').textContent = 
+      `${totalDuration} second video = ${numSegments} segments of ${segmentDuration} seconds each`;
+  };
+  
+  totalDurationInput.addEventListener('input', updateSummary);
+  segmentDurationSelect.addEventListener('change', updateSummary);
+  
+  // Image preview
+  imageInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        document.getElementById('image-preview').innerHTML = 
+          `<img src="${e.target.result}" style="max-width: 200px; max-height: 150px; border-radius: 4px; border: 1px solid #ddd;">`;
+      };
+      reader.readAsDataURL(file);
+    }
+  });
 }
 
 // Close create job modal
@@ -493,8 +557,13 @@ function closeCreateJobModal() {
 // Create job from modal form
 async function createJobFromModal() {
   const name = document.getElementById('new-job-name').value.trim();
+  const width = parseInt(document.getElementById('new-job-width').value) || 640;
+  const height = parseInt(document.getElementById('new-job-height').value) || 640;
+  const totalDuration = parseInt(document.getElementById('new-job-total-duration').value) || 30;
+  const segmentDuration = parseInt(document.getElementById('new-job-segment-duration').value) || 5;
   const prompt = document.getElementById('new-job-prompt').value.trim();
-  const workflowType = document.getElementById('new-job-workflow').value;
+  const imageInput = document.getElementById('new-job-image');
+  const imageFile = imageInput.files[0];
   
   if (!name) {
     showToast('Please enter a job name', 'error');
@@ -506,12 +575,37 @@ async function createJobFromModal() {
     return;
   }
   
+  if (!imageFile) {
+    showToast('Please select a start image', 'error');
+    return;
+  }
+  
   try {
+    // First, upload the image to ComfyUI
+    showToast('Uploading image...', 'info');
+    const uploadResult = await API.uploadImage(imageFile);
+    
+    if (!uploadResult || !uploadResult.filename) {
+      showToast('Failed to upload image', 'error');
+      return;
+    }
+    
+    // Calculate number of segments
+    const totalSegments = Math.ceil(totalDuration / segmentDuration);
+    
     const jobData = {
       name: name,
       prompt: prompt,
-      workflow_type: workflowType,
-      negative_prompt: AppState.settings?.default_negative_prompt || ''
+      workflow_type: 'i2v',
+      negative_prompt: AppState.settings?.default_negative_prompt || '',
+      input_image: uploadResult.filename,
+      parameters: {
+        width: width,
+        height: height,
+        total_duration: totalDuration,
+        segment_duration: segmentDuration,
+        total_segments: totalSegments
+      }
     };
     
     await API.createJob(jobData);
