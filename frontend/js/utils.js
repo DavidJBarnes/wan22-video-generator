@@ -101,16 +101,31 @@ function requestNotificationPermission() {
 
 function notifySegmentAwaitingPrompt(jobName, segmentIndex) {
   if (!('Notification' in window)) return;
-  if (Notification.permission !== 'granted') return;
   
   // Only notify if tab is not focused
   if (!document.hidden) return;
   
-  new Notification('Prompt input required!', {
-    body: `${jobName}: Segment ${segmentIndex} completed. Enter the next prompt to continue.`,
-    icon: '/static/favicon.ico',
-    tag: `segment-${segmentIndex}` // Prevent duplicate notifications
-  });
+  // Helper function to send the notification
+  const sendNotification = () => {
+    new Notification('Prompt input required!', {
+      body: `${jobName}: Segment ${segmentIndex} completed. Enter the next prompt to continue.`,
+      icon: '/static/favicon.ico',
+      tag: `segment-${segmentIndex}` // Prevent duplicate notifications
+    });
+  };
+  
+  // Check permission status and request if needed (per MDN pattern)
+  if (Notification.permission === 'granted') {
+    sendNotification();
+  } else if (Notification.permission === 'default') {
+    // Request permission and send notification if granted
+    Notification.requestPermission().then(permission => {
+      if (permission === 'granted') {
+        sendNotification();
+      }
+    });
+  }
+  // If permission is 'denied', do nothing
 }
 
 function openImageLightbox(url) {
