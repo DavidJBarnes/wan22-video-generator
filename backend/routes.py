@@ -149,17 +149,37 @@ async def retry_job(job_id: int):
 
 @router.get("/jobs/{job_id}/thumbnail")
 async def get_job_thumbnail(job_id: int):
-    """Get thumbnail for a job (redirects to first output image from ComfyUI)."""
+    """Get thumbnail for a job.
+    
+    Priority:
+    1. First output image/video (if job completed)
+    2. Input/start image (while job is pending/running)
+    3. 404 if neither exists
+    """
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    # First, try output images (for completed jobs)
     images = job.get("output_images") or []
-    if not images:
-        raise HTTPException(status_code=404, detail="No output images yet")
+    if images:
+        return RedirectResponse(images[0])
 
-    # output_images contains ComfyUI view URLs, redirect to the first one
-    return RedirectResponse(images[0])
+    # Fallback to input/start image (for pending/running jobs)
+    input_image = job.get("input_image")
+    if input_image:
+        comfyui_url = get_setting("comfyui_url", COMFYUI_SERVER_URL)
+        # If it's already a full URL, redirect directly
+        if input_image.startswith("http"):
+            return RedirectResponse(input_image)
+        # Otherwise, construct ComfyUI view URL for uploaded images
+        # Uploaded images go to the "input" subfolder with type "input"
+        return RedirectResponse(
+            f"{comfyui_url}/view?filename={input_image}&subfolder=&type=input"
+        )
+
+    # No thumbnail available
+    raise HTTPException(status_code=404, detail="No thumbnail available")
 
 
 @router.get("/jobs/{job_id}/segments")
