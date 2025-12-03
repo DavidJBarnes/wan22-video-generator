@@ -26,7 +26,7 @@ window.renderPage = function(page) {
 const renderDashboard = function(container) {
   container.innerHTML = `
     <h1>Dashboard</h1>
-    
+
     <div class="card-grid">
       <div class="card">
         <div class="status-indicator">
@@ -37,12 +37,12 @@ const renderDashboard = function(container) {
           </div>
         </div>
       </div>
-      
+
       <div class="card">
         <h3>Running Jobs</h3>
         <div class="value" id="running-jobs-count">0</div>
       </div>
-      
+
       <div class="card">
         <h3>Queued Jobs</h3>
         <div class="value" id="queued-jobs-count">0</div>
@@ -66,8 +66,19 @@ const renderDashboard = function(container) {
       </tbody>
     </table>
   `;
-  
+
   updateDashboard();
+
+  // Auto-refresh dashboard every 3 seconds for real-time status updates
+  if (AppState.dashboardInterval) {
+    clearInterval(AppState.dashboardInterval);
+  }
+
+  AppState.dashboardInterval = setInterval(() => {
+    if (AppState.currentPage === 'dashboard') {
+      updateDashboard();
+    }
+  }, 3000);
 };
 
 const renderQueue = function(container) {
