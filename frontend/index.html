@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wan2.2 Video Generator</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="toast-container" id="toast-container"></div>
+
+  <div class="app-container">
+    <div class="sidebar">
+      <div class="sidebar-header">Wan2.2 Video Gen</div>
+      <div class="nav-item active" data-page="dashboard">
+        <span>📊</span> Dashboard
+      </div>
+      <div class="nav-item" data-page="queue">
+        <span>📋</span> Job Queue
+      </div>
+      <div class="nav-item" data-page="images">
+        <span>🖼️</span> Image Repo
+      </div>
+      <div class="nav-item" data-page="settings">
+        <span>⚙️</span> Settings
+      </div>
+    </div>
+
+    <div class="main-content" id="main-content">
+      <!-- Content loaded dynamically -->
+    </div>
+  </div>
+
+  <!-- Modals container -->
+  <div id="modals-container"></div>
+
+  <script src="js/utils.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/pages.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

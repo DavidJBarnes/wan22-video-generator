@@ -1,0 +1,345 @@
+"""ComfyUI API client for workflow submission and monitoring."""
+
+import httpx
+import json
+import uuid
+import base64
+from typing import Optional, Dict, Any, List, Tuple
+from pathlib import Path
+
+# Default workflow templates
+WORKFLOW_TEMPLATES = {
+    "txt2img": {
+        "3": {
+            "class_type": "KSampler",
+            "inputs": {
+                "cfg": 7,
+                "denoise": 1,
+                "latent_image": ["5", 0],
+                "model": ["4", 0],
+                "negative": ["7", 0],
+                "positive": ["6", 0],
+                "sampler_name": "euler",
+                "scheduler": "normal",
+                "seed": 0,
+                "steps": 20
+            }
+        },
+        "4": {
+            "class_type": "CheckpointLoaderSimple",
+            "inputs": {
+                "ckpt_name": "v1-5-pruned.safetensors"
+            }
+        },
+        "5": {
+            "class_type": "EmptyLatentImage",
+            "inputs": {
+                "batch_size": 1,
+                "height": 512,
+                "width": 512
+            }
+        },
+        "6": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "clip": ["4", 1],
+                "text": ""
+            }
+        },
+        "7": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "clip": ["4", 1],
+                "text": ""
+            }
+        },
+        "8": {
+            "class_type": "VAEDecode",
+            "inputs": {
+                "samples": ["3", 0],
+                "vae": ["4", 2]
+            }
+        },
+        "9": {
+            "class_type": "SaveImage",
+            "inputs": {
+                "filename_prefix": "ComfyUI",
+                "images": ["8", 0]
+            }
+        }
+    },
+    "img2img": {
+        "1": {
+            "class_type": "LoadImage",
+            "inputs": {
+                "image": ""
+            }
+        },
+        "2": {
+            "class_type": "VAEEncode",
+            "inputs": {
+                "pixels": ["1", 0],
+                "vae": ["4", 2]
+            }
+        },
+        "3": {
+            "class_type": "KSampler",
+            "inputs": {
+                "cfg": 7,
+                "denoise": 0.75,
+                "latent_image": ["2", 0],
+                "model": ["4", 0],
+                "negative": ["7", 0],
+                "positive": ["6", 0],
+                "sampler_name": "euler",
+                "scheduler": "normal",
+                "seed": 0,
+                "steps": 20
+            }
+        },
+        "4": {
+            "class_type": "CheckpointLoaderSimple",
+            "inputs": {
+                "ckpt_name": "v1-5-pruned.safetensors"
+            }
+        },
+        "6": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "clip": ["4", 1],
+                "text": ""
+            }
+        },
+        "7": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {
+                "clip": ["4", 1],
+                "text": ""
+            }
+        },
+        "8": {
+            "class_type": "VAEDecode",
+            "inputs": {
+                "samples": ["3", 0],
+                "vae": ["4", 2]
+            }
+        },
+        "9": {
+            "class_type": "SaveImage",
+            "inputs": {
+                "filename_prefix": "ComfyUI",
+                "images": ["8", 0]
+            }
+        }
+    }
+}
+
+
+class ComfyUIClient:
+    """Client for interacting with ComfyUI API."""
+
+    def __init__(self, base_url: str = "http://127.0.0.1:8188"):
+        self.base_url = base_url.rstrip("/")
+        self.client = httpx.Client(timeout=30.0)
+
+    def check_connection(self) -> Tuple[bool, str]:
+        """Check if ComfyUI is reachable."""
+        try:
+            response = self.client.get(f"{self.base_url}/system_stats")
+            if response.status_code == 200:
+                return True, "Connected"
+            return False, f"Unexpected status: {response.status_code}"
+        except httpx.ConnectError:
+            return False, "Connection refused - is ComfyUI running?"
+        except Exception as e:
+            return False, str(e)
+
+    def get_checkpoints(self) -> List[str]:
+        """Get list of available checkpoint models."""
+        try:
+            response = self.client.get(f"{self.base_url}/object_info/CheckpointLoaderSimple")
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("CheckpointLoaderSimple", {}).get("input", {}).get("required", {}).get("ckpt_name", [[]])[0]
+            return []
+        except Exception:
+            return []
+
+    def get_samplers(self) -> List[str]:
+        """Get list of available samplers."""
+        try:
+            response = self.client.get(f"{self.base_url}/object_info/KSampler")
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("KSampler", {}).get("input", {}).get("required", {}).get("sampler_name", [[]])[0]
+            return ["euler", "euler_ancestral", "heun", "dpm_2", "dpm_2_ancestral",
+                    "lms", "dpm_fast", "dpm_adaptive", "dpmpp_2s_ancestral",
+                    "dpmpp_sde", "dpmpp_2m", "ddim", "uni_pc"]
+        except Exception:
+            return ["euler", "euler_ancestral", "heun", "dpm_2", "ddim"]
+
+    def get_schedulers(self) -> List[str]:
+        """Get list of available schedulers."""
+        try:
+            response = self.client.get(f"{self.base_url}/object_info/KSampler")
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("KSampler", {}).get("input", {}).get("required", {}).get("scheduler", [[]])[0]
+            return ["normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform"]
+        except Exception:
+            return ["normal", "karras", "exponential", "simple"]
+
+    def upload_image(self, image_data: bytes, filename: str) -> Optional[str]:
+        """Upload an image to ComfyUI and return the filename."""
+        try:
+            files = {
+                "image": (filename, image_data, "image/png")
+            }
+            response = self.client.post(
+                f"{self.base_url}/upload/image",
+                files=files
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("name")
+            return None
+        except Exception as e:
+            print(f"Image upload error: {e}")
+            return None
+
+    def build_workflow(
+        self,
+        workflow_type: str,
+        prompt: str,
+        negative_prompt: str = "",
+        checkpoint: str = "v1-5-pruned.safetensors",
+        steps: int = 20,
+        cfg: float = 7.0,
+        sampler: str = "euler",
+        scheduler: str = "normal",
+        width: int = 512,
+        height: int = 512,
+        seed: Optional[int] = None,
+        denoise: float = 0.75,
+        input_image: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Build a workflow from template with given parameters."""
+        import copy
+        import random
+
+        # Get base template
+        if workflow_type not in WORKFLOW_TEMPLATES:
+            workflow_type = "txt2img"
+
+        workflow = copy.deepcopy(WORKFLOW_TEMPLATES[workflow_type])
+
+        # Set seed
+        if seed is None:
+            seed = random.randint(0, 2**32 - 1)
+
+        # Update common parameters
+        if "3" in workflow:  # KSampler node
+            workflow["3"]["inputs"]["seed"] = seed
+            workflow["3"]["inputs"]["steps"] = steps
+            workflow["3"]["inputs"]["cfg"] = cfg
+            workflow["3"]["inputs"]["sampler_name"] = sampler
+            workflow["3"]["inputs"]["scheduler"] = scheduler
+            if workflow_type == "img2img":
+                workflow["3"]["inputs"]["denoise"] = denoise
+
+        if "4" in workflow:  # Checkpoint loader
+            workflow["4"]["inputs"]["ckpt_name"] = checkpoint
+
+        if "5" in workflow:  # Empty latent (txt2img)
+            workflow["5"]["inputs"]["width"] = width
+            workflow["5"]["inputs"]["height"] = height
+
+        if "6" in workflow:  # Positive prompt
+            workflow["6"]["inputs"]["text"] = prompt
+
+        if "7" in workflow:  # Negative prompt
+            workflow["7"]["inputs"]["text"] = negative_prompt
+
+        # img2img specific
+        if workflow_type == "img2img" and input_image and "1" in workflow:
+            workflow["1"]["inputs"]["image"] = input_image
+
+        return workflow
+
+    def queue_prompt(self, workflow: Dict[str, Any]) -> Tuple[bool, str]:
+        """Submit a workflow to ComfyUI queue."""
+        try:
+            client_id = str(uuid.uuid4())
+            payload = {
+                "prompt": workflow,
+                "client_id": client_id
+            }
+
+            response = self.client.post(
+                f"{self.base_url}/prompt",
+                json=payload
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                prompt_id = data.get("prompt_id")
+                if prompt_id:
+                    return True, prompt_id
+                return False, "No prompt_id in response"
+            else:
+                error_data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
+                error_msg = error_data.get("error", {}).get("message", response.text)
+                return False, f"Error: {error_msg}"
+        except Exception as e:
+            return False, str(e)
+
+    def get_prompt_status(self, prompt_id: str) -> Dict[str, Any]:
+        """Get the status of a queued prompt."""
+        try:
+            response = self.client.get(f"{self.base_url}/history/{prompt_id}")
+            if response.status_code == 200:
+                data = response.json()
+                if prompt_id in data:
+                    return {
+                        "status": "completed",
+                        "data": data[prompt_id]
+                    }
+                return {"status": "pending"}
+            return {"status": "unknown", "error": f"Status code: {response.status_code}"}
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+
+    def get_queue_status(self) -> Dict[str, Any]:
+        """Get current queue status."""
+        try:
+            response = self.client.get(f"{self.base_url}/queue")
+            if response.status_code == 200:
+                return response.json()
+            return {"queue_running": [], "queue_pending": []}
+        except Exception:
+            return {"queue_running": [], "queue_pending": []}
+
+    def get_output_images(self, prompt_id: str) -> List[str]:
+        """Get output image URLs for a completed prompt."""
+        status = self.get_prompt_status(prompt_id)
+        if status.get("status") != "completed":
+            return []
+
+        images = []
+        outputs = status.get("data", {}).get("outputs", {})
+
+        for node_id, node_output in outputs.items():
+            if "images" in node_output:
+                for img in node_output["images"]:
+                    filename = img.get("filename")
+                    subfolder = img.get("subfolder", "")
+                    img_type = img.get("type", "output")
+                    if filename:
+                        url = f"{self.base_url}/view?filename={filename}&subfolder={subfolder}&type={img_type}"
+                        images.append(url)
+
+        return images
+
+    def close(self):
+        """Close the HTTP client."""
+        self.client.close()

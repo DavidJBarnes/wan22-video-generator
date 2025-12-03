@@ -1,0 +1,8 @@
+{
+  "_comment": "Paste your ComfyUI workflow JSON here",
+  "_instructions": [
+    "1. Copy the workflow from video_wan2_2_14B_i2v.json",
+    "2. Replace hardcoded values with placeholders like {{PROMPT}}, {{IMAGE_PATH}}, etc.",
+    "3. This will be used by the backend to generate dynamic workflows"
+  ]
+}

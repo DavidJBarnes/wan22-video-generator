@@ -1,0 +1,304 @@
+"""API routes for the ComfyUI Queue Manager."""
+
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from pydantic import BaseModel
+from typing import Optional, Dict, Any, List
+import base64
+
+from database import (
+    get_all_jobs,
+    get_job,
+    create_job,
+    delete_job,
+    update_job_status,
+    get_all_settings,
+    get_setting,
+    update_settings
+)
+from comfyui_client import ComfyUIClient
+from queue_manager import queue_manager
+
+# Create router
+router = APIRouter()
+
+
+# ============== Pydantic Models ==============
+
+class JobCreate(BaseModel):
+    name: str
+    prompt: str
+    negative_prompt: Optional[str] = ""
+    workflow_type: Optional[str] = "txt2img"
+    parameters: Optional[Dict[str, Any]] = None
+    input_image: Optional[str] = None  # Base64 encoded or ComfyUI filename
+
+
+class JobResponse(BaseModel):
+    id: int
+    name: str
+    status: str
+    prompt: Optional[str]
+    negative_prompt: Optional[str]
+    workflow_type: Optional[str]
+    parameters: Optional[Dict[str, Any]]
+    input_image: Optional[str]
+    output_images: Optional[List[str]]
+    comfyui_prompt_id: Optional[str]
+    error_message: Optional[str]
+    created_at: Optional[str]
+    started_at: Optional[str]
+    completed_at: Optional[str]
+
+
+class SettingsUpdate(BaseModel):
+    settings: Dict[str, str]
+
+
+class QueueStatus(BaseModel):
+    is_running: bool
+    current_job_id: Optional[int]
+    pending_count: int
+    comfyui_connected: bool
+    comfyui_message: str
+
+
+# ============== Job Endpoints ==============
+
+@router.get("/jobs", response_model=List[JobResponse])
+async def list_jobs(limit: int = 100, offset: int = 0):
+    """Get all jobs with pagination."""
+    jobs = get_all_jobs(limit=limit, offset=offset)
+    return jobs
+
+
+@router.get("/jobs/{job_id}", response_model=JobResponse)
+async def get_job_details(job_id: int):
+    """Get a specific job by ID."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@router.post("/jobs", response_model=JobResponse)
+async def create_new_job(job: JobCreate):
+    """Create a new job."""
+    job_id = create_job(
+        name=job.name,
+        prompt=job.prompt,
+        negative_prompt=job.negative_prompt or "",
+        workflow_type=job.workflow_type or "txt2img",
+        parameters=job.parameters,
+        input_image=job.input_image
+    )
+    return get_job(job_id)
+
+
+@router.delete("/jobs/{job_id}")
+async def delete_job_endpoint(job_id: int):
+    """Delete a job."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Don't delete running jobs
+    if job["status"] == "running":
+        raise HTTPException(status_code=400, detail="Cannot delete a running job")
+
+    delete_job(job_id)
+    return {"status": "deleted", "id": job_id}
+
+
+@router.post("/jobs/{job_id}/cancel")
+async def cancel_job(job_id: int):
+    """Cancel a pending job."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Only pending jobs can be cancelled")
+
+    update_job_status(job_id, "cancelled")
+    return {"status": "cancelled", "id": job_id}
+
+
+@router.post("/jobs/{job_id}/retry")
+async def retry_job(job_id: int):
+    """Retry a failed job."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job["status"] not in ("failed", "cancelled"):
+        raise HTTPException(status_code=400, detail="Only failed or cancelled jobs can be retried")
+
+    update_job_status(job_id, "pending", error_message=None)
+    return {"status": "pending", "id": job_id}
+
+
+# ============== Settings Endpoints ==============
+
+@router.get("/settings")
+async def get_settings():
+    """Get all settings."""
+    settings = get_all_settings()
+    return {"settings": settings}
+
+
+@router.put("/settings")
+async def update_settings_endpoint(data: SettingsUpdate):
+    """Update settings."""
+    update_settings(data.settings)
+    return {"status": "updated", "settings": get_all_settings()}
+
+
+@router.get("/settings/{key}")
+async def get_single_setting(key: str):
+    """Get a single setting by key."""
+    value = get_setting(key)
+    if value is None:
+        raise HTTPException(status_code=404, detail=f"Setting '{key}' not found")
+    return {"key": key, "value": value}
+
+
+# ============== Queue Control Endpoints ==============
+
+@router.get("/queue/status", response_model=QueueStatus)
+async def get_queue_status():
+    """Get queue manager status."""
+    from database import get_pending_jobs
+
+    # Check ComfyUI connection
+    comfyui_url = get_setting("comfyui_url", "http://127.0.0.1:8188")
+    client = ComfyUIClient(comfyui_url)
+    connected, message = client.check_connection()
+    client.close()
+
+    pending_jobs = get_pending_jobs()
+
+    return QueueStatus(
+        is_running=queue_manager.is_running,
+        current_job_id=queue_manager.current_job_id,
+        pending_count=len(pending_jobs),
+        comfyui_connected=connected,
+        comfyui_message=message
+    )
+
+
+@router.post("/queue/start")
+async def start_queue():
+    """Start the queue manager."""
+    if queue_manager.is_running:
+        return {"status": "already_running"}
+
+    queue_manager.start()
+    return {"status": "started"}
+
+
+@router.post("/queue/stop")
+async def stop_queue():
+    """Stop the queue manager."""
+    if not queue_manager.is_running:
+        return {"status": "already_stopped"}
+
+    queue_manager.stop()
+    return {"status": "stopped"}
+
+
+# ============== ComfyUI Info Endpoints ==============
+
+@router.get("/comfyui/checkpoints")
+async def get_checkpoints():
+    """Get available checkpoint models from ComfyUI."""
+    comfyui_url = get_setting("comfyui_url", "http://127.0.0.1:8188")
+    client = ComfyUIClient(comfyui_url)
+    checkpoints = client.get_checkpoints()
+    client.close()
+    return {"checkpoints": checkpoints}
+
+
+@router.get("/comfyui/samplers")
+async def get_samplers():
+    """Get available samplers from ComfyUI."""
+    comfyui_url = get_setting("comfyui_url", "http://127.0.0.1:8188")
+    client = ComfyUIClient(comfyui_url)
+    samplers = client.get_samplers()
+    client.close()
+    return {"samplers": samplers}
+
+
+@router.get("/comfyui/schedulers")
+async def get_schedulers():
+    """Get available schedulers from ComfyUI."""
+    comfyui_url = get_setting("comfyui_url", "http://127.0.0.1:8188")
+    client = ComfyUIClient(comfyui_url)
+    schedulers = client.get_schedulers()
+    client.close()
+    return {"schedulers": schedulers}
+
+
+@router.get("/comfyui/status")
+async def get_comfyui_status():
+    """Check ComfyUI connection status."""
+    comfyui_url = get_setting("comfyui_url", "http://127.0.0.1:8188")
+    client = ComfyUIClient(comfyui_url)
+    connected, message = client.check_connection()
+
+    queue_status = {}
+    if connected:
+        queue_status = client.get_queue_status()
+
+    client.close()
+
+    return {
+        "connected": connected,
+        "message": message,
+        "url": comfyui_url,
+        "queue": queue_status
+    }
+
+
+# ============== Image Upload Endpoint ==============
+
+@router.post("/upload/image")
+async def upload_image(file: UploadFile = File(...)):
+    """Upload an image to ComfyUI."""
+    # Read file content
+    content = await file.read()
+
+    # Upload to ComfyUI
+    comfyui_url = get_setting("comfyui_url", "http://127.0.0.1:8188")
+    client = ComfyUIClient(comfyui_url)
+
+    filename = client.upload_image(content, file.filename)
+    client.close()
+
+    if not filename:
+        raise HTTPException(status_code=500, detail="Failed to upload image to ComfyUI")
+
+    return {"filename": filename, "original_name": file.filename}
+
+
+@router.post("/upload/image/base64")
+async def upload_image_base64(image_data: str = Form(...), filename: str = Form(...)):
+    """Upload a base64 encoded image to ComfyUI."""
+    try:
+        # Decode base64
+        if "," in image_data:
+            image_data = image_data.split(",")[1]
+        content = base64.b64decode(image_data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid base64 data: {e}")
+
+    # Upload to ComfyUI
+    comfyui_url = get_setting("comfyui_url", "http://127.0.0.1:8188")
+    client = ComfyUIClient(comfyui_url)
+
+    result_filename = client.upload_image(content, filename)
+    client.close()
+
+    if not result_filename:
+        raise HTTPException(status_code=500, detail="Failed to upload image to ComfyUI")
+
+    return {"filename": result_filename, "original_name": filename}
