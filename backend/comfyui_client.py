@@ -7,6 +7,9 @@ import base64
 from typing import Optional, Dict, Any, List, Tuple
 from pathlib import Path
 
+# Import the pre-converted workflow builder
+from workflow_templates import build_wan_i2v_workflow as _build_wan_i2v_workflow
+
 # Default workflow templates
 WORKFLOW_TEMPLATES = {
     "txt2img": {
@@ -207,6 +210,35 @@ class ComfyUIClient:
             print(f"Image upload error: {e}")
             return None
 
+    def build_wan_i2v_workflow(
+        self,
+        prompt: str,
+        negative_prompt: str = "",
+        width: int = 640,
+        height: int = 640,
+        frames: int = 81,
+        start_image_filename: str = "",
+        high_noise_model: str = "wan2.2_i2v_high_noise_14B_fp16.safetensors",
+        low_noise_model: str = "wan2.2_i2v_low_noise_14B_fp16.safetensors",
+        seed: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Build a Wan2.2 i2v workflow using the pre-converted API template.
+        
+        Delegates to workflow_templates.build_wan_i2v_workflow which injects
+        user values into the pre-converted workflow constant.
+        """
+        return _build_wan_i2v_workflow(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            width=width,
+            height=height,
+            frames=frames,
+            start_image_filename=start_image_filename,
+            high_noise_model=high_noise_model,
+            low_noise_model=low_noise_model,
+            seed=seed,
+        )
+
     def build_workflow(
         self,
         workflow_type: str,
@@ -221,13 +253,30 @@ class ComfyUIClient:
         height: int = 512,
         seed: Optional[int] = None,
         denoise: float = 0.75,
-        input_image: Optional[str] = None
+        input_image: Optional[str] = None,
+        frames: int = 81,
+        high_noise_model: str = "wan2.2_i2v_high_noise_14B_fp16.safetensors",
+        low_noise_model: str = "wan2.2_i2v_low_noise_14B_fp16.safetensors",
     ) -> Dict[str, Any]:
         """Build a workflow from template with given parameters."""
         import copy
         import random
 
-        # Get base template
+        # Use Wan2.2 i2v workflow for video generation
+        if workflow_type in ("i2v", "wan_i2v", "wan_video"):
+            print(f"[Workflow] Building Wan2.2 i2v workflow")
+            return self.build_wan_i2v_workflow(
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                width=width,
+                height=height,
+                frames=frames,
+                start_image_filename=input_image or "",
+                high_noise_model=high_noise_model,
+                low_noise_model=low_noise_model,
+            )
+
+        # Get base template for simple workflows
         if workflow_type not in WORKFLOW_TEMPLATES:
             workflow_type = "txt2img"
 
@@ -287,9 +336,23 @@ class ComfyUIClient:
                     return True, prompt_id
                 return False, "No prompt_id in response"
             else:
-                error_data = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
-                error_msg = error_data.get("error", {}).get("message", response.text)
-                return False, f"Error: {error_msg}"
+                if response.headers.get("content-type", "").startswith("application/json"):
+                    error_data = response.json()
+                    # Log full error for debugging including node_errors
+                    print(f"[ComfyUI] queue_prompt error: {json.dumps(error_data, indent=2, ensure_ascii=False)}")
+                    
+                    # Extract detailed node errors if available
+                    node_errors = error_data.get("node_errors", {})
+                    if node_errors:
+                        for node_id, node_error in node_errors.items():
+                            class_type = node_error.get("class_type", "unknown")
+                            errors = node_error.get("errors", [])
+                            print(f"[ComfyUI] Node {node_id} ({class_type}) errors: {errors}")
+                    
+                    error_msg = error_data.get("error", {}).get("message", response.text)
+                    return False, f"Error: {error_msg}"
+                else:
+                    return False, response.text
         except Exception as e:
             return False, str(e)
 
@@ -319,26 +382,61 @@ class ComfyUIClient:
         except Exception:
             return {"queue_running": [], "queue_pending": []}
 
+    def get_execution_time(self, prompt_id: str) -> Optional[float]:
+        """Get the total execution time in seconds for a completed prompt."""
+        status = self.get_prompt_status(prompt_id)
+        if status.get("status") != "completed":
+            return None
+        
+        data = status.get("data") or {}
+        
+        # ComfyUI stores execution time in status.execution_time or status.execution_cached
+        # The structure varies by version, so we check multiple locations
+        status_info = data.get("status", {})
+        
+        # Try to get execution time from status
+        exec_time = status_info.get("execution_time")
+        if exec_time is not None:
+            return float(exec_time)
+        
+        # Alternative: calculate from prompt timestamps if available
+        prompt_info = data.get("prompt", [])
+        if len(prompt_info) >= 2:
+            # prompt_info[0] is the prompt number, prompt_info[1] is the prompt_id
+            # Some versions include timestamps
+            pass
+        
+        return None
+
     def get_output_images(self, prompt_id: str) -> List[str]:
-        """Get output image URLs for a completed prompt."""
+        """Get output media URLs (images, videos, gifs) for a completed prompt."""
         status = self.get_prompt_status(prompt_id)
         if status.get("status") != "completed":
             return []
 
-        images = []
-        outputs = status.get("data", {}).get("outputs", {})
+        media_urls = []
+        
+        # Handle both possible response structures
+        data = status.get("data") or status
+        outputs = data.get("outputs", {})
+        
+        print(f"[ComfyUI] get_output_images: outputs keys = {list(outputs.keys())}")
 
         for node_id, node_output in outputs.items():
-            if "images" in node_output:
-                for img in node_output["images"]:
-                    filename = img.get("filename")
-                    subfolder = img.get("subfolder", "")
-                    img_type = img.get("type", "output")
-                    if filename:
-                        url = f"{self.base_url}/view?filename={filename}&subfolder={subfolder}&type={img_type}"
-                        images.append(url)
+            # Check for images, videos, and gifs (different node types use different keys)
+            for media_key in ("images", "videos", "gifs"):
+                if media_key in node_output:
+                    print(f"[ComfyUI] Found {media_key} in node {node_id}: {len(node_output[media_key])} items")
+                    for media in node_output[media_key]:
+                        filename = media.get("filename")
+                        subfolder = media.get("subfolder", "")
+                        media_type = media.get("type", "output")
+                        if filename:
+                            url = f"{self.base_url}/view?filename={filename}&subfolder={subfolder}&type={media_type}"
+                            media_urls.append(url)
+                            print(f"[ComfyUI] Added media URL: {url}")
 
-        return images
+        return media_urls
 
     def close(self):
         """Close the HTTP client."""

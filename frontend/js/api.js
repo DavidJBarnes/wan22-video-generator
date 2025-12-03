@@ -29,6 +29,15 @@ const API = {
 
         try {
             const response = await fetch(url, config);
+            
+            // Check if we got HTML instead of JSON (common when accessing from wrong port)
+            const contentType = response.headers.get('content-type') || '';
+            if (contentType.includes('text/html')) {
+                const errorMsg = `API returned HTML instead of JSON. Make sure you're accessing the app via the FastAPI backend (http://localhost:8000/), not a separate static file server.`;
+                console.error(errorMsg);
+                throw new Error(errorMsg);
+            }
+            
             const data = await response.json();
 
             if (!response.ok) {
@@ -37,7 +46,12 @@ const API = {
 
             return data;
         } catch (error) {
-            console.error(`API Error (${endpoint}):`, error);
+            // Add helpful message for common "wrong port" error
+            if (error.message && error.message.includes('Unexpected token')) {
+                console.error(`API Error (${endpoint}): Got HTML instead of JSON. Are you accessing the app at http://localhost:8000/ (FastAPI backend)?`);
+            } else {
+                console.error(`API Error (${endpoint}):`, error);
+            }
             throw error;
         }
     },
@@ -114,6 +128,16 @@ const API = {
         return this.request('/comfyui/status');
     },
 
+    async checkComfyStatus() {
+        // Wrapper that returns { reachable: boolean } for pages.js compatibility
+        try {
+            const status = await this.request('/comfyui/status');
+            return { reachable: status.connected, ...status };
+        } catch (error) {
+            return { reachable: false, error: error.message };
+        }
+    },
+
     async getCheckpoints() {
         return this.request('/comfyui/checkpoints');
     },
@@ -124,6 +148,45 @@ const API = {
 
     async getSchedulers() {
         return this.request('/comfyui/schedulers');
+    },
+
+    // ============== Job Segments & Frames ==============
+
+    async getSegments(jobId) {
+        // Get segments for a job - returns empty array if endpoint doesn't exist
+        try {
+            return await this.request(`/jobs/${jobId}/segments`);
+        } catch (error) {
+            // Segments endpoint may not exist yet, return empty array
+            console.warn('Segments endpoint not available:', error);
+            return [];
+        }
+    },
+
+    getJobThumbnail(jobId) {
+        // Return URL for job thumbnail
+        return `${this.baseUrl}/jobs/${jobId}/thumbnail`;
+    },
+
+    getSegmentFrame(jobId, segmentIndex) {
+        // Return URL for segment end frame
+        return `${this.baseUrl}/jobs/${jobId}/segments/${segmentIndex}/frame`;
+    },
+
+    getJobVideo(jobId) {
+        // Return URL for job's final video
+        return `${this.baseUrl}/jobs/${jobId}/video`;
+    },
+
+    async submitSegmentPrompt(jobId, segmentIndex, prompt) {
+        // Submit a prompt for a specific segment (used when job is awaiting_prompt)
+        const formData = new FormData();
+        formData.append('prompt', prompt);
+        
+        return this.request(`/jobs/${jobId}/segments/${segmentIndex}/prompt`, {
+            method: 'POST',
+            body: formData
+        });
     },
 
     // ============== Image Upload ==============
