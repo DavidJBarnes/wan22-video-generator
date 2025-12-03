@@ -145,7 +145,11 @@ class QueueManager:
             self._current_job_id = None
 
     def _process_job_segments(self, job_id: int, job: dict, client: ComfyUIClient):
-        """Process all segments for a job sequentially."""
+        """Process all segments for a job sequentially.
+        
+        After each segment completes (except the last), the job pauses and waits
+        for the user to provide a prompt for the next segment.
+        """
         params = job.get("parameters") or {}
         total_segments = int(params.get("total_segments", 1))
         
@@ -172,6 +176,14 @@ class QueueManager:
                 print(f"[QueueManager] Segment {segment_index} already completed, skipping")
                 continue
             
+            # For segments after the first, check if we have a prompt
+            # If no prompt, pause and wait for user input
+            if segment_index > 0 and not segment.get("prompt"):
+                print(f"[QueueManager] Segment {segment_index} has no prompt yet, waiting for user input")
+                update_job_status(job_id, "awaiting_prompt")
+                self._notify_update(job_id, "awaiting_prompt")
+                return  # Stop processing, will resume when user provides prompt
+            
             # Check if segment has a start image (required for all segments)
             if segment_index > 0 and not segment.get("start_image_url"):
                 # Get the previous segment's end frame
@@ -195,6 +207,15 @@ class QueueManager:
             
             # Refresh segments list to get updated data
             segments = get_job_segments(job_id)
+            
+            # After completing a segment (except the last), check if next segment needs prompt
+            if segment_index < total_segments - 1:
+                next_segment = segments[segment_index + 1] if segment_index + 1 < len(segments) else None
+                if next_segment and not next_segment.get("prompt"):
+                    print(f"[QueueManager] Segment {segment_index} completed. Waiting for user to provide prompt for segment {segment_index + 1}")
+                    update_job_status(job_id, "awaiting_prompt")
+                    self._notify_update(job_id, "awaiting_prompt")
+                    return  # Stop processing, will resume when user provides prompt
         
         # All segments completed - stitch videos together
         self._finalize_job(job_id, total_segments)

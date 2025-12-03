@@ -244,7 +244,7 @@ async def get_job_segments_endpoint(job_id: int):
 
 @router.post("/jobs/{job_id}/segments/{segment_index}/prompt")
 async def update_segment_prompt_endpoint(job_id: int, segment_index: int, prompt: str = Form(...)):
-    """Update the prompt for a specific segment."""
+    """Update the prompt for a specific segment and resume job processing."""
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -253,8 +253,14 @@ async def update_segment_prompt_endpoint(job_id: int, segment_index: int, prompt
     if not segment:
         raise HTTPException(status_code=404, detail="Segment not found")
     
+    # Update the segment's prompt
     update_segment_prompt(job_id, segment_index, prompt)
-    return {"status": "updated", "job_id": job_id, "segment_index": segment_index}
+    
+    # If job was waiting for prompt, set it back to pending so queue manager picks it up
+    if job.get("status") == "awaiting_prompt":
+        update_job_status(job_id, "pending")
+    
+    return {"status": "updated", "job_id": job_id, "segment_index": segment_index, "resumed": job.get("status") == "awaiting_prompt"}
 
 
 # ============== Settings Endpoints ==============

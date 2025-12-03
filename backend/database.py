@@ -261,22 +261,26 @@ def update_settings(settings: Dict[str, str]):
 # ============== Segment Functions ==============
 
 def create_segments_for_job(job_id: int, total_segments: int, initial_prompt: str, start_image_url: str):
-    """Create segment records for a job."""
+    """Create segment records for a job.
+    
+    Only segment 0 gets the initial prompt and start image.
+    Subsequent segments are created with no prompt - user must provide one after each segment completes.
+    """
     with get_connection() as conn:
         cursor = conn.cursor()
         for i in range(total_segments):
-            # First segment uses the uploaded image and initial prompt
-            # Subsequent segments start with pending status and no start image yet
             if i == 0:
+                # First segment uses the uploaded image and initial prompt
                 cursor.execute("""
                     INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url)
                     VALUES (?, ?, 'pending', ?, ?)
                 """, (job_id, i, initial_prompt, start_image_url))
             else:
+                # Subsequent segments start with no prompt - user provides after previous segment completes
                 cursor.execute("""
-                    INSERT INTO job_segments (job_id, segment_index, status, prompt)
-                    VALUES (?, ?, 'pending', ?)
-                """, (job_id, i, initial_prompt))
+                    INSERT INTO job_segments (job_id, segment_index, status)
+                    VALUES (?, ?, 'pending')
+                """, (job_id, i))
 
 
 def get_job_segments(job_id: int) -> List[Dict[str, Any]]:
