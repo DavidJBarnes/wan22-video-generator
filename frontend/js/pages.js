@@ -511,7 +511,11 @@ async function updateJobDetail(jobId) {
               ${seg.start_image_url ? `<img src="${seg.start_image_url}" style="width: 120px; height: 120px; border-radius: 4px; object-fit: cover; border: 2px solid #e0e0e0; cursor: pointer;" onclick="openImageLightbox('${seg.start_image_url}')" onerror="this.style.display='none'" title="Click to view full size">` : '<div style="width: 120px; height: 120px; border-radius: 4px; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; background: #f5f5f5; color: #999; font-size: 11px;">Pending</div>'}
             </div>
             <div style="flex: 1;">
-              <div class="segment-prompt"><strong>Prompt:</strong> ${seg.prompt || 'No prompt yet'}</div>
+              <div class="segment-prompt">
+                <div><strong>Prompt:</strong> ${seg.prompt || 'No prompt yet'}</div>
+                <div style="margin-top: 8px;"><strong>High lora:</strong> ${seg.high_lora || 'N/A'}</div>
+                <div><strong>Low lora:</strong> ${seg.low_lora || 'N/A'}</div>
+              </div>
             </div>
             <div>
               <div style="font-size: 12px; color: #666; margin-bottom: 4px;">End Image</div>
