@@ -297,6 +297,9 @@ class ComfyUIClient:
         ComfyUI API expects: {node_id: {class_type, inputs}}
         where inputs maps input names to either values or [source_node_id, source_slot]
         """
+        # Node types to skip (custom/annotation nodes that don't exist in standard ComfyUI)
+        skip_types = {"MarkdownNote", "Note"}
+        
         # Widget name mappings for each node type
         # These map widget index to input name for the API format
         widget_mappings = {
@@ -322,6 +325,10 @@ class ComfyUIClient:
             
             # Skip bypassed nodes (mode 4)
             if mode == 4:
+                continue
+            
+            # Skip custom/annotation nodes that don't exist in standard ComfyUI
+            if node_type in skip_types:
                 continue
             
             inputs = {}
