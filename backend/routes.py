@@ -241,7 +241,7 @@ async def get_schedulers():
 @router.get("/comfyui/status")
 async def get_comfyui_status():
     """Check ComfyUI connection status."""
-    comfyui_url = get_setting("comfyui_url", "http://127.0.0.1:8188")
+    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
     client = ComfyUIClient(comfyui_url)
     connected, message = client.check_connection()
 
