@@ -29,13 +29,17 @@ function showToast(message, type = 'info', title = '') {
 }
 
 function getChipClass(status) {
+  // Color coordination: green=success, blue=in progress, red=failure/error
   const map = {
-    'completed': 'success',
-    'running': 'primary',
-    'error': 'error',
-    'awaiting_prompt': 'warning',
-    'queued': 'default',
-    'processing': 'primary'
+    'completed': 'success',      // green
+    'running': 'primary',        // blue
+    'processing': 'primary',     // blue
+    'queued': 'primary',         // blue (in progress)
+    'pending': 'default',        // gray
+    'awaiting_prompt': 'warning', // orange/yellow
+    'error': 'error',            // red
+    'failed': 'error',           // red
+    'cancelled': 'error'         // red
   };
   return map[status] || 'default';
 }
@@ -47,7 +51,7 @@ function formatDate(dateString) {
 }
 
 function calculateProgress(current, total) {
-  if (total === 0) return 0;
+  if (!total || total <= 0) return 0;
   return Math.round((current / total) * 100);
 }
 
@@ -81,4 +85,82 @@ function showModal(modalId) {
 
 function hideModal(modalId) {
   document.getElementById(modalId).classList.remove('active');
+}
+
+// Image lightbox for viewing full-size images
+// Browser notifications for segment completion
+function requestNotificationPermission() {
+  if (!('Notification' in window)) {
+    console.log('Browser does not support notifications');
+    return;
+  }
+  if (Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function notifySegmentAwaitingPrompt(jobName, segmentIndex) {
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  
+  // Only notify if tab is not focused
+  if (!document.hidden) return;
+  
+  new Notification('Prompt input required!', {
+    body: `${jobName}: Segment ${segmentIndex} completed. Enter the next prompt to continue.`,
+    icon: '/static/favicon.ico',
+    tag: `segment-${segmentIndex}` // Prevent duplicate notifications
+  });
+}
+
+function openImageLightbox(url) {
+  // Create overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'image-lightbox';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    cursor: pointer;
+  `;
+  
+  // Create image
+  const img = document.createElement('img');
+  img.src = url;
+  img.style.cssText = `
+    max-width: 90%;
+    max-height: 90%;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  `;
+  img.onerror = () => {
+    overlay.innerHTML = '<div style="color: white; font-size: 18px;">Failed to load image</div>';
+  };
+  
+  // Close button
+  const closeBtn = document.createElement('div');
+  closeBtn.innerHTML = '&times;';
+  closeBtn.style.cssText = `
+    position: absolute;
+    top: 20px;
+    right: 30px;
+    font-size: 40px;
+    color: white;
+    cursor: pointer;
+  `;
+  
+  overlay.appendChild(img);
+  overlay.appendChild(closeBtn);
+  
+  // Close on click
+  overlay.onclick = () => overlay.remove();
+  
+  document.body.appendChild(overlay);
 }
