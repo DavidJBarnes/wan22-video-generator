@@ -47,7 +47,7 @@ function formatDate(dateString) {
 }
 
 function calculateProgress(current, total) {
-  if (total === 0) return 0;
+  if (!total || total <= 0) return 0;
   return Math.round((current / total) * 100);
 }
 

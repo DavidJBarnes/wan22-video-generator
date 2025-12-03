@@ -213,6 +213,11 @@ async function updateDashboard() {
     const dot = document.getElementById('comfy-status-dot');
     const text = document.getElementById('comfy-status-text');
     
+    // If we're not on the dashboard, these elements won't exist - bail out safely
+    if (!dot || !text) {
+      return;
+    }
+    
     if (status.reachable) {
       dot.className = 'status-dot green';
       text.textContent = 'Connected';
@@ -232,14 +237,18 @@ async function updateDashboard() {
     
     const recentTable = document.getElementById('recent-jobs-table');
     if (jobs.length > 0) {
-      recentTable.innerHTML = jobs.slice(0, 5).map(job => `
+      recentTable.innerHTML = jobs.slice(0, 5).map(job => {
+        const params = job.parameters || {};
+        const totalSegments = job.total_segments ?? params.total_segments ?? 0;
+        const currentSegment = job.current_segment ?? params.current_segment ?? 0;
+        return `
         <tr onclick="navigate('job-detail', {currentJobId: '${job.id}'})">
           <td>${job.name}</td>
           <td><span class="chip ${getChipClass(job.status)}">${job.status}</span></td>
-          <td>${job.current_segment || 0}/${job.total_segments}</td>
+          <td>${currentSegment}/${totalSegments}</td>
           <td>${formatDate(job.created_at)}</td>
         </tr>
-      `).join('');
+      `}).join('');
     }
   } catch (err) {
     console.error('Dashboard update error:', err);
@@ -253,7 +262,14 @@ async function updateJobsTable() {
     
     const jobsTable = document.getElementById('jobs-table');
     if (jobs.length > 0) {
-      jobsTable.innerHTML = jobs.map(job => `
+      jobsTable.innerHTML = jobs.map(job => {
+        // Read segment info from job.parameters if not at top level
+        const params = job.parameters || {};
+        const totalSegments = job.total_segments ?? params.total_segments ?? 0;
+        const currentSegment = job.current_segment ?? params.current_segment ?? 0;
+        const progress = calculateProgress(currentSegment, totalSegments);
+        
+        return `
         <tr style="cursor: pointer;" onclick="navigate('job-detail', {currentJobId: '${job.id}'})">
           <td>
             ${job.queue_position !== null && job.queue_position !== undefined ? 
@@ -264,13 +280,13 @@ async function updateJobsTable() {
           <td>${job.name}</td>
           <td>${formatDate(job.created_at)}</td>
           <td><span class="chip ${getChipClass(job.status)}">${job.status}</span></td>
-          <td>${job.current_segment || 0}/${job.total_segments}</td>
+          <td>${currentSegment}/${totalSegments}</td>
           <td>
             <div class="progress-container">
               <div class="progress-bar">
-                <div class="progress-fill" style="width: ${calculateProgress(job.current_segment || 0, job.total_segments)}%"></div>
+                <div class="progress-fill" style="width: ${progress}%"></div>
               </div>
-              <span style="font-size: 12px;">${calculateProgress(job.current_segment || 0, job.total_segments)}%</span>
+              <span style="font-size: 12px;">${progress}%</span>
             </div>
           </td>
           <td class="action-buttons">
@@ -282,7 +298,7 @@ async function updateJobsTable() {
             </button>
           </td>
         </tr>
-      `).join('');
+      `}).join('');
     } else {
       jobsTable.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #999;">No jobs yet</td></tr>';
     }
@@ -296,6 +312,15 @@ async function updateJobDetail(jobId) {
     const job = await API.getJob(jobId);
     const segments = await API.getSegments(jobId);
     
+    // Read parameters from job.parameters if not at top level
+    const params = job.parameters || {};
+    const totalSegments = job.total_segments ?? params.total_segments ?? 0;
+    const currentSegment = job.current_segment ?? params.current_segment ?? 0;
+    const width = job.width ?? params.width ?? 640;
+    const height = job.height ?? params.height ?? 640;
+    const totalDuration = job.total_duration ?? params.total_duration ?? 0;
+    const segmentDuration = job.segment_duration ?? params.segment_duration ?? 5;
+    
     document.getElementById('job-detail-name').textContent = job.name;
     
     const metaContainer = document.getElementById('job-detail-meta');
@@ -306,15 +331,15 @@ async function updateJobDetail(jobId) {
       </div>
       <div class="detail-meta-item">
         <label>Progress</label>
-        <div class="value">${job.current_segment || 0}/${job.total_segments} segments</div>
+        <div class="value">${currentSegment}/${totalSegments} segments</div>
       </div>
       <div class="detail-meta-item">
         <label>Dimensions</label>
-        <div class="value">${job.width}x${job.height}</div>
+        <div class="value">${width}x${height}</div>
       </div>
       <div class="detail-meta-item">
         <label>Duration</label>
-        <div class="value">${job.total_duration}s (${job.segment_duration}s/segment)</div>
+        <div class="value">${totalDuration}s (${segmentDuration}s/segment)</div>
       </div>
       <div class="detail-meta-item">
         <label>Created</label>
@@ -323,7 +348,30 @@ async function updateJobDetail(jobId) {
     `;
     
     const segmentsList = document.getElementById('segments-list');
-    if (segments.length > 0) {
+    
+    // If no segments from API, create a stub segment from job data
+    if (segments.length === 0 && totalSegments > 0) {
+      // Create a placeholder showing the job's initial state
+      segmentsList.innerHTML = `
+        <div class="segment-item">
+          <div class="segment-header">
+            <div>
+              <strong>Segment 1 of ${totalSegments}</strong>
+              <span class="chip ${getChipClass(job.status)}" style="margin-left: 8px;">${job.status}</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 16px; align-items: flex-start; margin-top: 12px;">
+            <div>
+              <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Start Image</div>
+              ${job.input_image ? `<div style="padding: 8px; background: #f5f5f5; border-radius: 4px; font-size: 12px;">${job.input_image}</div>` : '<div style="color: #999;">No image</div>'}
+            </div>
+            <div style="flex: 1;">
+              <div class="segment-prompt"><strong>Prompt:</strong> ${job.prompt || 'No prompt'}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    } else if (segments.length > 0) {
       segmentsList.innerHTML = segments.map(seg => `
         <div class="segment-item">
           <div class="segment-header">
@@ -336,7 +384,7 @@ async function updateJobDetail(jobId) {
           <div style="display: flex; gap: 16px; align-items: flex-start; margin-top: 12px;">
             <div>
               <div style="font-size: 12px; color: #666; margin-bottom: 4px;">Start Image</div>
-              ${seg.start_frame_path ? `<img src="${API_BASE}/frames/${seg.start_frame_path.split('/').pop()}" style="width: 120px; height: 120px; border-radius: 4px; object-fit: cover; border: 2px solid #e0e0e0;" onerror="this.src='${API.getJobThumbnail(jobId)}'">` : ''}
+              ${seg.start_frame_path ? `<img src="/api/frames/${seg.start_frame_path.split('/').pop()}" style="width: 120px; height: 120px; border-radius: 4px; object-fit: cover; border: 2px solid #e0e0e0;" onerror="this.style.display='none'">` : ''}
             </div>
             <div style="flex: 1;">
               <div class="segment-prompt"><strong>Prompt:</strong> ${seg.prompt}</div>
@@ -358,7 +406,7 @@ async function updateJobDetail(jobId) {
       
       // Check if waiting for prompt
       if (job.status === 'awaiting_prompt') {
-        const nextSegmentIndex = job.current_segment;
+        const nextSegmentIndex = currentSegment;
         const lastSegment = segments[segments.length - 1];
         
         segmentsList.innerHTML += `
@@ -382,7 +430,7 @@ async function updateJobDetail(jobId) {
         `;
       }
     } else {
-      segmentsList.innerHTML = '<p style="color: #999;">No segments yet</p>';
+      segmentsList.innerHTML = '<p style="color: #999;">No segments yet - job has not started processing</p>';
     }
   } catch (err) {
     console.error('Job detail update error:', err);
@@ -440,11 +488,13 @@ async function saveSettings() {
       default_negative_prompt: negativePrompt
     };
     
-    await API.updateSettings(settingsPayload);
+    const updated = await API.updateSettings(settingsPayload);
+    // Refresh AppState.settings with the updated values
+    AppState.settings = updated.settings || settingsPayload;
     showToast('Settings saved successfully', 'success');
     
-    // Refresh dashboard status
-    if (typeof updateDashboard === 'function') {
+    // Refresh dashboard status (only if on dashboard page)
+    if (typeof updateDashboard === 'function' && AppState.currentPage === 'dashboard') {
       updateDashboard();
     }
   } catch (err) {

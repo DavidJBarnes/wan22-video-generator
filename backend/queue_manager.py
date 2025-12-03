@@ -63,7 +63,7 @@ class QueueManager:
 
     def _get_client(self) -> ComfyUIClient:
         """Get or create ComfyUI client with current settings."""
-        comfyui_url = get_setting("comfyui_url", "http://127.0.0.1:8188")
+        comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
 
         if self._client is None or self._client.base_url != comfyui_url:
             if self._client:

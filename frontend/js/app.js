@@ -6,9 +6,18 @@
 const App = {
     statusInterval: null,
 
-    init() {
+    async init() {
         this.bindNavigation();
         this.startStatusPolling();
+        
+        // Preload settings before navigating so they're available for modals
+        try {
+            const resp = await API.getSettings();
+            AppState.settings = resp.settings || resp;
+        } catch (e) {
+            console.error('Failed to preload settings:', e);
+            AppState.settings = {};
+        }
         
         // Navigate to dashboard on load
         navigate('dashboard');
