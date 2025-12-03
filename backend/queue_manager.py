@@ -258,24 +258,25 @@ class QueueManager:
         
         print(f"[QueueManager] Segment {segment_index} using input_image: {input_image}")
         
-        # Build the workflow
-        workflow = client.build_workflow(
-            workflow_type=job.get("workflow_type", "i2v"),
+        # Get LoRA selections for this segment (may be None if user didn't select any)
+        high_lora = segment.get("high_lora")
+        low_lora = segment.get("low_lora")
+        print(f"[QueueManager] Segment {segment_index} LoRA selections: high={high_lora}, low={low_lora}")
+        
+        # Build the workflow using the Wan2.2 i2v workflow builder directly
+        # This ensures LoRA parameters are passed correctly
+        workflow = client.build_wan_i2v_workflow(
             prompt=segment.get("prompt") or job.get("prompt", ""),
             negative_prompt=job.get("negative_prompt", get_setting("default_negative_prompt", "")),
-            checkpoint=params.get("checkpoint", get_setting("default_checkpoint", "v1-5-pruned.safetensors")),
-            steps=int(params.get("steps", get_setting("default_steps", "20"))),
-            cfg=float(params.get("cfg", get_setting("default_cfg", "7.0"))),
-            sampler=params.get("sampler", get_setting("default_sampler", "euler")),
-            scheduler=params.get("scheduler", get_setting("default_scheduler", "normal")),
             width=int(params.get("width", get_setting("default_width", "640"))),
             height=int(params.get("height", get_setting("default_height", "640"))),
-            seed=params.get("seed"),
-            denoise=float(params.get("denoise", 0.75)),
-            input_image=input_image,
             frames=frames,
+            start_image_filename=input_image,
             high_noise_model=get_setting("high_noise_model", "wan2.2_i2v_high_noise_14B_fp16.safetensors"),
             low_noise_model=get_setting("low_noise_model", "wan2.2_i2v_low_noise_14B_fp16.safetensors"),
+            seed=params.get("seed"),
+            high_lora=high_lora,
+            low_lora=low_lora,
         )
         
         # Queue the prompt
