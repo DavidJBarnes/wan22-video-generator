@@ -1,6 +1,7 @@
 """API routes for the ComfyUI Queue Manager."""
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import base64
@@ -144,6 +145,45 @@ async def retry_job(job_id: int):
 
     update_job_status(job_id, "pending", error_message=None)
     return {"status": "pending", "id": job_id}
+
+
+@router.get("/jobs/{job_id}/thumbnail")
+async def get_job_thumbnail(job_id: int):
+    """Get thumbnail for a job (redirects to first output image from ComfyUI)."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    images = job.get("output_images") or []
+    if not images:
+        raise HTTPException(status_code=404, detail="No output images yet")
+
+    # output_images contains ComfyUI view URLs, redirect to the first one
+    return RedirectResponse(images[0])
+
+
+@router.get("/jobs/{job_id}/segments")
+async def get_job_segments(job_id: int):
+    """Get segments for a job (stub implementation based on job parameters)."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    params = job.get("parameters") or {}
+    total_segments = int(params.get("total_segments", 1))
+
+    # Create stub segments based on job parameters
+    segments = []
+    for i in range(total_segments):
+        segments.append({
+            "segment_index": i,
+            "status": job["status"] if i == 0 else "pending",
+            "prompt": job.get("prompt", ""),
+            "start_frame_url": None,
+            "end_frame_url": None,
+        })
+
+    return segments
 
 
 # ============== Settings Endpoints ==============

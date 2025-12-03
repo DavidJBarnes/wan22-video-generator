@@ -227,6 +227,11 @@ class ComfyUIClient:
         import copy
         import random
 
+        # Map i2v to img2img for now (temporary until proper Wan2.2 i2v workflow is implemented)
+        if workflow_type == "i2v":
+            workflow_type = "img2img"
+            print(f"Note: workflow_type 'i2v' mapped to 'img2img' (Wan2.2 video workflow not yet implemented)")
+
         # Get base template
         if workflow_type not in WORKFLOW_TEMPLATES:
             workflow_type = "txt2img"

@@ -87,6 +87,7 @@ class QueueManager:
         """Process the next pending job if any."""
         # Check for pending jobs
         pending_jobs = get_pending_jobs()
+        print(f"[QueueManager] Checking queue: {len(pending_jobs)} pending jobs")
         if not pending_jobs:
             return
 
@@ -95,16 +96,20 @@ class QueueManager:
         job_id = job["id"]
         self._current_job_id = job_id
 
-        print(f"Processing job {job_id}: {job['name']}")
+        print(f"[QueueManager] Processing job {job_id}: {job['name']}")
+        print(f"[QueueManager] Job details: workflow_type={job.get('workflow_type')}, input_image={job.get('input_image')}")
 
         try:
             # Get ComfyUI client
             client = self._get_client()
+            comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+            print(f"[QueueManager] Using ComfyUI URL: {comfyui_url}")
 
             # Check ComfyUI connection
             connected, msg = client.check_connection()
+            print(f"[QueueManager] ComfyUI connection check: connected={connected}, msg={msg}")
             if not connected:
-                print(f"ComfyUI not available: {msg}")
+                print(f"[QueueManager] ComfyUI not available: {msg}")
                 # Don't fail the job, just wait
                 self._current_job_id = None
                 return
@@ -132,15 +137,19 @@ class QueueManager:
             )
 
             # Queue the prompt
+            print(f"[QueueManager] Queuing workflow to ComfyUI...")
             success, result = client.queue_prompt(workflow)
+            print(f"[QueueManager] queue_prompt result: success={success}, result={result}")
 
             if not success:
+                print(f"[QueueManager] Failed to queue prompt: {result}")
                 update_job_status(job_id, "failed", error_message=result)
                 self._notify_update(job_id, "failed")
                 self._current_job_id = None
                 return
 
             prompt_id = result
+            print(f"[QueueManager] Job {job_id} queued successfully with prompt_id={prompt_id}")
             update_job_status(job_id, "running", comfyui_prompt_id=prompt_id)
 
             # Wait for completion
