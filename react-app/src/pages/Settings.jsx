@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Button } from '@mui/material';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import './Settings.css';
@@ -7,6 +8,7 @@ export default function Settings() {
   const [settings, setSettings] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [fetchingLoras, setFetchingLoras] = useState(false);
 
   // Form fields
   const [comfyuiUrl, setComfyuiUrl] = useState('');
@@ -68,6 +70,20 @@ export default function Settings() {
     }
   }
 
+  async function handleFetchLoras() {
+    setFetchingLoras(true);
+
+    try {
+      const result = await API.fetchAndCacheLoras();
+      showToast(`Successfully cached ${result.count} LoRAs`, 'success');
+      setFetchingLoras(false);
+    } catch (error) {
+      console.error('Failed to fetch LoRAs:', error);
+      showToast('Failed to fetch LoRAs from ComfyUI', 'error');
+      setFetchingLoras(false);
+    }
+  }
+
   if (loading) {
     return (
       <div>
@@ -114,6 +130,21 @@ export default function Settings() {
               Absolute path to a local directory containing your images
             </small>
           </div>
+        </div>
+
+        {/* LoRA Library */}
+        <div className="card settings-section">
+          <h2>LoRA Library</h2>
+          <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
+            Fetch and cache LoRA models from ComfyUI. Cached LoRAs can be managed in the LoRA Library page.
+          </p>
+          <Button
+            variant="contained"
+            onClick={handleFetchLoras}
+            disabled={fetchingLoras}
+          >
+            {fetchingLoras ? 'Fetching...' : 'Fetch LoRAs from ComfyUI'}
+          </Button>
         </div>
 
         {/* Default Parameters */}

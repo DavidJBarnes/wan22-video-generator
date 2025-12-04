@@ -12,7 +12,8 @@
       "Bash(python -m py_compile:*)",
       "Bash(python:*)",
       "Bash(timeout 5 python3:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": [],
     "ask": []

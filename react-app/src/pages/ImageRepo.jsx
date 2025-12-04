@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import CreateJobModal from '../components/CreateJobModal';
+import ImagePreviewModal from '../components/ImagePreviewModal';
 import './ImageRepo.css';
 
 export default function ImageRepo() {
@@ -15,6 +16,8 @@ export default function ImageRepo() {
   const [sortOrder, setSortOrder] = useState('name-asc');
   const [showJobModal, setShowJobModal] = useState(false);
   const [preUploadedImage, setPreUploadedImage] = useState(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
 
   useEffect(() => {
     loadDirectory(currentPath);
@@ -44,13 +47,31 @@ export default function ImageRepo() {
 
   function sortItems(items) {
     return [...items].sort((a, b) => {
-      const nameA = a.name.toLowerCase();
-      const nameB = b.name.toLowerCase();
+      const nameA = a.name;
+      const nameB = b.name;
+
+      // Check if names are date-formatted (YYYY-MM-DD)
+      const datePatternA = nameA.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      const datePatternB = nameB.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+      // If both are date-formatted folders, sort chronologically
+      if (datePatternA && datePatternB) {
+        // YYYY-MM-DD format is already sortable by string comparison
+        if (sortOrder === 'name-asc') {
+          return nameA.localeCompare(nameB);  // Chronological order
+        } else if (sortOrder === 'name-desc') {
+          return nameB.localeCompare(nameA);  // Reverse chronological
+        }
+      }
+
+      // For non-date items, use regular alphabetical sorting
+      const lowerA = nameA.toLowerCase();
+      const lowerB = nameB.toLowerCase();
 
       if (sortOrder === 'name-asc') {
-        return nameA.localeCompare(nameB);
+        return lowerA.localeCompare(lowerB);
       } else if (sortOrder === 'name-desc') {
-        return nameB.localeCompare(nameA);
+        return lowerB.localeCompare(lowerA);
       }
       return 0;
     });
@@ -66,21 +87,29 @@ export default function ImageRepo() {
     setCurrentPath(path);
   }
 
-  async function selectImage(imagePath) {
-    try {
-      showToast('Uploading image...', 'info');
+  function openImagePreview(image) {
+    setSelectedImage(image);
+    setShowPreviewModal(true);
+  }
 
-      const data = await API.selectImageFromRepo(imagePath);
+  function handleClosePreview() {
+    setShowPreviewModal(false);
+    setSelectedImage(null);
+  }
 
-      showToast('Image uploaded successfully!', 'success');
+  function handleCreateJobFromPreview(imageUrl) {
+    // Close preview modal and open job modal
+    setShowPreviewModal(false);
+    setSelectedImage(null);
+    setPreUploadedImage(imageUrl);
+    setShowJobModal(true);
+  }
 
-      // Open job modal with pre-uploaded image
-      setPreUploadedImage(data.image_url);
-      setShowJobModal(true);
-    } catch (error) {
-      console.error('Failed to select image:', error);
-      showToast(error.message || 'Failed to upload image', 'error');
-    }
+  function handleDeleteImage() {
+    // Close preview modal and reload directory
+    setShowPreviewModal(false);
+    setSelectedImage(null);
+    loadDirectory(currentPath);
   }
 
   return (
@@ -169,7 +198,7 @@ export default function ImageRepo() {
                 <div
                   key={image.path}
                   className="repo-item image"
-                  onClick={() => selectImage(image.path)}
+                  onClick={() => openImagePreview(image)}
                 >
                   <div className="repo-item-preview">
                     <img
@@ -202,7 +231,7 @@ export default function ImageRepo() {
                 <div
                   key={image.path}
                   className="repo-list-item image"
-                  onClick={() => selectImage(image.path)}
+                  onClick={() => openImagePreview(image)}
                 >
                   <span className="repo-list-icon">🖼️</span>
                   <span className="repo-list-name">{image.name}</span>
@@ -214,6 +243,15 @@ export default function ImageRepo() {
             </div>
           )}
         </>
+      )}
+
+      {showPreviewModal && selectedImage && (
+        <ImagePreviewModal
+          image={selectedImage}
+          onClose={handleClosePreview}
+          onCreateJob={handleCreateJobFromPreview}
+          onDelete={handleDeleteImage}
+        />
       )}
 
       {showJobModal && (
