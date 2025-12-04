@@ -180,6 +180,66 @@ def get_pending_jobs() -> List[Dict[str, Any]]:
         return [_row_to_job_dict(row) for row in cursor.fetchall()]
 
 
+def reset_orphaned_running_jobs():
+    """Reset jobs/segments stuck in 'running' state (e.g., after backend restart).
+
+    When the backend restarts while jobs are processing, they remain in 'running' state
+    but are no longer being monitored. This function:
+    1. Checks if 'running' segments actually completed (video file exists)
+    2. Marks completed ones as 'completed'
+    3. Resets still-running ones to 'pending' for retry
+    4. Updates job statuses accordingly
+    """
+    import os
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Check running segments to see if they actually completed
+        cursor.execute("""
+            SELECT s.id, s.job_id, s.segment_index, s.video_path, j.id as job_id_check
+            FROM job_segments s
+            JOIN jobs j ON s.job_id = j.id
+            WHERE s.status = 'running'
+        """)
+        running_segments = cursor.fetchall()
+
+        segments_completed = 0
+        segments_reset = 0
+
+        for seg_row in running_segments:
+            seg_id, job_id, seg_index, video_path, _ = seg_row
+
+            # Check if the segment's video file exists (indicating it completed)
+            if video_path and os.path.exists(video_path):
+                print(f"[Database] Segment {seg_index} of job {job_id} completed but not marked - updating status")
+                cursor.execute(
+                    "UPDATE job_segments SET status = 'completed' WHERE id = ?",
+                    (seg_id,)
+                )
+                segments_completed += 1
+            else:
+                # Video doesn't exist, reset to pending for retry
+                cursor.execute(
+                    "UPDATE job_segments SET status = 'pending' WHERE id = ?",
+                    (seg_id,)
+                )
+                segments_reset += 1
+
+        # Reset running jobs back to pending (they'll be reprocessed or set to awaiting_prompt)
+        cursor.execute("UPDATE jobs SET status = 'pending' WHERE status = 'running'")
+        jobs_reset = cursor.rowcount
+
+        conn.commit()
+
+        if jobs_reset > 0 or segments_reset > 0 or segments_completed > 0:
+            print(f"[Database] Startup cleanup: {jobs_reset} job(s) reset to pending, "
+                  f"{segments_completed} segment(s) marked completed, "
+                  f"{segments_reset} segment(s) reset to pending")
+
+        return jobs_reset, segments_reset, segments_completed
+
+
 def update_job_status(
     job_id: int,
     status: str,
