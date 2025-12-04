@@ -11,7 +11,10 @@ def utc_now_iso():
     """Return current UTC time as ISO string with Z suffix for proper browser parsing."""
     return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
-DATABASE_PATH = "comfyui_queue.db"
+# Use absolute path to avoid issues with current working directory
+from pathlib import Path
+BACKEND_DIR = Path(__file__).resolve().parent
+DATABASE_PATH = str(BACKEND_DIR / "comfyui_queue.db")
 
 
 @contextmanager
@@ -106,7 +109,8 @@ def init_db():
             "default_scheduler": "normal",
             "default_width": "640",
             "default_height": "640",
-            "auto_start_queue": "true"
+            "auto_start_queue": "true",
+            "image_repo_path": ""
         }
 
         for key, value in default_settings.items():
@@ -279,6 +283,46 @@ def update_settings(settings: Dict[str, str]):
 
 # ============== Segment Functions ==============
 
+def create_first_segment(
+    job_id: int,
+    initial_prompt: str,
+    start_image_url: str,
+    high_lora: Optional[str] = None,
+    low_lora: Optional[str] = None
+):
+    """Create the first segment for a job (on-demand workflow).
+
+    In the new workflow, segments are created on-demand as prompts are provided.
+    This creates segment 0 with the initial prompt, start image, and LoRA selections.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?)
+        """, (job_id, 0, initial_prompt, start_image_url, high_lora, low_lora))
+
+
+def create_next_segment(
+    job_id: int,
+    segment_index: int,
+    prompt: str,
+    start_image_url: str,
+    high_lora: Optional[str] = None,
+    low_lora: Optional[str] = None
+):
+    """Create the next segment for a job (on-demand workflow).
+
+    Creates a new segment with the provided prompt and settings.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?)
+        """, (job_id, segment_index, prompt, start_image_url, high_lora, low_lora))
+
+
 def create_segments_for_job(
     job_id: int,
     total_segments: int,
@@ -287,8 +331,8 @@ def create_segments_for_job(
     high_lora: Optional[str] = None,
     low_lora: Optional[str] = None
 ):
-    """Create segment records for a job.
-    
+    """Create segment records for a job (legacy function for backward compatibility).
+
     Only segment 0 gets the initial prompt, start image, and LoRA selections.
     Subsequent segments are created with no prompt - user must provide one after each segment completes.
     """
