@@ -652,3 +652,34 @@ tbody tr:hover {
   background: #1976d2;
   color: white;
 }
+
+/* View button active state */
+.btn.active {
+  background: #1976d2 !important;
+  color: white !important;
+}
+
+/* Alert styles */
+.alert {
+  padding: 16px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+.alert.info {
+  background: #e3f2fd;
+  color: #1976d2;
+  border: 1px solid #90caf9;
+}
+
+.alert.error {
+  background: #ffebee;
+  color: #c62828;
+  border: 1px solid #ef9a9a;
+}
+
+.alert.success {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #81c784;
+}

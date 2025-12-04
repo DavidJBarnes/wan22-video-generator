@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import os
 
-from database import init_db, get_setting
+from database import init_db, get_setting, reset_orphaned_running_jobs
 from routes import router
 from queue_manager import queue_manager
 
@@ -21,6 +21,9 @@ async def lifespan(app: FastAPI):
     # Initialize database
     init_db()
     print("Database initialized")
+
+    # Reset any orphaned running jobs/segments from previous backend instance
+    reset_orphaned_running_jobs()
 
     # Auto-start queue if enabled
     auto_start = get_setting("auto_start_queue", "true")
