@@ -75,6 +75,15 @@ class QueueManager:
             self._client = None
         print("Queue manager stopped")
 
+    def finalize_job_now(self, job_id: int):
+        """Finalize a job immediately (called from finalize endpoint)."""
+        print(f"[QueueManager] Finalize request for job {job_id}")
+        try:
+            self._finalize_job(job_id)
+        except Exception as e:
+            print(f"[QueueManager] Error finalizing job {job_id}: {e}")
+            update_job_status(job_id, "failed", error_message=f"Finalization failed: {str(e)}")
+
     def _get_client(self) -> ComfyUIClient:
         """Get or create ComfyUI client with current settings."""
         comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
@@ -145,16 +154,12 @@ class QueueManager:
             self._current_job_id = None
 
     def _process_job_segments(self, job_id: int, job: dict, client: ComfyUIClient):
-        """Process all segments for a job sequentially.
-        
-        After each segment completes (except the last), the job pauses and waits
-        for the user to provide a prompt for the next segment.
+        """Process all segments for a job sequentially (on-demand workflow).
+
+        After each segment completes, the job pauses and waits for the user to either:
+        1. Provide a prompt for the next segment (continues)
+        2. Click "Finalize & Merge" (completes the job)
         """
-        params = job.get("parameters") or {}
-        total_segments = int(params.get("total_segments", 1))
-        
-        print(f"[QueueManager] Job {job_id} has {total_segments} segments")
-        
         # Get all segments
         segments = get_job_segments(job_id)
         if not segments:
@@ -162,28 +167,29 @@ class QueueManager:
             # Fall back to single-segment processing
             self._process_single_segment_job(job_id, job, client)
             return
-        
-        # Process each segment
+
+        print(f"[QueueManager] Job {job_id} has {len(segments)} segment(s)")
+
+        # Process each segment that has a prompt and isn't completed yet
         for segment in segments:
             if not self._running:
                 print(f"[QueueManager] Queue manager stopped, aborting job {job_id}")
                 return
-            
+
             segment_index = segment["segment_index"]
-            
+
             # Skip already completed segments
             if segment["status"] == "completed":
                 print(f"[QueueManager] Segment {segment_index} already completed, skipping")
                 continue
-            
-            # For segments after the first, check if we have a prompt
-            # If no prompt, pause and wait for user input
-            if segment_index > 0 and not segment.get("prompt"):
+
+            # Check if segment has a prompt (required for all segments)
+            if not segment.get("prompt"):
                 print(f"[QueueManager] Segment {segment_index} has no prompt yet, waiting for user input")
                 update_job_status(job_id, "awaiting_prompt")
                 self._notify_update(job_id, "awaiting_prompt")
                 return  # Stop processing, will resume when user provides prompt
-            
+
             # Check if segment has a start image (required for all segments)
             if segment_index > 0 and not segment.get("start_image_url"):
                 # Get the previous segment's end frame
@@ -195,31 +201,39 @@ class QueueManager:
                 else:
                     print(f"[QueueManager] Segment {segment_index} missing start image, waiting for previous segment")
                     continue
-            
+
             # Process this segment
             success = self._process_segment(job_id, job, segment, client)
-            
+
             if not success:
                 # Use 1-based segment number for user-facing error message
                 print(f"[QueueManager] Segment {segment_index} failed, stopping job")
                 update_job_status(job_id, "failed", error_message=f"Segment {segment_index + 1} failed")
                 self._notify_update(job_id, "failed")
                 return
-            
-            # Refresh segments list to get updated data
-            segments = get_job_segments(job_id)
-            
-            # After completing a segment (except the last), check if next segment needs prompt
-            if segment_index < total_segments - 1:
-                next_segment = segments[segment_index + 1] if segment_index + 1 < len(segments) else None
-                if next_segment and not next_segment.get("prompt"):
-                    print(f"[QueueManager] Segment {segment_index} completed. Waiting for user to provide prompt for segment {segment_index + 1}")
-                    update_job_status(job_id, "awaiting_prompt")
-                    self._notify_update(job_id, "awaiting_prompt")
-                    return  # Stop processing, will resume when user provides prompt
-        
-        # All segments completed - stitch videos together
-        self._finalize_job(job_id, total_segments)
+
+        # After processing all segments that have prompts, check if user wants to continue or finalize
+        # If we reach here, all existing segments are completed
+        # The job should go to awaiting_prompt to let user decide: add more segments OR finalize
+
+        # Re-fetch segments to get updated status
+        segments = get_job_segments(job_id)
+        print(f"[QueueManager] Re-fetched segments for final check: {len(segments)} total")
+        for seg in segments:
+            print(f"[QueueManager]   Segment {seg['segment_index']}: status={seg.get('status')}, has_prompt={bool(seg.get('prompt'))}")
+
+        completed_count = len([s for s in segments if s.get("status") == "completed"])
+        print(f"[QueueManager] Completed count: {completed_count}")
+
+        if completed_count > 0:
+            print(f"[QueueManager] {completed_count} segment(s) completed. Awaiting user decision: continue or finalize")
+            update_job_status(job_id, "awaiting_prompt")
+            self._notify_update(job_id, "awaiting_prompt")
+        else:
+            # No segments completed - something went wrong
+            print(f"[QueueManager] ERROR: No segments completed for job {job_id}")
+            update_job_status(job_id, "failed", error_message="No segments were successfully processed")
+            self._notify_update(job_id, "failed")
 
     def _process_segment(self, job_id: int, job: dict, segment: dict, client: ComfyUIClient) -> bool:
         """Process a single segment and return True if successful."""
@@ -308,34 +322,43 @@ class QueueManager:
                 # Get output media URLs
                 media_urls = client.get_output_images(prompt_id)
                 print(f"[QueueManager] Segment {segment_index} completed with {len(media_urls)} outputs")
-                
+                print(f"[QueueManager] Media URLs: {media_urls}")
+
                 # Find the video output (mp4/webm)
                 video_url = None
                 for url in media_urls:
+                    print(f"[QueueManager] Checking URL: {url}")
                     if any(ext in url.lower() for ext in ['.mp4', '.webm', '.gif']):
                         video_url = url
+                        print(f"[QueueManager] Found video URL: {video_url}")
                         break
                 
                 if video_url:
                     # Download the video
                     video_path = get_segment_video_path(job_id, segment_index)
+                    print(f"[QueueManager] Downloading video from {video_url} to {video_path}")
                     if download_video_from_comfyui(video_url, video_path):
+                        print(f"[QueueManager] Video downloaded successfully")
                         # Extract the last frame
                         frame_path = get_segment_frame_path(job_id, segment_index, "last")
+                        print(f"[QueueManager] Extracting last frame to {frame_path}")
                         if extract_last_frame(video_path, frame_path):
+                            print(f"[QueueManager] Last frame extracted successfully")
                             # Read the frame and upload it to ComfyUI
                             with open(frame_path, "rb") as f:
                                 frame_data = f.read()
-                            
+
+                            print(f"[QueueManager] Uploading last frame to ComfyUI ({len(frame_data)} bytes)")
                             uploaded_filename = client.upload_image(frame_data, f"job_{job_id}_seg_{segment_index}_last.jpg")
-                            
+
                             if uploaded_filename:
+                                print(f"[QueueManager] Last frame uploaded as {uploaded_filename}")
                                 # Build the URL for the uploaded frame
                                 end_frame_url = f"{comfyui_url}/view?filename={uploaded_filename}&subfolder=&type=input"
-                                
+
                                 # Get execution time from ComfyUI history
                                 exec_time = client.get_execution_time(prompt_id)
-                                
+
                                 # Update segment with video path, end frame URL, and execution time
                                 update_segment_status(
                                     job_id, segment_index, "completed",
@@ -343,18 +366,18 @@ class QueueManager:
                                     end_frame_url=end_frame_url,
                                     execution_time=exec_time
                                 )
-                                
+
                                 # Update the next segment's start image
                                 update_segment_start_image(job_id, segment_index + 1, end_frame_url)
-                                
+
                                 print(f"[QueueManager] Segment {segment_index} fully processed")
                                 return True
                             else:
-                                print(f"[QueueManager] Failed to upload last frame for segment {segment_index}")
+                                print(f"[QueueManager] ERROR: Failed to upload last frame for segment {segment_index}")
                         else:
-                            print(f"[QueueManager] Failed to extract last frame for segment {segment_index}")
+                            print(f"[QueueManager] ERROR: Failed to extract last frame from {video_path}")
                     else:
-                        print(f"[QueueManager] Failed to download video for segment {segment_index}")
+                        print(f"[QueueManager] ERROR: Failed to download video from {video_url}")
                 else:
                     print(f"[QueueManager] No video output found for segment {segment_index}")
                     # Still mark as completed but without video
@@ -380,19 +403,24 @@ class QueueManager:
         
         return False
 
-    def _finalize_job(self, job_id: int, total_segments: int):
-        """Finalize a job by stitching all segment videos together."""
-        print(f"[QueueManager] Finalizing job {job_id} - stitching {total_segments} segments")
-        
+    def _finalize_job(self, job_id: int):
+        """Finalize a job by stitching all completed segment videos together."""
+        # Get all completed segments
+        segments = get_job_segments(job_id)
+        completed_segments = [s for s in segments if s.get("status") == "completed"]
+
+        print(f"[QueueManager] Finalizing job {job_id} - stitching {len(completed_segments)} segment(s)")
+
         # Collect all segment video paths
         video_paths = []
-        for i in range(total_segments):
-            video_path = get_segment_video_path(job_id, i)
+        for segment in completed_segments:
+            segment_index = segment["segment_index"]
+            video_path = get_segment_video_path(job_id, segment_index)
             if video_path and os.path.exists(video_path):
                 video_paths.append(video_path)
             else:
-                print(f"[QueueManager] Warning: Segment {i} video not found at {video_path}")
-        
+                print(f"[QueueManager] Warning: Segment {segment_index} video not found at {video_path}")
+
         if not video_paths:
             print(f"[QueueManager] No segment videos found for job {job_id}")
             update_job_status(job_id, "failed", error_message="No segment videos to stitch")

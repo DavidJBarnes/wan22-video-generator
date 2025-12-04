@@ -91,6 +91,18 @@ const API = {
         });
     },
 
+    async finalizeJob(jobId) {
+        return this.request(`/jobs/${jobId}/finalize`, {
+            method: 'POST'
+        });
+    },
+
+    async reopenJob(jobId) {
+        return this.request(`/jobs/${jobId}/reopen`, {
+            method: 'POST'
+        });
+    },
+
     // ============== Settings ==============
 
     async getSettings() {

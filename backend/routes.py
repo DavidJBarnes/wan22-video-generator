@@ -6,6 +6,8 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import base64
 import os
+import shutil
+from pathlib import Path
 
 from database import (
     get_all_jobs,
@@ -17,6 +19,8 @@ from database import (
     get_setting,
     update_settings,
     create_segments_for_job,
+    create_first_segment,
+    create_next_segment,
     get_job_segments as db_get_job_segments,
     update_segment_prompt,
     get_segment,
@@ -137,11 +141,7 @@ async def create_new_job(job: JobCreate):
         input_image=job.input_image
     )
     
-    # Create segments for the job
-    params = job.parameters or {}
-    total_segments = int(params.get("total_segments", 1))
-    
-    # Build start image URL for segment 1
+    # Build start image URL for segment 0
     start_image_url = None
     if job.input_image:
         comfyui_url = get_setting("comfyui_url", COMFYUI_SERVER_URL)
@@ -149,11 +149,11 @@ async def create_new_job(job: JobCreate):
             start_image_url = job.input_image
         else:
             start_image_url = f"{comfyui_url}/view?filename={job.input_image}&subfolder=&type=input"
-    
-    # Create segment records with LoRA selections for segment 1
-    create_segments_for_job(
+
+    # Create only the first segment (on-demand workflow)
+    # Additional segments will be created when user provides prompts
+    create_first_segment(
         job_id,
-        total_segments,
         job.prompt,
         start_image_url,
         high_lora=job.high_lora,
@@ -225,6 +225,58 @@ async def retry_job(job_id: int):
     # Reset job status to pending and clear error message
     update_job_status(job_id, "pending", error_message=None)
     return {"status": "pending", "id": job_id}
+
+
+@router.post("/jobs/{job_id}/finalize")
+async def finalize_job(job_id: int):
+    """Finalize a job and merge all completed segments into final video."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Get all segments to check if we have any completed
+    segments = db_get_job_segments(job_id)
+    completed_segments = [s for s in segments if s.get("status") == "completed"]
+
+    if len(completed_segments) == 0:
+        raise HTTPException(status_code=400, detail="No completed segments to finalize")
+
+    # Update job status to 'running' and trigger finalization through queue manager
+    update_job_status(job_id, "running")
+
+    # Trigger the queue manager to finalize this job
+    queue_manager.finalize_job_now(job_id)
+
+    return {
+        "status": "finalizing",
+        "id": job_id,
+        "completed_segments": len(completed_segments),
+        "message": "Job is being finalized. All completed segments will be merged into final video."
+    }
+
+
+@router.post("/jobs/{job_id}/reopen")
+async def reopen_job(job_id: int):
+    """Reopen a completed job to add more segments."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.get("status") != "completed":
+        raise HTTPException(status_code=400, detail="Only completed jobs can be reopened")
+
+    # Set job status to awaiting_prompt so user can add more segments
+    update_job_status(job_id, "awaiting_prompt")
+
+    segments = db_get_job_segments(job_id)
+    completed_segments = [s for s in segments if s.get("status") == "completed"]
+
+    return {
+        "status": "awaiting_prompt",
+        "id": job_id,
+        "completed_segments": len(completed_segments),
+        "message": "Job reopened. You can now add more segments."
+    }
 
 
 @router.get("/jobs/{job_id}/thumbnail")
@@ -338,22 +390,47 @@ async def update_segment_prompt_endpoint(
     high_lora: Optional[str] = Form(None),
     low_lora: Optional[str] = Form(None)
 ):
-    """Update the prompt and LoRA selections for a specific segment and resume job processing."""
+    """Create or update a segment with a prompt and resume job processing (on-demand workflow)."""
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    
+
     segment = get_segment(job_id, segment_index)
+
     if not segment:
-        raise HTTPException(status_code=404, detail="Segment not found")
-    
-    # Update the segment's prompt and LoRA selections
-    update_segment_prompt(job_id, segment_index, prompt, high_lora=high_lora, low_lora=low_lora)
-    
+        # Segment doesn't exist - create it on-demand
+        # Get the previous segment's end frame as the start image for this segment
+        if segment_index == 0:
+            raise HTTPException(status_code=400, detail="Segment 0 should already exist")
+
+        previous_segment = get_segment(job_id, segment_index - 1)
+        if not previous_segment:
+            raise HTTPException(status_code=400, detail=f"Previous segment {segment_index - 1} does not exist")
+
+        if previous_segment.get("status") != "completed":
+            raise HTTPException(status_code=400, detail=f"Previous segment {segment_index - 1} must be completed first")
+
+        start_image_url = previous_segment.get("end_frame_url")
+        if not start_image_url:
+            raise HTTPException(status_code=400, detail=f"Previous segment {segment_index - 1} has no end frame")
+
+        # Create new segment on-demand
+        create_next_segment(
+            job_id,
+            segment_index,
+            prompt,
+            start_image_url,
+            high_lora=high_lora,
+            low_lora=low_lora
+        )
+    else:
+        # Segment exists - update its prompt and LoRA selections
+        update_segment_prompt(job_id, segment_index, prompt, high_lora=high_lora, low_lora=low_lora)
+
     # If job was waiting for prompt, set it back to pending so queue manager picks it up
     if job.get("status") == "awaiting_prompt":
         update_job_status(job_id, "pending")
-    
+
     return {"status": "updated", "job_id": job_id, "segment_index": segment_index, "resumed": job.get("status") == "awaiting_prompt"}
 
 
@@ -499,6 +576,46 @@ async def get_comfyui_status():
     }
 
 
+@router.get("/comfyui/view")
+async def proxy_comfyui_view(filename: str, subfolder: str = "", type: str = "input"):
+    """Proxy endpoint to view images from ComfyUI.
+
+    This proxies requests to ComfyUI's /view endpoint to avoid CORS issues.
+    """
+    import httpx
+    from fastapi.responses import StreamingResponse
+
+    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+
+    # Build the ComfyUI view URL
+    view_url = f"{comfyui_url}/view"
+    params = {
+        "filename": filename,
+        "subfolder": subfolder,
+        "type": type
+    }
+
+    try:
+        # Proxy the request to ComfyUI
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(view_url, params=params)
+
+            if response.status_code != 200:
+                raise HTTPException(status_code=response.status_code, detail="Failed to fetch image from ComfyUI")
+
+            # Determine content type from ComfyUI response
+            content_type = response.headers.get("content-type", "image/jpeg")
+
+            # Return the image as a streaming response
+            return StreamingResponse(
+                iter([response.content]),
+                media_type=content_type,
+                headers={"Cache-Control": "public, max-age=3600"}
+            )
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"Failed to connect to ComfyUI: {str(e)}")
+
+
 # ============== Image Upload Endpoint ==============
 
 @router.post("/upload/image")
@@ -542,3 +659,182 @@ async def upload_image_base64(image_data: str = Form(...), filename: str = Form(
         raise HTTPException(status_code=500, detail="Failed to upload image to ComfyUI")
 
     return {"filename": result_filename, "original_name": filename}
+
+
+# ============== Image Repository Endpoints ==============
+
+@router.get("/image-repo/browse")
+async def browse_image_repo(path: str = ""):
+    """Browse the image repository directory.
+
+    Returns folders and images (jpg, png) in the specified path.
+    """
+    repo_root = get_setting("image_repo_path", "")
+
+    if not repo_root:
+        raise HTTPException(status_code=400, detail="Image repository path not configured. Please set it in Settings.")
+
+    # Security: Ensure the repo root exists and is accessible
+    repo_root_path = Path(repo_root)
+    if not repo_root_path.exists():
+        raise HTTPException(status_code=400, detail=f"Image repository path does not exist: {repo_root}")
+
+    if not repo_root_path.is_dir():
+        raise HTTPException(status_code=400, detail=f"Image repository path is not a directory: {repo_root}")
+
+    # Build the full path, ensuring it's within repo_root (security)
+    if path:
+        full_path = repo_root_path / path
+        # Resolve to prevent directory traversal attacks
+        full_path = full_path.resolve()
+        if not str(full_path).startswith(str(repo_root_path.resolve())):
+            raise HTTPException(status_code=403, detail="Access denied: Path is outside repository")
+    else:
+        full_path = repo_root_path
+
+    if not full_path.exists():
+        raise HTTPException(status_code=404, detail="Path not found")
+
+    if not full_path.is_dir():
+        raise HTTPException(status_code=400, detail="Path is not a directory")
+
+    # List directory contents
+    folders = []
+    images = []
+
+    try:
+        for item in sorted(full_path.iterdir()):
+            if item.is_dir():
+                # Get relative path from repo root
+                rel_path = item.relative_to(repo_root_path)
+                folders.append({
+                    "name": item.name,
+                    "path": str(rel_path).replace("\\", "/")  # Normalize path separators
+                })
+            elif item.is_file():
+                # Only include jpg and png files
+                if item.suffix.lower() in ['.jpg', '.jpeg', '.png']:
+                    rel_path = item.relative_to(repo_root_path)
+                    images.append({
+                        "name": item.name,
+                        "path": str(rel_path).replace("\\", "/"),  # Normalize path separators
+                        "size": item.stat().st_size
+                    })
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied accessing directory")
+
+    # Build breadcrumb trail
+    breadcrumbs = [{"name": "Home", "path": ""}]
+    if path:
+        parts = Path(path).parts
+        current_path = ""
+        for part in parts:
+            current_path = str(Path(current_path) / part).replace("\\", "/")
+            breadcrumbs.append({"name": part, "path": current_path})
+
+    return {
+        "current_path": path,
+        "breadcrumbs": breadcrumbs,
+        "folders": folders,
+        "images": images
+    }
+
+
+@router.get("/image-repo/image")
+async def get_image_from_repo(path: str):
+    """Serve an image file from the repository.
+
+    This endpoint is used to display thumbnails in the image repository browser.
+    """
+    from fastapi.responses import FileResponse
+
+    repo_root = get_setting("image_repo_path", "")
+
+    if not repo_root:
+        raise HTTPException(status_code=400, detail="Image repository path not configured")
+
+    repo_root_path = Path(repo_root)
+
+    # Build full path with security check
+    full_path = repo_root_path / path
+    full_path = full_path.resolve()
+
+    # Security: Ensure path is within repo root
+    if not str(full_path).startswith(str(repo_root_path.resolve())):
+        raise HTTPException(status_code=403, detail="Access denied: Path is outside repository")
+
+    if not full_path.exists():
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    if not full_path.is_file():
+        raise HTTPException(status_code=400, detail="Path is not a file")
+
+    # Check file extension
+    if full_path.suffix.lower() not in ['.jpg', '.jpeg', '.png']:
+        raise HTTPException(status_code=400, detail="Only JPG and PNG images are supported")
+
+    # Determine media type
+    media_type = "image/jpeg" if full_path.suffix.lower() in ['.jpg', '.jpeg'] else "image/png"
+
+    return FileResponse(str(full_path), media_type=media_type)
+
+
+@router.post("/image-repo/select")
+async def select_image_from_repo(image_path: str = Form(...)):
+    """Upload an image from the repository to ComfyUI.
+
+    Takes an image from the local repository and uploads it to ComfyUI's input folder.
+    """
+    repo_root = get_setting("image_repo_path", "")
+
+    if not repo_root:
+        raise HTTPException(status_code=400, detail="Image repository path not configured")
+
+    repo_root_path = Path(repo_root)
+
+    # Build full path with security check
+    full_path = repo_root_path / image_path
+    full_path = full_path.resolve()
+
+    # Security: Ensure path is within repo root
+    if not str(full_path).startswith(str(repo_root_path.resolve())):
+        raise HTTPException(status_code=403, detail="Access denied: Path is outside repository")
+
+    if not full_path.exists():
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    if not full_path.is_file():
+        raise HTTPException(status_code=400, detail="Path is not a file")
+
+    # Check file extension
+    if full_path.suffix.lower() not in ['.jpg', '.jpeg', '.png']:
+        raise HTTPException(status_code=400, detail="Only JPG and PNG images are supported")
+
+    # Read the image file
+    try:
+        with open(full_path, 'rb') as f:
+            image_content = f.read()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read image: {str(e)}")
+
+    # Upload to ComfyUI
+    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+    client = ComfyUIClient(comfyui_url)
+
+    try:
+        result_filename = client.upload_image(image_content, full_path.name)
+        client.close()
+
+        if not result_filename:
+            raise HTTPException(status_code=500, detail="Failed to upload image to ComfyUI")
+
+        # Return both filename and image_url for compatibility
+        return {
+            "filename": result_filename,
+            "image_url": result_filename,  # For frontend compatibility
+            "original_name": full_path.name,
+            "original_path": image_path
+        }
+    except Exception as e:
+        client.close()
+        raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
