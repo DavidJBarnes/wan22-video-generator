@@ -55,7 +55,7 @@ const renderDashboard = function(container) {
         <tr>
           <th>Job Name</th>
           <th>Status</th>
-          <th>Progress</th>
+          <th>Segments</th>
           <th>Created</th>
         </tr>
       </thead>
@@ -115,7 +115,6 @@ const renderQueue = function(container) {
           <th>Created</th>
           <th>Status</th>
           <th>Segments</th>
-          <th>Progress</th>
           <th></th>
         </tr>
       </thead>
@@ -620,7 +619,6 @@ async function updateJobsTable() {
       jobsTable.innerHTML = jobs.map(job => {
         // Use computed segment fields from API
         const completedSegments = job.completed_segments ?? 0;
-        const progress = job.progress_percent ?? 0;
 
         return `
         <tr style="cursor: pointer;" onclick="navigate('job-detail', {currentJobId: '${job.id}'})">
@@ -629,14 +627,6 @@ async function updateJobsTable() {
           <td>${formatDate(job.created_at)}</td>
           <td><span class="chip ${getChipClass(job.status)}">${job.status}</span></td>
           <td>${completedSegments} completed</td>
-          <td>
-            <div class="progress-container">
-              <div class="progress-bar">
-                <div class="progress-fill" style="width: ${progress}%"></div>
-              </div>
-              <span style="font-size: 12px;">${progress}%</span>
-            </div>
-          </td>
           <td class="action-buttons">
             <button class="btn-icon" onclick="event.stopPropagation(); navigate('job-detail', {currentJobId: '${job.id}'})" title="View Details">
               👁️
@@ -663,7 +653,6 @@ async function updateJobDetail(jobId) {
     // Read parameters from job.parameters if not at top level
     const params = job.parameters || {};
     const completedSegments = job.completed_segments ?? 0;
-    const progressPercent = job.progress_percent ?? 0;
     const width = job.width ?? params.width ?? 640;
     const height = job.height ?? params.height ?? 640;
     const totalDuration = job.total_duration ?? params.total_duration ?? 0;
@@ -721,7 +710,7 @@ async function updateJobDetail(jobId) {
           <div class="value"><span class="chip ${getChipClass(job.status)}">${job.status}</span></div>
         </div>
         <div class="detail-meta-item">
-          <label>Progress</label>
+          <label>Segments</label>
           <div class="value">${completedSegments} segments completed</div>
         </div>
         <div class="detail-meta-item">
