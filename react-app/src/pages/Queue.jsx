@@ -126,7 +126,6 @@ export default function Queue() {
             <th>Created</th>
             <th>Status</th>
             <th>Segments</th>
-            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -157,22 +156,22 @@ export default function Queue() {
                   <StatusChip status={job.status} />
                 </td>
                 <td>{job.completed_segments ?? 0} completed</td>
-                <td className="action-buttons">
-                  <button
-                    className="btn-icon"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/job/${job.id}`); }}
-                    title="View Details"
-                  >
-                    👁️
-                  </button>
-                  <button
-                    className="btn-icon delete"
-                    onClick={(e) => handleDeleteJob(job.id, e)}
-                    title="Delete Job"
-                  >
-                    🗑️
-                  </button>
-                </td>
+{/*                 <td className="action-buttons"> */}
+{/*                   <button */}
+{/*                     className="btn-icon" */}
+{/*                     onClick={(e) => { e.stopPropagation(); navigate(`/job/${job.id}`); }} */}
+{/*                     title="View Details" */}
+{/*                   > */}
+{/*                     👁️ */}
+{/*                   </button> */}
+{/*                   <button */}
+{/*                     className="btn-icon delete" */}
+{/*                     onClick={(e) => handleDeleteJob(job.id, e)} */}
+{/*                     title="Delete Job" */}
+{/*                   > */}
+{/*                     🗑️ */}
+{/*                   </button> */}
+{/*                 </td> */}
               </tr>
             ))
           )}
