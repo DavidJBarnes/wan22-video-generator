@@ -1,0 +1,32 @@
+/* Status indicator */
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.green {
+  background: #4caf50;
+  box-shadow: 0 0 8px #4caf50;
+}
+
+.status-dot.blue {
+  background: #2196f3;
+  box-shadow: 0 0 8px #2196f3;
+}
+
+.status-dot.red {
+  background: #f44336;
+  box-shadow: 0 0 8px #f44336;
+}
+
+.status-dot.gray {
+  background: #999;
+}
