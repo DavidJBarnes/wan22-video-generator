@@ -18,13 +18,53 @@ export default function SubmitPromptModal({ jobId, segmentIndex, onClose, onSucc
 
   async function loadLoras() {
     try {
-      const data = await API.getLoras();
+      // Load from cached library instead of querying ComfyUI directly
+      const data = await API.getLoraLibrary();
       const loraList = data.loras || [];
-      setLoras(loraList.sort((a, b) => a.localeCompare(b)));
+      // Sort by technical name for stable ordering
+      loraList.sort((a, b) => a.name.localeCompare(b.name));
+      setLoras(loraList);
     } catch (error) {
       console.error('Failed to load LoRAs:', error);
     }
   }
+
+  // Helper function to build prompt text from LoRA metadata
+  function buildPromptFromLora(loraName) {
+    if (!loraName || !loras.length) return '';
+
+    const lora = loras.find(l => l.name === loraName);
+    if (!lora) return '';
+
+    const parts = [];
+
+    if (lora.prompt_text) {
+      parts.push(lora.prompt_text);
+    }
+
+    if (lora.trigger_keywords) {
+      parts.push(lora.trigger_keywords);
+    }
+
+    return parts.join(', ');
+  }
+
+  // Auto-populate prompt when LoRA is selected (only if prompt is empty)
+  useEffect(() => {
+    if (prompt.trim()) {
+      // Don't overwrite existing prompt
+      return;
+    }
+
+    // Try high LoRA first, then low LoRA
+    const loraToUse = highLora || lowLora;
+    if (!loraToUse) return;
+
+    const generatedPrompt = buildPromptFromLora(loraToUse);
+    if (generatedPrompt) {
+      setPrompt(generatedPrompt);
+    }
+  }, [highLora, lowLora, loras]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -55,8 +95,8 @@ export default function SubmitPromptModal({ jobId, segmentIndex, onClose, onSucc
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-content">
         <h2>Submit Prompt for Segment {segmentIndex}</h2>
 
         <form onSubmit={handleSubmit}>
@@ -74,24 +114,23 @@ export default function SubmitPromptModal({ jobId, segmentIndex, onClose, onSucc
             />
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <LoraAutocomplete
-                label="High Noise LoRA (optional)"
-                value={highLora}
-                onChange={setHighLora}
-                loras={loras}
-              />
-            </div>
-            <div className="form-group">
-              <LoraAutocomplete
-                label="Low Noise LoRA (optional)"
-                value={lowLora}
-                onChange={setLowLora}
-                loras={loras}
-              />
-            </div>
-          </div>
+
+        <div className="form-group">
+          <LoraAutocomplete
+            label="High Noise LoRA (optional)"
+            value={highLora}
+            onChange={setHighLora}
+            loras={loras}
+          />
+        </div>
+        <div className="form-group">
+          <LoraAutocomplete
+            label="Low Noise LoRA (optional)"
+            value={lowLora}
+            onChange={setLowLora}
+            loras={loras}
+          />
+        </div>
 
           <div className="modal-actions">
             <Button

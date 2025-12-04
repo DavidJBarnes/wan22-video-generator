@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard';
 import Queue from './pages/Queue';
 import JobDetail from './pages/JobDetail';
 import ImageRepo from './pages/ImageRepo';
+import LoraLibrary from './pages/LoraLibrary';
 import Settings from './pages/Settings';
 
 function App() {
@@ -15,6 +16,7 @@ function App() {
           <Route path="queue" element={<Queue />} />
           <Route path="job/:id" element={<JobDetail />} />
           <Route path="images" element={<ImageRepo />} />
+          <Route path="loras" element={<LoraLibrary />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

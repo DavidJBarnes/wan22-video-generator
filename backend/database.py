@@ -98,6 +98,27 @@ def init_db():
             )
         """)
 
+        # LoRA library table - caches LoRA metadata
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS lora_library (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                friendly_name TEXT,
+                url TEXT,
+                prompt_text TEXT,
+                trigger_keywords TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Migration: Add rating column if it doesn't exist (preserves existing data)
+        try:
+            cursor.execute("ALTER TABLE lora_library ADD COLUMN rating INTEGER DEFAULT NULL")
+        except Exception:
+            # Column already exists, ignore
+            pass
+
         # Insert default settings if not exist
         # Note: comfyui_url should match config.py COMFYUI_SERVER_URL
         default_settings = {
@@ -553,3 +574,103 @@ def delete_job_segments(job_id: int):
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM job_segments WHERE job_id = ?", (job_id,))
+
+
+# ============== LoRA Library Functions ==============
+
+def get_all_loras() -> List[Dict[str, Any]]:
+    """Get all LoRAs from the library."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, name, friendly_name, url, prompt_text, trigger_keywords, rating,
+                   created_at, updated_at
+            FROM lora_library
+            ORDER BY name ASC
+        """)
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+def get_lora(lora_id: int) -> Optional[Dict[str, Any]]:
+    """Get a LoRA by ID."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, name, friendly_name, url, prompt_text, trigger_keywords, rating,
+                   created_at, updated_at
+            FROM lora_library
+            WHERE id = ?
+        """, (lora_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_lora_by_name(name: str) -> Optional[Dict[str, Any]]:
+    """Get a LoRA by its technical name."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, name, friendly_name, url, prompt_text, trigger_keywords, rating,
+                   created_at, updated_at
+            FROM lora_library
+            WHERE name = ?
+        """, (name,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def upsert_lora(name: str, friendly_name: Optional[str] = None,
+                url: Optional[str] = None, prompt_text: Optional[str] = None,
+                trigger_keywords: Optional[str] = None) -> int:
+    """Insert or update a LoRA in the library. Returns the LoRA ID."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO lora_library (name, friendly_name, url, prompt_text, trigger_keywords, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(name) DO UPDATE SET
+                friendly_name = COALESCE(excluded.friendly_name, friendly_name),
+                url = COALESCE(excluded.url, url),
+                prompt_text = COALESCE(excluded.prompt_text, prompt_text),
+                trigger_keywords = COALESCE(excluded.trigger_keywords, trigger_keywords),
+                updated_at = excluded.updated_at
+        """, (name, friendly_name, url, prompt_text, trigger_keywords, utc_now_iso()))
+
+        # Get the ID of the inserted/updated row
+        cursor.execute("SELECT id FROM lora_library WHERE name = ?", (name,))
+        return cursor.fetchone()[0]
+
+
+def update_lora(lora_id: int, friendly_name: Optional[str] = None,
+                url: Optional[str] = None, prompt_text: Optional[str] = None,
+                trigger_keywords: Optional[str] = None, rating: Optional[int] = None):
+    """Update LoRA metadata."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE lora_library
+            SET friendly_name = ?, url = ?, prompt_text = ?, trigger_keywords = ?, rating = ?, updated_at = ?
+            WHERE id = ?
+        """, (friendly_name, url, prompt_text, trigger_keywords, rating, utc_now_iso(), lora_id))
+
+
+def delete_lora(lora_id: int):
+    """Delete a LoRA from the library."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM lora_library WHERE id = ?", (lora_id,))
+
+
+def bulk_upsert_loras(lora_names: List[str]):
+    """Bulk insert/update LoRAs from a list of names (typically from ComfyUI)."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        for name in lora_names:
+            cursor.execute("""
+                INSERT INTO lora_library (name, updated_at)
+                VALUES (?, ?)
+                ON CONFLICT(name) DO UPDATE SET updated_at = excluded.updated_at
+            """, (name, utc_now_iso()))
+        conn.commit()
+    return len(lora_names)

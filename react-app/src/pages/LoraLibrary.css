@@ -1,0 +1,32 @@
+/* LoRA Library page styles */
+
+.lora-library {
+  padding: 24px;
+}
+
+.lora-library table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+}
+
+.lora-library table th {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 2px solid #e0e0e0;
+  font-weight: 600;
+  color: #333;
+}
+
+.lora-library table td {
+  padding: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.lora-library table tbody tr:hover {
+  background: #f9f9f9;
+}
+
+.lora-library table tbody tr:last-child td {
+  border-bottom: none;
+}

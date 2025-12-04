@@ -25,7 +25,13 @@ from database import (
     update_segment_prompt,
     get_segment,
     delete_job_segments,
-    get_completed_segments_count
+    get_completed_segments_count,
+    get_all_loras as db_get_all_loras,
+    get_lora as db_get_lora,
+    update_lora as db_update_lora,
+    delete_lora as db_delete_lora,
+    bulk_upsert_loras,
+    get_connection
 )
 from comfyui_client import ComfyUIClient
 from queue_manager import queue_manager
@@ -75,6 +81,14 @@ class JobResponse(BaseModel):
     total_segments: Optional[int] = 0
     completed_segments: Optional[int] = 0
     progress_percent: Optional[int] = 0
+
+
+class LoraUpdate(BaseModel):
+    friendly_name: Optional[str] = None
+    url: Optional[str] = None
+    prompt_text: Optional[str] = None
+    trigger_keywords: Optional[str] = None
+    rating: Optional[int] = None
 
 
 def enrich_job_with_segments(job: Dict[str, Any]) -> Dict[str, Any]:
@@ -194,7 +208,7 @@ async def cancel_job(job_id: int):
 
 @router.post("/jobs/{job_id}/retry")
 async def retry_job(job_id: int):
-    """Retry a failed job by resetting all segments and job status."""
+    """Retry a failed job by resetting incomplete segments while preserving completed ones."""
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -202,26 +216,19 @@ async def retry_job(job_id: int):
     if job["status"] not in ("failed", "cancelled"):
         raise HTTPException(status_code=400, detail="Only failed or cancelled jobs can be retried")
 
-    # Delete existing segments and recreate them
-    delete_job_segments(job_id)
-    
-    # Recreate segments
-    params = job.get("parameters") or {}
-    total_segments = int(params.get("total_segments", 1))
-    
-    # Build start image URL for segment 1
-    start_image_url = None
-    if job.get("input_image"):
-        comfyui_url = get_setting("comfyui_url", COMFYUI_SERVER_URL)
-        input_image = job["input_image"]
-        if input_image.startswith("http"):
-            start_image_url = input_image
-        else:
-            start_image_url = f"{comfyui_url}/view?filename={input_image}&subfolder=&type=input"
-    
-    # Create fresh segment records
-    create_segments_for_job(job_id, total_segments, job.get("prompt", ""), start_image_url)
-    
+    # Get existing segments
+    existing_segments = db_get_job_segments(job_id)
+
+    # Reset non-completed segments to pending (preserves completed segments)
+    # This allows the job to pick up where it left off
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE job_segments
+            SET status = 'pending', error_message = NULL
+            WHERE job_id = ? AND status != 'completed'
+        """, (job_id,))
+
     # Reset job status to pending and clear error message
     update_job_status(job_id, "pending", error_message=None)
     return {"status": "pending", "id": job_id}
@@ -555,6 +562,79 @@ async def get_loras():
     return {"loras": loras}
 
 
+# ============== LoRA Library Routes ==============
+
+@router.get("/loras/library")
+async def get_lora_library():
+    """Get all LoRAs from the cached library."""
+    loras = db_get_all_loras()
+    return {"loras": loras}
+
+
+@router.post("/loras/fetch")
+async def fetch_and_cache_loras():
+    """Fetch LoRAs from ComfyUI and cache them in the database."""
+    try:
+        comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+        client = ComfyUIClient(comfyui_url)
+        loras = client.get_loras()
+        client.close()
+
+        # Bulk insert/update LoRAs
+        count = bulk_upsert_loras(loras)
+
+        return {
+            "status": "success",
+            "message": f"Fetched and cached {count} LoRAs",
+            "count": count
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch LoRAs: {str(e)}")
+
+
+@router.get("/loras/{lora_id}")
+async def get_lora(lora_id: int):
+    """Get a specific LoRA by ID."""
+    lora = db_get_lora(lora_id)
+    if not lora:
+        raise HTTPException(status_code=404, detail="LoRA not found")
+    return lora
+
+
+@router.put("/loras/{lora_id}")
+async def update_lora(lora_id: int, lora_data: LoraUpdate):
+    """Update LoRA metadata."""
+    # Check if LoRA exists
+    lora = db_get_lora(lora_id)
+    if not lora:
+        raise HTTPException(status_code=404, detail="LoRA not found")
+
+    # Update the LoRA
+    db_update_lora(
+        lora_id,
+        friendly_name=lora_data.friendly_name,
+        url=lora_data.url,
+        prompt_text=lora_data.prompt_text,
+        trigger_keywords=lora_data.trigger_keywords,
+        rating=lora_data.rating
+    )
+
+    # Return updated LoRA
+    updated_lora = db_get_lora(lora_id)
+    return updated_lora
+
+
+@router.delete("/loras/{lora_id}")
+async def delete_lora(lora_id: int):
+    """Delete a LoRA from the library."""
+    lora = db_get_lora(lora_id)
+    if not lora:
+        raise HTTPException(status_code=404, detail="LoRA not found")
+
+    db_delete_lora(lora_id)
+    return {"status": "deleted", "id": lora_id}
+
+
 @router.get("/comfyui/status")
 async def get_comfyui_status():
     """Check ComfyUI connection status."""
@@ -838,3 +918,46 @@ async def select_image_from_repo(image_path: str = Form(...)):
     except Exception as e:
         client.close()
         raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
+
+
+@router.post("/image-repo/delete")
+async def delete_image_from_repo(image_path: str = Form(...)):
+    """Delete an image from the repository.
+
+    Permanently removes an image file from the local filesystem.
+    """
+    repo_root = get_setting("image_repo_path", "")
+
+    if not repo_root:
+        raise HTTPException(status_code=400, detail="Image repository path not configured")
+
+    repo_root_path = Path(repo_root)
+
+    # Build full path with security check
+    full_path = repo_root_path / image_path
+    full_path = full_path.resolve()
+
+    # Security: Ensure path is within repo root
+    if not str(full_path).startswith(str(repo_root_path.resolve())):
+        raise HTTPException(status_code=403, detail="Access denied: Path is outside repository")
+
+    if not full_path.exists():
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    if not full_path.is_file():
+        raise HTTPException(status_code=400, detail="Path is not a file")
+
+    # Check file extension for safety
+    if full_path.suffix.lower() not in ['.jpg', '.jpeg', '.png']:
+        raise HTTPException(status_code=400, detail="Only JPG and PNG images can be deleted")
+
+    # Delete the file
+    try:
+        full_path.unlink()
+        return {
+            "success": True,
+            "message": f"Image '{full_path.name}' deleted successfully",
+            "deleted_path": image_path
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete image: {str(e)}")

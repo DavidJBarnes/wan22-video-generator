@@ -15,6 +15,9 @@ export default function Layout() {
         <NavLink to="/images" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
           <span>🖼️</span> Image Repo
         </NavLink>
+        <NavLink to="/loras" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+          <span>🎨</span> LoRA Library
+        </NavLink>
         <NavLink to="/settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
           <span>⚙️</span> Settings
         </NavLink>

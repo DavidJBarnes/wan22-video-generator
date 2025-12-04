@@ -237,10 +237,52 @@ class APIClient {
     });
   }
 
+  async deleteRepoImage(imagePath) {
+    const formData = new FormData();
+    formData.append('image_path', imagePath);
+
+    return this.request('/image-repo/delete', {
+      method: 'POST',
+      body: formData
+    });
+  }
+
   // ============== ComfyUI View Proxy ==============
 
   getComfyUIImage(filename, subfolder = '', type = 'input') {
     return `${API_BASE_URL}/comfyui/view?filename=${encodeURIComponent(filename)}&subfolder=${subfolder}&type=${type}`;
+  }
+
+  // ============== LoRA Library ==============
+
+  async getLoraLibrary() {
+    return this.request('/loras/library');
+  }
+
+  async fetchAndCacheLoras() {
+    return this.request('/loras/fetch', {
+      method: 'POST'
+    });
+  }
+
+  async getLora(loraId) {
+    return this.request(`/loras/${loraId}`);
+  }
+
+  async updateLora(loraId, data) {
+    return this.request(`/loras/${loraId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data)
+    });
+  }
+
+  async deleteLora(loraId) {
+    return this.request(`/loras/${loraId}`, {
+      method: 'DELETE'
+    });
   }
 }
 
