@@ -55,7 +55,7 @@ const renderDashboard = function(container) {
         <tr>
           <th>Job Name</th>
           <th>Status</th>
-          <th>Progress</th>
+          <th>Segments</th>
           <th>Created</th>
         </tr>
       </thead>
@@ -115,7 +115,6 @@ const renderQueue = function(container) {
           <th>Created</th>
           <th>Status</th>
           <th>Segments</th>
-          <th>Progress</th>
           <th></th>
         </tr>
       </thead>
@@ -218,11 +217,277 @@ const renderJobDetail = function(container) {
 
 const renderImageRepo = function(container) {
   container.innerHTML = `
-    <h1>Image Repository</h1>
-    <div class="alert info">
-      Coming soon...
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+      <h1 style="margin-bottom: 0;">Image Repository</h1>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <label style="font-size: 14px; color: #666;">Sort:</label>
+        <select id="image-repo-sort" onchange="setImageRepoSort(this.value)" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; background: white; cursor: pointer;">
+          <option value="name-asc">Name (A-Z)</option>
+          <option value="name-desc">Name (Z-A)</option>
+        </select>
+        <button class="btn btn-secondary" onclick="setImageRepoView('grid')" id="view-grid-btn">
+          <span style="font-size: 18px;">▦</span> Grid
+        </button>
+        <button class="btn btn-secondary" onclick="setImageRepoView('list')" id="view-list-btn">
+          <span style="font-size: 18px;">☰</span> List
+        </button>
+      </div>
+    </div>
+
+    <div id="image-repo-breadcrumb" class="breadcrumb"></div>
+
+    <div id="image-repo-loading" class="alert info" style="display: none;">
+      Loading...
+    </div>
+
+    <div id="image-repo-error" class="alert error" style="display: none;"></div>
+
+    <div id="image-repo-content"></div>
+  `;
+
+  // Initialize view state
+  if (!AppState.imageRepoView) {
+    AppState.imageRepoView = 'grid';
+  }
+  if (!AppState.imageRepoPath) {
+    AppState.imageRepoPath = '';
+  }
+  if (!AppState.imageRepoSort) {
+    AppState.imageRepoSort = 'name-asc';
+  }
+
+  // Update view button states
+  updateImageRepoViewButtons();
+
+  // Update sort dropdown
+  const sortSelect = document.getElementById('image-repo-sort');
+  if (sortSelect) {
+    sortSelect.value = AppState.imageRepoSort;
+  }
+
+  // Load initial directory
+  loadImageRepoDirectory(AppState.imageRepoPath);
+};
+
+// Set the view type (grid or list)
+window.setImageRepoView = function(view) {
+  AppState.imageRepoView = view;
+  updateImageRepoViewButtons();
+  loadImageRepoDirectory(AppState.imageRepoPath);
+};
+
+// Set the sort order
+window.setImageRepoSort = function(sortOrder) {
+  AppState.imageRepoSort = sortOrder;
+  loadImageRepoDirectory(AppState.imageRepoPath);
+};
+
+// Update the view button states
+function updateImageRepoViewButtons() {
+  const gridBtn = document.getElementById('view-grid-btn');
+  const listBtn = document.getElementById('view-list-btn');
+
+  if (gridBtn && listBtn) {
+    if (AppState.imageRepoView === 'grid') {
+      gridBtn.classList.add('active');
+      listBtn.classList.remove('active');
+    } else {
+      gridBtn.classList.remove('active');
+      listBtn.classList.add('active');
+    }
+  }
+}
+
+// Sort folders and images based on current sort preference
+function sortRepoItems(items) {
+  const sortOrder = AppState.imageRepoSort || 'name-asc';
+
+  return items.sort((a, b) => {
+    const nameA = a.name.toLowerCase();
+    const nameB = b.name.toLowerCase();
+
+    if (sortOrder === 'name-asc') {
+      return nameA.localeCompare(nameB);
+    } else if (sortOrder === 'name-desc') {
+      return nameB.localeCompare(nameA);
+    }
+    return 0;
+  });
+}
+
+// Load and display a directory from the image repo
+async function loadImageRepoDirectory(path) {
+  const loading = document.getElementById('image-repo-loading');
+  const error = document.getElementById('image-repo-error');
+  const content = document.getElementById('image-repo-content');
+  const breadcrumb = document.getElementById('image-repo-breadcrumb');
+
+  if (!loading || !error || !content || !breadcrumb) return;
+
+  // Show loading state
+  loading.style.display = 'block';
+  error.style.display = 'none';
+  content.innerHTML = '';
+
+  try {
+    // Fetch directory listing from backend
+    const response = await fetch(`/api/image-repo/browse?path=${encodeURIComponent(path)}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || 'Failed to load directory');
+    }
+
+    // Update state
+    AppState.imageRepoPath = path;
+
+    // Render breadcrumb
+    renderBreadcrumb(data.breadcrumbs || []);
+
+    // Hide loading
+    loading.style.display = 'none';
+
+    // Sort folders and images
+    const sortedFolders = sortRepoItems(data.folders || []);
+    const sortedImages = sortRepoItems(data.images || []);
+
+    // Render content based on view type
+    if (AppState.imageRepoView === 'grid') {
+      renderImageRepoGrid(sortedFolders, sortedImages);
+    } else {
+      renderImageRepoList(sortedFolders, sortedImages);
+    }
+
+  } catch (err) {
+    console.error('Failed to load image repository:', err);
+    loading.style.display = 'none';
+    error.style.display = 'block';
+    error.textContent = err.message || 'Failed to load directory. Please check that the Image Repository Path is set correctly in Settings.';
+  }
+}
+
+// Render breadcrumb navigation
+function renderBreadcrumb(breadcrumbs) {
+  const breadcrumb = document.getElementById('image-repo-breadcrumb');
+  if (!breadcrumb) return;
+
+  if (breadcrumbs.length === 0) {
+    breadcrumb.innerHTML = '<span style="color: #999;">No repository path configured. Please set it in Settings.</span>';
+    return;
+  }
+
+  breadcrumb.innerHTML = breadcrumbs.map((crumb, index) => {
+    const isLast = index === breadcrumbs.length - 1;
+    return `
+      <span class="breadcrumb-item ${isLast ? 'active' : ''}"
+            onclick="${isLast ? '' : `navigateToPath('${crumb.path}')`}"
+            style="cursor: ${isLast ? 'default' : 'pointer'};">
+        ${crumb.name}
+      </span>
+      ${isLast ? '' : '<span class="breadcrumb-separator">/</span>'}
+    `;
+  }).join('');
+}
+
+// Navigate to a specific path
+window.navigateToPath = function(path) {
+  loadImageRepoDirectory(path);
+};
+
+// Render grid view
+function renderImageRepoGrid(folders, images) {
+  const content = document.getElementById('image-repo-content');
+  if (!content) return;
+
+  if (folders.length === 0 && images.length === 0) {
+    content.innerHTML = '<div class="alert info">This directory is empty.</div>';
+    return;
+  }
+
+  content.innerHTML = `
+    <div class="image-repo-grid">
+      ${folders.map(folder => `
+        <div class="repo-item folder" onclick="navigateToPath('${folder.path}')">
+          <div class="repo-item-icon">📁</div>
+          <div class="repo-item-name">${folder.name}</div>
+        </div>
+      `).join('')}
+
+      ${images.map(image => `
+        <div class="repo-item image" onclick="selectImageFromRepo('${image.path}')">
+          <div class="repo-item-preview">
+            <img src="/api/image-repo/image?path=${encodeURIComponent(image.path)}"
+                 alt="${image.name}"
+                 onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22%3E%3Crect fill=%22%23ddd%22 width=%22200%22 height=%22200%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23999%22%3E🖼️%3C/text%3E%3C/svg%3E'">
+          </div>
+          <div class="repo-item-name">${image.name}</div>
+        </div>
+      `).join('')}
     </div>
   `;
+}
+
+// Render list view
+function renderImageRepoList(folders, images) {
+  const content = document.getElementById('image-repo-content');
+  if (!content) return;
+
+  if (folders.length === 0 && images.length === 0) {
+    content.innerHTML = '<div class="alert info">This directory is empty.</div>';
+    return;
+  }
+
+  content.innerHTML = `
+    <div class="image-repo-list">
+      ${folders.map(folder => `
+        <div class="repo-list-item folder" onclick="navigateToPath('${folder.path}')">
+          <span class="repo-list-icon">📁</span>
+          <span class="repo-list-name">${folder.name}</span>
+          <span class="repo-list-type">Folder</span>
+        </div>
+      `).join('')}
+
+      ${images.map(image => `
+        <div class="repo-list-item image" onclick="selectImageFromRepo('${image.path}')">
+          <span class="repo-list-icon">🖼️</span>
+          <span class="repo-list-name">${image.name}</span>
+          <span class="repo-list-type">${image.name.split('.').pop().toUpperCase()}</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// Select an image from the repo
+window.selectImageFromRepo = async function(imagePath) {
+  try {
+    // Show loading toast
+    showToast('Uploading image...', 'info');
+
+    // Upload the image to ComfyUI via backend
+    const formData = new FormData();
+    formData.append('image_path', imagePath);
+
+    const response = await fetch('/api/image-repo/select', {
+      method: 'POST',
+      body: formData
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || 'Failed to upload image');
+    }
+
+    showToast('Image uploaded successfully!', 'success');
+
+    // Open create job modal with the uploaded image
+    openCreateJobModal(data.image_url);
+
+  } catch (err) {
+    console.error('Failed to select image:', err);
+    showToast(err.message || 'Failed to upload image', 'error');
+  }
 };
 
 const renderSettings = function(container) {
@@ -234,6 +499,15 @@ const renderSettings = function(container) {
       <div class="form-group">
         <label>Server URL</label>
         <input type="text" id="setting-server-url">
+      </div>
+    </div>
+
+    <div class="card settings-section">
+      <h2>Image Repository</h2>
+      <div class="form-group">
+        <label>Local Image Repository Path</label>
+        <input type="text" id="setting-image-repo-path" placeholder="/path/to/your/images">
+        <small style="color: #666; font-size: 12px;">Absolute path to a local directory containing your images</small>
       </div>
     </div>
 
@@ -315,13 +589,12 @@ async function updateDashboard() {
     if (jobs.length > 0) {
       recentTable.innerHTML = jobs.slice(0, 5).map(job => {
         // Use completed_segments from API (computed from job_segments table)
-        const totalSegments = job.total_segments ?? 0;
         const completedSegments = job.completed_segments ?? 0;
         return `
         <tr onclick="navigate('job-detail', {currentJobId: '${job.id}'})">
           <td>${job.name}</td>
           <td><span class="chip ${getChipClass(job.status)}">${job.status}</span></td>
-          <td>${completedSegments}/${totalSegments}</td>
+          <td>${completedSegments} completed</td>
           <td>${formatDate(job.created_at)}</td>
         </tr>
       `}).join('');
@@ -345,25 +618,15 @@ async function updateJobsTable() {
     if (jobs.length > 0) {
       jobsTable.innerHTML = jobs.map(job => {
         // Use computed segment fields from API
-        const totalSegments = job.total_segments ?? 0;
         const completedSegments = job.completed_segments ?? 0;
-        const progress = job.progress_percent ?? calculateProgress(completedSegments, totalSegments);
-        
+
         return `
         <tr style="cursor: pointer;" onclick="navigate('job-detail', {currentJobId: '${job.id}'})">
           <td><img class="thumbnail" src="${API.getJobThumbnail(job.id)}" onerror="this.style.display='none'"></td>
           <td>${job.name}</td>
           <td>${formatDate(job.created_at)}</td>
           <td><span class="chip ${getChipClass(job.status)}">${job.status}</span></td>
-          <td>${completedSegments}/${totalSegments}</td>
-          <td>
-            <div class="progress-container">
-              <div class="progress-bar">
-                <div class="progress-fill" style="width: ${progress}%"></div>
-              </div>
-              <span style="font-size: 12px;">${progress}%</span>
-            </div>
-          </td>
+          <td>${completedSegments} completed</td>
           <td class="action-buttons">
             <button class="btn-icon" onclick="event.stopPropagation(); navigate('job-detail', {currentJobId: '${job.id}'})" title="View Details">
               👁️
@@ -389,9 +652,7 @@ async function updateJobDetail(jobId) {
     
     // Read parameters from job.parameters if not at top level
     const params = job.parameters || {};
-    const totalSegments = job.total_segments ?? params.total_segments ?? 0;
     const completedSegments = job.completed_segments ?? 0;
-    const progressPercent = job.progress_percent ?? calculateProgress(completedSegments, totalSegments);
     const width = job.width ?? params.width ?? 640;
     const height = job.height ?? params.height ?? 640;
     const totalDuration = job.total_duration ?? params.total_duration ?? 0;
@@ -449,8 +710,8 @@ async function updateJobDetail(jobId) {
           <div class="value"><span class="chip ${getChipClass(job.status)}">${job.status}</span></div>
         </div>
         <div class="detail-meta-item">
-          <label>Progress</label>
-          <div class="value">${completedSegments}/${totalSegments} segments (${progressPercent}%)</div>
+          <label>Segments</label>
+          <div class="value">${completedSegments} segments completed</div>
         </div>
         <div class="detail-meta-item">
           <label>Dimensions</label>
@@ -470,18 +731,26 @@ async function updateJobDetail(jobId) {
         </div>
       </div>
       ${finalOutputSection}
+      ${job.status === 'completed' ? `
+        <div style="margin-top: 16px;">
+          <button class="btn btn-secondary" onclick="reopenJob('${jobId}')" style="background: #ff9800; color: white; border: none;">
+            Reopen Job & Continue
+          </button>
+          <p style="font-size: 12px; color: #666; margin-top: 8px;">Reopening allows you to add more segments to this completed job.</p>
+        </div>
+      ` : ''}
     `;
-    
+
     const segmentsList = document.getElementById('segments-list');
     
     // If no segments from API, create a stub segment from job data
-    if (segments.length === 0 && totalSegments > 0) {
+    if (segments.length === 0) {
       // Create a placeholder showing the job's initial state
       segmentsList.innerHTML = `
         <div class="segment-item">
           <div class="segment-header">
             <div>
-              <strong>Segment 1 of ${totalSegments}</strong>
+              <strong>Segment 1</strong>
               <span class="chip ${getChipClass(job.status)}" style="margin-left: 8px;">${job.status}</span>
             </div>
           </div>
@@ -535,12 +804,15 @@ async function updateJobDetail(jobId) {
         </div>
       `).join('');
       
-      // Check if waiting for prompt - find the first segment without a prompt
+      // Check if waiting for prompt - show form for next segment
       if (job.status === 'awaiting_prompt') {
-        const nextSegmentIndex = segments.findIndex(s => !s.prompt && s.status === 'pending');
+        // The next segment is either the first one without a prompt, or a new segment after all completed ones
+        const segmentWithoutPrompt = segments.find(s => !s.prompt && s.status === 'pending');
+        const nextSegmentIndex = segmentWithoutPrompt ? segmentWithoutPrompt.segment_index : segments.length;
         const lastCompletedSegment = segments.filter(s => s.status === 'completed').pop();
-        
-        if (nextSegmentIndex >= 0) {
+
+        // Always show the form when status is awaiting_prompt
+        if (true) {
           segmentsList.innerHTML += `
             <div class="segment-item" style="border: 2px solid #ff9800;">
               <div class="segment-header">
@@ -573,7 +845,11 @@ async function updateJobDetail(jobId) {
                   </div>
                 </div>
               </div>
-              <button class="btn btn-primary" id="submit-next-prompt-btn" onclick="submitNextPrompt('${jobId}', ${nextSegmentIndex})">Submit Prompt</button>
+              <div style="display: flex; gap: 12px; align-items: center; margin-top: 12px;">
+                <button class="btn btn-primary" id="submit-next-prompt-btn" onclick="submitNextPrompt('${jobId}', ${nextSegmentIndex})" style="flex: 1;">Continue with Next Segment</button>
+                <div style="color: #666; font-weight: 500;">OR</div>
+                <button class="btn btn-secondary" id="finalize-job-btn" onclick="finalizeJob('${jobId}')" style="flex: 1; background: #4caf50; color: white; border: none;">Finalize & Merge</button>
+              </div>
             </div>
           `;
           // Load LoRA options for segment prompt form
@@ -596,6 +872,7 @@ async function loadSettings() {
     
     // Use comfyui_url (the actual key in the backend)
     document.getElementById('setting-server-url').value = settings.comfyui_url || 'http://3090.zero:8188';
+    document.getElementById('setting-image-repo-path').value = settings.image_repo_path || '';
     document.getElementById('setting-width').value = settings.default_width || 640;
     document.getElementById('setting-height').value = settings.default_height || 640;
     document.getElementById('setting-fps').value = settings.default_fps || 16;
@@ -616,6 +893,7 @@ async function loadSettings() {
 async function saveSettings() {
   try {
     const serverUrl = document.getElementById('setting-server-url').value.trim();
+    const imageRepoPath = document.getElementById('setting-image-repo-path').value.trim();
     const width = parseInt(document.getElementById('setting-width').value, 10) || 640;
     const height = parseInt(document.getElementById('setting-height').value, 10) || 640;
     const fps = parseInt(document.getElementById('setting-fps').value, 10) || 16;
@@ -633,6 +911,7 @@ async function saveSettings() {
     
     const settingsPayload = {
       comfyui_url: serverUrl || 'http://3090.zero:8188',
+      image_repo_path: imageRepoPath,
       default_width: String(width),
       default_height: String(height),
       default_fps: String(fps),
@@ -654,13 +933,20 @@ async function saveSettings() {
   }
 }
 
-// Open create job modal
-function openCreateJobModal() {
+// Open create job modal (optionally with pre-uploaded image from repo)
+function openCreateJobModal(preUploadedImageUrl = null) {
   const container = document.getElementById('modals-container');
   const settings = AppState.settings || {};
   const defaultWidth = settings.default_width || 640;
   const defaultHeight = settings.default_height || 640;
-  
+
+  // Store pre-uploaded image URL in app state if provided
+  if (preUploadedImageUrl) {
+    AppState.preUploadedImageUrl = preUploadedImageUrl;
+  } else {
+    AppState.preUploadedImageUrl = null;
+  }
+
   container.innerHTML = `
     <div class="modal active" id="create-job-modal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
       <div class="modal-content" style="background: white; padding: 24px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto;">
@@ -682,19 +968,14 @@ function openCreateJobModal() {
           </div>
         </div>
         
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
-          <div class="form-group">
-            <label style="display: block; margin-bottom: 4px; font-weight: 500;">Total Video Duration (seconds)</label>
-            <input id="new-job-total-duration" type="number" value="30" min="3" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
-          </div>
-          <div class="form-group">
-            <label style="display: block; margin-bottom: 4px; font-weight: 500;">Segment Duration</label>
-            <select id="new-job-segment-duration" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
-              <option value="3">3 seconds</option>
-              <option value="4">4 seconds</option>
-              <option value="5" selected>5 seconds</option>
-            </select>
-          </div>
+        <div class="form-group" style="margin-bottom: 16px;">
+          <label style="display: block; margin-bottom: 4px; font-weight: 500;">Segment Duration</label>
+          <select id="new-job-segment-duration" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+            <option value="3">3 seconds</option>
+            <option value="4">4 seconds</option>
+            <option value="5" selected>5 seconds</option>
+          </select>
+          <small style="color: #666; font-size: 12px;">Add segments one at a time. Click "Finalize & Merge" when done.</small>
         </div>
         
         <div class="form-group" style="margin-bottom: 16px;">
@@ -724,11 +1005,7 @@ function openCreateJobModal() {
             </div>
           </div>
         </div>
-        
-        <div id="job-summary" style="background: #f5f5f5; padding: 12px; border-radius: 4px; margin-bottom: 16px; font-size: 14px;">
-          <strong>Summary:</strong> <span id="summary-text">30 second video = 6 segments of 5 seconds each</span>
-        </div>
-        
+
         <div style="text-align: right; margin-top: 24px;">
           <button class="btn btn-secondary" onclick="closeCreateJobModal()" style="padding: 8px 16px; margin-right: 8px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">Cancel</button>
           <button class="btn btn-primary" onclick="createJobFromModal()" style="padding: 8px 16px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer;">Create Job</button>
@@ -737,38 +1014,50 @@ function openCreateJobModal() {
     </div>
   `;
   
-  // Add event listeners for dynamic summary update
-  const totalDurationInput = document.getElementById('new-job-total-duration');
-  const segmentDurationSelect = document.getElementById('new-job-segment-duration');
-  const imageInput = document.getElementById('new-job-image');
-  
-  const updateSummary = () => {
-    const totalDuration = parseInt(totalDurationInput.value) || 30;
-    const segmentDuration = parseInt(segmentDurationSelect.value) || 5;
-    const numSegments = Math.ceil(totalDuration / segmentDuration);
-    document.getElementById('summary-text').textContent = 
-      `${totalDuration} second video = ${numSegments} segments of ${segmentDuration} seconds each`;
-  };
-  
-  totalDurationInput.addEventListener('input', updateSummary);
-  segmentDurationSelect.addEventListener('change', updateSummary);
-  
   // Image preview
-  imageInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        document.getElementById('image-preview').innerHTML = 
-          `<img src="${e.target.result}" style="max-width: 200px; max-height: 150px; border-radius: 4px; border: 1px solid #ddd;">`;
-      };
-      reader.readAsDataURL(file);
-    }
-  });
-  
+  const imageInput = document.getElementById('new-job-image');
+  const imagePreview = document.getElementById('image-preview');
+
+  // If we have a pre-uploaded image from repo, show it and hide the file input
+  if (preUploadedImageUrl) {
+    imagePreview.innerHTML = `
+      <div style="margin-bottom: 8px;">
+        <img src="/api/comfyui/view?filename=${encodeURIComponent(preUploadedImageUrl)}"
+             style="max-width: 200px; max-height: 150px; border-radius: 4px; border: 1px solid #ddd;"
+             onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22150%22%3E%3Crect fill=%22%23ddd%22 width=%22200%22 height=%22150%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23999%22%3EImage from Repo%3C/text%3E%3C/svg%3E'">
+      </div>
+      <div style="font-size: 12px; color: #666;">
+        Image from repository: ${preUploadedImageUrl}
+        <button onclick="clearPreUploadedImage()" class="btn btn-secondary" style="margin-left: 8px; padding: 4px 8px; font-size: 11px;">Choose Different Image</button>
+      </div>
+    `;
+    imageInput.style.display = 'none';
+  } else {
+    imageInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          imagePreview.innerHTML =
+            `<img src="${e.target.result}" style="max-width: 200px; max-height: 150px; border-radius: 4px; border: 1px solid #ddd;">`;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+
   // Load available LoRAs from ComfyUI
   loadLoraOptions();
 }
+
+// Clear pre-uploaded image and show file input
+window.clearPreUploadedImage = function() {
+  AppState.preUploadedImageUrl = null;
+  const imageInput = document.getElementById('new-job-image');
+  const imagePreview = document.getElementById('image-preview');
+  imageInput.style.display = 'block';
+  imagePreview.innerHTML = '';
+};
 
 // Helper function to create searchable dropdown for LoRAs
 function createSearchableLoraDropdown(inputId, dropdownId, loras) {
@@ -884,7 +1173,6 @@ async function createJobFromModal() {
   const name = document.getElementById('new-job-name').value.trim();
   const width = parseInt(document.getElementById('new-job-width').value) || 640;
   const height = parseInt(document.getElementById('new-job-height').value) || 640;
-  const totalDuration = parseInt(document.getElementById('new-job-total-duration').value) || 30;
   const segmentDuration = parseInt(document.getElementById('new-job-segment-duration').value) || 5;
   const prompt = document.getElementById('new-job-prompt').value.trim();
   const imageInput = document.getElementById('new-job-image');
@@ -893,56 +1181,64 @@ async function createJobFromModal() {
   const lowLoraInput = document.getElementById('new-job-low-lora');
   const highLora = (highLoraInput?.dataset.selectedValue || highLoraInput?.value || '').trim() || null;
   const lowLora = (lowLoraInput?.dataset.selectedValue || lowLoraInput?.value || '').trim() || null;
-  
+
   if (!name) {
     showToast('Please enter a job name', 'error');
     return;
   }
-  
+
   if (!prompt) {
     showToast('Please enter a prompt', 'error');
     return;
   }
-  
-  if (!imageFile) {
+
+  // Check if we have either a pre-uploaded image or a file upload
+  const hasPreUploadedImage = AppState.preUploadedImageUrl;
+  if (!hasPreUploadedImage && !imageFile) {
     showToast('Please select a start image', 'error');
     return;
   }
-  
+
   try {
-    // First, upload the image to ComfyUI
-    showToast('Uploading image...', 'info');
-    const uploadResult = await API.uploadImage(imageFile);
-    
-    if (!uploadResult || !uploadResult.filename) {
-      showToast('Failed to upload image', 'error');
-      return;
+    let imageFilename;
+
+    // Use pre-uploaded image from repo if available, otherwise upload the file
+    if (hasPreUploadedImage) {
+      imageFilename = AppState.preUploadedImageUrl;
+    } else {
+      // Upload the image to ComfyUI
+      showToast('Uploading image...', 'info');
+      const uploadResult = await API.uploadImage(imageFile);
+
+      if (!uploadResult || !uploadResult.filename) {
+        showToast('Failed to upload image', 'error');
+        return;
+      }
+      imageFilename = uploadResult.filename;
     }
-    
-    // Calculate number of segments
-    const totalSegments = Math.ceil(totalDuration / segmentDuration);
-    
+
     const jobData = {
       name: name,
       prompt: prompt,
       workflow_type: 'i2v',
       negative_prompt: AppState.settings?.default_negative_prompt || '',
-      input_image: uploadResult.filename,
+      input_image: imageFilename,
       high_lora: highLora || null,
       low_lora: lowLora || null,
       parameters: {
         width: width,
         height: height,
-        total_duration: totalDuration,
-        segment_duration: segmentDuration,
-        total_segments: totalSegments
+        segment_duration: segmentDuration
       }
     };
-    
+
     await API.createJob(jobData);
     showToast('Job created successfully', 'success');
     closeCreateJobModal();
-    
+
+    // Clear pre-uploaded image state
+    AppState.preUploadedImageUrl = null;
+
     // Refresh the jobs table
     if (typeof updateJobsTable === 'function') {
       updateJobsTable();
@@ -970,6 +1266,44 @@ async function deleteJob(jobId) {
   } catch (err) {
     console.error('Failed to delete job:', err);
     showToast('Failed to delete job', 'error');
+  }
+}
+
+// Reopen a completed job to add more segments
+async function reopenJob(jobId) {
+  if (!confirm('Reopen this job to add more segments? The final video will remain available until you finalize again.')) {
+    return;
+  }
+
+  try {
+    showToast('Reopening job...', 'info');
+    await API.reopenJob(jobId);
+    showToast('Job reopened! You can now add more segments.', 'success');
+
+    // Refresh the job detail view
+    updateJobDetail(jobId);
+  } catch (err) {
+    console.error('Failed to reopen job:', err);
+    showToast('Failed to reopen job: ' + err.message, 'error');
+  }
+}
+
+// Finalize job and merge all completed segments
+async function finalizeJob(jobId) {
+  if (!confirm('Are you sure you want to finalize this job? This will merge all completed segments into a final video.')) {
+    return;
+  }
+
+  try {
+    showToast('Finalizing and merging segments...', 'info');
+    await API.finalizeJob(jobId);
+    showToast('Job finalized successfully! Final video is being generated.', 'success');
+
+    // Refresh the job detail view
+    updateJobDetail(jobId);
+  } catch (err) {
+    console.error('Failed to finalize job:', err);
+    showToast('Failed to finalize job: ' + err.message, 'error');
   }
 }
 

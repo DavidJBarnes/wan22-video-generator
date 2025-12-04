@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(xargs -I {} bash -c 'echo \"\"\"\"Directory: {}\"\"\"\"; ls -lh \"\"\"\"{}\"\"\"\"')",
+      "Bash(python3:*)"
     ],
     "deny": [],
     "ask": []
