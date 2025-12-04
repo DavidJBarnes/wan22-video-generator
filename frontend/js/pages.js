@@ -655,7 +655,7 @@ async function updateJobDetail(jobId) {
     const completedSegments = job.completed_segments ?? 0;
     const width = job.width ?? params.width ?? 640;
     const height = job.height ?? params.height ?? 640;
-    const totalDuration = job.total_duration ?? params.total_duration ?? 0;
+    const totalDuration = completedSegments * 5;
     const segmentDuration = job.segment_duration ?? params.segment_duration ?? 5;
     
     document.getElementById('job-detail-name').textContent = job.name;
@@ -719,7 +719,7 @@ async function updateJobDetail(jobId) {
         </div>
         <div class="detail-meta-item">
           <label>Duration</label>
-          <div class="value">${totalDuration}s (${segmentDuration}s/segment)</div>
+          <div class="value">${totalDuration} seconds</div>
         </div>
         <div class="detail-meta-item">
           <label>Created</label>
