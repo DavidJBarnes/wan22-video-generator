@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { FormControl, InputLabel, Select, MenuItem } from '@mui/material';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import CreateJobModal from '../components/CreateJobModal';
@@ -9,11 +10,15 @@ export default function ImageRepo() {
   const [currentPath, setCurrentPath] = useState('');
   const [folders, setFolders] = useState([]);
   const [images, setImages] = useState([]);
+  const [allImages, setAllImages] = useState([]);
   const [breadcrumbs, setBreadcrumbs] = useState([]);
+  const [siblingFolders, setSiblingFolders] = useState([]);
+  const [currentFolderIndex, setCurrentFolderIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [viewMode, setViewMode] = useState('grid');
   const [sortOrder, setSortOrder] = useState('name-asc');
+  const [ratingFilter, setRatingFilter] = useState('all');
   const [showJobModal, setShowJobModal] = useState(false);
   const [preUploadedImage, setPreUploadedImage] = useState(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
@@ -22,6 +27,10 @@ export default function ImageRepo() {
   useEffect(() => {
     loadDirectory(currentPath);
   }, [currentPath]);
+
+  useEffect(() => {
+    applyRatingFilter();
+  }, [ratingFilter, allImages]);
 
   async function loadDirectory(path) {
     setLoading(true);
@@ -35,13 +44,51 @@ export default function ImageRepo() {
       const sortedImages = sortItems(data.images || []);
 
       setFolders(sortedFolders);
-      setImages(sortedImages);
+      setAllImages(sortedImages);
       setBreadcrumbs(data.breadcrumbs || []);
+
+      // Load sibling folders for navigation
+      if (data.breadcrumbs && data.breadcrumbs.length > 1) {
+        // Get parent path (second to last breadcrumb)
+        const parentPath = data.breadcrumbs[data.breadcrumbs.length - 2].path;
+        loadSiblingFolders(parentPath, path);
+      } else {
+        setSiblingFolders([]);
+        setCurrentFolderIndex(-1);
+      }
+
       setLoading(false);
     } catch (err) {
       console.error('Failed to load image repository:', err);
       setError(err.message || 'Failed to load directory. Please check that the Image Repository Path is set correctly in Settings.');
       setLoading(false);
+    }
+  }
+
+  async function loadSiblingFolders(parentPath, currentPath) {
+    try {
+      const data = await API.browseImageRepo(parentPath);
+      const sortedSiblings = sortItems(data.folders || []);
+      setSiblingFolders(sortedSiblings);
+
+      // Find current folder index
+      const index = sortedSiblings.findIndex(f => f.path === currentPath);
+      setCurrentFolderIndex(index);
+    } catch (err) {
+      console.error('Failed to load sibling folders:', err);
+      setSiblingFolders([]);
+      setCurrentFolderIndex(-1);
+    }
+  }
+
+  function applyRatingFilter() {
+    if (ratingFilter === 'all') {
+      setImages(allImages);
+    } else if (ratingFilter === 'unrated') {
+      setImages(allImages.filter(img => !img.rating));
+    } else {
+      const targetRating = parseInt(ratingFilter);
+      setImages(allImages.filter(img => img.rating === targetRating));
     }
   }
 
@@ -87,6 +134,20 @@ export default function ImageRepo() {
     setCurrentPath(path);
   }
 
+  function navigateToPrevious() {
+    if (currentFolderIndex > 0 && siblingFolders.length > 0) {
+      const prevFolder = siblingFolders[currentFolderIndex - 1];
+      setCurrentPath(prevFolder.path);
+    }
+  }
+
+  function navigateToNext() {
+    if (currentFolderIndex >= 0 && currentFolderIndex < siblingFolders.length - 1) {
+      const nextFolder = siblingFolders[currentFolderIndex + 1];
+      setCurrentPath(nextFolder.path);
+    }
+  }
+
   function openImagePreview(image) {
     setSelectedImage(image);
     setShowPreviewModal(true);
@@ -95,6 +156,8 @@ export default function ImageRepo() {
   function handleClosePreview() {
     setShowPreviewModal(false);
     setSelectedImage(null);
+    // Reload directory to reflect any rating changes
+    loadDirectory(currentPath);
   }
 
   function handleCreateJobFromPreview(imageUrl) {
@@ -117,6 +180,22 @@ export default function ImageRepo() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <h1 style={{ margin: 0 }}>Image Repository</h1>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel>Rating</InputLabel>
+            <Select
+              value={ratingFilter}
+              onChange={(e) => setRatingFilter(e.target.value)}
+              label="Rating"
+            >
+              <MenuItem value="all">All Images</MenuItem>
+              <MenuItem value="unrated">Unrated</MenuItem>
+              <MenuItem value="5">5 Stars</MenuItem>
+              <MenuItem value="4">4 Stars</MenuItem>
+              <MenuItem value="3">3 Stars</MenuItem>
+              <MenuItem value="2">2 Stars</MenuItem>
+              <MenuItem value="1">1 Star</MenuItem>
+            </Select>
+          </FormControl>
           <label style={{ fontSize: '14px', color: '#666' }}>Sort:</label>
           <select
             value={sortOrder}
@@ -141,29 +220,67 @@ export default function ImageRepo() {
         </div>
       </div>
 
-      {/* Breadcrumb */}
-      <div className="breadcrumb">
-        {breadcrumbs.length === 0 ? (
-          <span style={{ color: '#999' }}>
-            No repository path configured. Please set it in Settings.
-          </span>
-        ) : (
-          breadcrumbs.map((crumb, index) => {
-            const isLast = index === breadcrumbs.length - 1;
-            return (
-              <span key={index}>
-                <span
-                  className={`breadcrumb-item ${isLast ? 'active' : ''}`}
-                  onClick={isLast ? undefined : () => navigateToPath(crumb.path)}
-                  style={{ cursor: isLast ? 'default' : 'pointer' }}
-                >
-                  {crumb.name}
-                </span>
-                {!isLast && <span className="breadcrumb-separator">/</span>}
-              </span>
-            );
-          })
+      {/* Breadcrumb with Navigation */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+        {siblingFolders.length > 0 && (
+          <div style={{ display: 'flex', gap: '4px' }}>
+            <button
+              onClick={navigateToPrevious}
+              disabled={currentFolderIndex <= 0}
+              style={{
+                padding: '4px 12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                background: currentFolderIndex <= 0 ? '#f5f5f5' : 'white',
+                cursor: currentFolderIndex <= 0 ? 'not-allowed' : 'pointer',
+                fontSize: '16px',
+                color: currentFolderIndex <= 0 ? '#ccc' : '#333'
+              }}
+              title="Previous folder"
+            >
+              ‹‹
+            </button>
+            <button
+              onClick={navigateToNext}
+              disabled={currentFolderIndex >= siblingFolders.length - 1}
+              style={{
+                padding: '4px 12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                background: currentFolderIndex >= siblingFolders.length - 1 ? '#f5f5f5' : 'white',
+                cursor: currentFolderIndex >= siblingFolders.length - 1 ? 'not-allowed' : 'pointer',
+                fontSize: '16px',
+                color: currentFolderIndex >= siblingFolders.length - 1 ? '#ccc' : '#333'
+              }}
+              title="Next folder"
+            >
+              ››
+            </button>
+          </div>
         )}
+        <div className="breadcrumb" style={{ flex: 1 }}>
+          {breadcrumbs.length === 0 ? (
+            <span style={{ color: '#999' }}>
+              No repository path configured. Please set it in Settings.
+            </span>
+          ) : (
+            breadcrumbs.map((crumb, index) => {
+              const isLast = index === breadcrumbs.length - 1;
+              return (
+                <span key={index}>
+                  <span
+                    className={`breadcrumb-item ${isLast ? 'active' : ''}`}
+                    onClick={isLast ? undefined : () => navigateToPath(crumb.path)}
+                    style={{ cursor: isLast ? 'default' : 'pointer' }}
+                  >
+                    {crumb.name}
+                  </span>
+                  {!isLast && <span className="breadcrumb-separator">/</span>}
+                </span>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {/* Loading */}
@@ -261,7 +378,7 @@ export default function ImageRepo() {
             setShowJobModal(false);
             setPreUploadedImage(null);
           }}
-          onSuccess={() => {
+          onSuccess={(newJobId) => {
             setShowJobModal(false);
             setPreUploadedImage(null);
           }}

@@ -194,6 +194,12 @@ class APIClient {
     });
   }
 
+  async deleteSegment(jobId, segmentIndex) {
+    return this.request(`/jobs/${jobId}/segments/${segmentIndex}`, {
+      method: 'DELETE'
+    });
+  }
+
   // ============== Image Upload ==============
 
   async uploadImage(file) {
@@ -242,6 +248,23 @@ class APIClient {
     formData.append('image_path', imagePath);
 
     return this.request('/image-repo/delete', {
+      method: 'POST',
+      body: formData
+    });
+  }
+
+  async getImageRating(imagePath) {
+    return this.request(`/image-repo/rating?image_path=${encodeURIComponent(imagePath)}`);
+  }
+
+  async setImageRating(imagePath, rating) {
+    const formData = new FormData();
+    formData.append('image_path', imagePath);
+    if (rating !== null) {
+      formData.append('rating', rating);
+    }
+
+    return this.request('/image-repo/rating', {
       method: 'POST',
       body: formData
     });

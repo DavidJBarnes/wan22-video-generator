@@ -160,7 +160,35 @@ def get_segment_frame_path(job_id: int, segment_index: int, frame_type: str = "l
     return str(job_dir / f"segment_{segment_index}_{frame_type}_frame.jpg")
 
 
-def get_final_video_path(job_id: int) -> str:
-    """Get the path where the final stitched video should be stored."""
+def get_final_video_path(job_id: int, job_name: str = None, finalized_at: str = None) -> str:
+    """Get the path where the final stitched video should be stored.
+
+    Args:
+        job_id: The job ID
+        job_name: Optional job name to include in filename
+        finalized_at: Optional datetime string when job was finalized
+
+    Returns:
+        Path to the final video file
+    """
     job_dir = get_job_output_dir(job_id)
-    return str(job_dir / "final_video.mp4")
+
+    if job_name and finalized_at:
+        # Create filename-friendly version: JobName_YYYY-MM-DD_HH-MM-SS.mp4
+        # Remove or replace characters that aren't filesystem-friendly
+        safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in job_name)
+        safe_name = safe_name.strip().replace(' ', '_')
+
+        # Parse datetime and format as YYYY-MM-DD_HH-MM-SS
+        from datetime import datetime
+        try:
+            dt = datetime.fromisoformat(finalized_at.replace('Z', '+00:00'))
+            datetime_str = dt.strftime('%Y-%m-%d_%H-%M-%S')
+            filename = f"{safe_name}_{datetime_str}.mp4"
+        except (ValueError, AttributeError):
+            # Fallback if datetime parsing fails
+            filename = f"{safe_name}.mp4"
+    else:
+        filename = "final_video.mp4"
+
+    return str(job_dir / filename)

@@ -5,10 +5,18 @@ import { showToast } from '../utils/helpers';
 import LoraAutocomplete from './LoraAutocomplete';
 import './CreateJobModal.css';
 
-export default function SubmitPromptModal({ jobId, segmentIndex, onClose, onSuccess }) {
-  const [prompt, setPrompt] = useState('');
-  const [highLora, setHighLora] = useState('');
-  const [lowLora, setLowLora] = useState('');
+export default function SubmitPromptModal({
+  jobId,
+  segmentIndex,
+  defaultPrompt = '',
+  defaultHighLora = '',
+  defaultLowLora = '',
+  onClose,
+  onSuccess
+}) {
+  const [prompt, setPrompt] = useState(defaultPrompt);
+  const [highLora, setHighLora] = useState(defaultHighLora);
+  const [lowLora, setLowLora] = useState(defaultLowLora);
   const [loras, setLoras] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -98,6 +106,14 @@ export default function SubmitPromptModal({ jobId, segmentIndex, onClose, onSucc
     <div className="modal-overlay">
       <div className="modal-content">
         <h2>Submit Prompt for Segment {segmentIndex}</h2>
+
+        {defaultPrompt && (
+          <div style={{ marginBottom: '16px', padding: '12px', background: '#e3f2fd', borderRadius: '4px', border: '1px solid #90caf9' }}>
+            <span style={{ fontSize: '13px', color: '#1976d2' }}>
+              ℹ️ Values pre-filled from previous segment. Modify as needed.
+            </span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">

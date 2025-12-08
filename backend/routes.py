@@ -25,13 +25,17 @@ from database import (
     update_segment_prompt,
     get_segment,
     delete_job_segments,
+    delete_segment,
     get_completed_segments_count,
     get_all_loras as db_get_all_loras,
     get_lora as db_get_lora,
     update_lora as db_update_lora,
     delete_lora as db_delete_lora,
     bulk_upsert_loras,
-    get_connection
+    get_connection,
+    get_image_rating,
+    set_image_rating,
+    get_all_image_ratings
 )
 from comfyui_client import ComfyUIClient
 from queue_manager import queue_manager
@@ -343,11 +347,14 @@ async def get_job_video(job_id: int):
     # Check if file exists
     if not os.path.exists(video_path):
         raise HTTPException(status_code=404, detail=f"Video file not found on disk")
-    
+
+    # Get the actual filename from the path
+    actual_filename = os.path.basename(video_path)
+
     return FileResponse(
         video_path,
         media_type="video/mp4",
-        filename=f"job_{job_id}_final.mp4"
+        filename=actual_filename
     )
 
 
@@ -439,6 +446,58 @@ async def update_segment_prompt_endpoint(
         update_job_status(job_id, "pending")
 
     return {"status": "updated", "job_id": job_id, "segment_index": segment_index, "resumed": job.get("status") == "awaiting_prompt"}
+
+
+@router.delete("/jobs/{job_id}/segments/{segment_index}")
+async def delete_segment_endpoint(job_id: int, segment_index: int):
+    """Delete a specific segment from a job.
+
+    Can only delete the last segment, and only when the job is in awaiting_prompt status.
+    """
+    # Get job and validate
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Validate job status
+    if job.get("status") != "awaiting_prompt":
+        raise HTTPException(
+            status_code=400,
+            detail="Can only delete segments when job is awaiting prompt"
+        )
+
+    # Get all segments to validate this is the last one
+    segments = db_get_job_segments(job_id)
+    if not segments:
+        raise HTTPException(status_code=404, detail="No segments found for this job")
+
+    # Find the highest segment index (last segment)
+    max_segment_index = max(seg["segment_index"] for seg in segments)
+
+    # Validate that we're deleting the last segment
+    if segment_index != max_segment_index:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Can only delete the last segment (segment {max_segment_index}). To delete segment {segment_index}, first delete segments {max_segment_index} down to {segment_index + 1}."
+        )
+
+    # Validate the segment exists
+    segment = get_segment(job_id, segment_index)
+    if not segment:
+        raise HTTPException(status_code=404, detail="Segment not found")
+
+    # Delete the segment
+    success = delete_segment(job_id, segment_index)
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete segment")
+
+    # Job remains in awaiting_prompt status
+    return {
+        "status": "success",
+        "message": f"Segment {segment_index} deleted successfully",
+        "job_status": "awaiting_prompt"
+    }
 
 
 # ============== Settings Endpoints ==============
@@ -812,6 +871,11 @@ async def browse_image_repo(path: str = ""):
             current_path = str(Path(current_path) / part).replace("\\", "/")
             breadcrumbs.append({"name": part, "path": current_path})
 
+    # Enrich images with ratings
+    all_ratings = get_all_image_ratings()
+    for image in images:
+        image['rating'] = all_ratings.get(image['path'], None)
+
     return {
         "current_path": path,
         "breadcrumbs": breadcrumbs,
@@ -961,3 +1025,21 @@ async def delete_image_from_repo(image_path: str = Form(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete image: {str(e)}")
+
+
+@router.get("/image-repo/rating")
+async def get_image_rating_endpoint(image_path: str):
+    """Get the rating for a specific image."""
+    rating = get_image_rating(image_path)
+    return {"image_path": image_path, "rating": rating}
+
+
+@router.post("/image-repo/rating")
+async def set_image_rating_endpoint(image_path: str = Form(...), rating: Optional[int] = Form(None)):
+    """Set or update the rating for an image."""
+    # Validate rating is between 1-5 or None
+    if rating is not None and (rating < 1 or rating > 5):
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+
+    set_image_rating(image_path, rating)
+    return {"image_path": image_path, "rating": rating, "success": True}

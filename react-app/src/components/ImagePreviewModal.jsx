@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button } from '@mui/material';
+import { Button, Rating, Box, Typography } from '@mui/material';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import './CreateJobModal.css';
@@ -7,6 +7,7 @@ import './CreateJobModal.css';
 export default function ImagePreviewModal({ image, onClose, onCreateJob, onDelete }) {
   const [deleting, setDeleting] = useState(false);
   const [creatingJob, setCreatingJob] = useState(false);
+  const [rating, setRating] = useState(image.rating || null);
 
   async function handleDelete() {
     if (!confirm(`Are you sure you want to delete "${image.name}"? This will permanently remove the file from the filesystem.`)) {
@@ -41,6 +42,16 @@ export default function ImagePreviewModal({ image, onClose, onCreateJob, onDelet
     }
   }
 
+  async function handleRatingChange(event, newValue) {
+    setRating(newValue);
+    try {
+      await API.setImageRating(image.path, newValue);
+    } catch (error) {
+      console.error('Failed to set rating:', error);
+      showToast('Failed to save rating', 'error');
+    }
+  }
+
   return (
     <div className="modal-overlay">
       <div className="modal-content" style={{ maxWidth: '90vw', maxHeight: '90vh' }}>
@@ -63,6 +74,18 @@ export default function ImagePreviewModal({ image, onClose, onCreateJob, onDelet
             }}
           />
         </div>
+
+        {/* Rating */}
+        <Box sx={{ marginBottom: '24px', textAlign: 'center' }}>
+          <Typography component="legend" sx={{ fontSize: '14px', mb: 1, color: '#666' }}>
+            Rating
+          </Typography>
+          <Rating
+            value={rating}
+            onChange={handleRatingChange}
+            size="large"
+          />
+        </Box>
 
         {/* Path Info */}
         <div style={{ marginBottom: '24px', padding: '12px', background: '#f5f5f5', borderRadius: '4px' }}>
