@@ -277,6 +277,31 @@ class QueueManager:
         low_lora = segment.get("low_lora")
         print(f"[QueueManager] Segment {segment_index} LoRA selections: high={high_lora}, low={low_lora}")
         
+        # Check if ComfyUI queue is idle before submitting
+        queue_status = client.get_queue_status()
+        queue_running = queue_status.get("queue_running", [])
+        queue_pending = queue_status.get("queue_pending", [])
+
+        if len(queue_running) > 0 or len(queue_pending) > 0:
+            print(f"[QueueManager] WARNING: ComfyUI queue is not idle! Running: {len(queue_running)}, Pending: {len(queue_pending)}")
+            print(f"[QueueManager] This should not happen - we only submit when idle. Waiting for queue to clear...")
+
+            # Wait for queue to clear (max 2 minutes)
+            wait_time = 0
+            max_wait = 120
+            while (len(queue_running) > 0 or len(queue_pending) > 0) and wait_time < max_wait:
+                time.sleep(5)
+                wait_time += 5
+                queue_status = client.get_queue_status()
+                queue_running = queue_status.get("queue_running", [])
+                queue_pending = queue_status.get("queue_pending", [])
+                print(f"[QueueManager] Waiting for queue to clear... Running: {len(queue_running)}, Pending: {len(queue_pending)}")
+
+            if wait_time >= max_wait:
+                print(f"[QueueManager] Queue did not clear in time, aborting segment {segment_index}")
+                update_segment_status(job_id, segment_index, "failed", error_message="ComfyUI queue did not clear")
+                return False
+
         # Build the workflow using the Wan2.2 i2v workflow builder directly
         # This ensures LoRA parameters are passed correctly
         workflow = client.build_wan_i2v_workflow(
@@ -292,7 +317,7 @@ class QueueManager:
             high_lora=high_lora,
             low_lora=low_lora,
         )
-        
+
         # Queue the prompt
         print(f"[QueueManager] Queuing segment {segment_index} workflow to ComfyUI...")
         success, result = client.queue_prompt(workflow)
@@ -405,6 +430,11 @@ class QueueManager:
 
     def _finalize_job(self, job_id: int):
         """Finalize a job by stitching all completed segment videos together."""
+        # Get job info for naming the final video
+        job = get_job(job_id)
+        job_name = job.get("name", f"job_{job_id}")
+        finalized_at = datetime.now().isoformat()
+
         # Get all completed segments
         segments = get_job_segments(job_id)
         completed_segments = [s for s in segments if s.get("status") == "completed"]
@@ -426,9 +456,9 @@ class QueueManager:
             update_job_status(job_id, "failed", error_message="No segment videos to stitch")
             self._notify_update(job_id, "failed")
             return
-        
-        # Stitch videos together
-        final_video_path = get_final_video_path(job_id)
+
+        # Stitch videos together with descriptive filename
+        final_video_path = get_final_video_path(job_id, job_name, finalized_at)
         if stitch_videos(video_paths, final_video_path):
             # Update job with final video path
             update_job_status(job_id, "completed", output_images=[final_video_path])
@@ -447,6 +477,32 @@ class QueueManager:
         segment_duration = int(params.get("segment_duration", 5))
         frames = fps * segment_duration + 1
         
+        # Check if ComfyUI queue is idle before submitting
+        queue_status = client.get_queue_status()
+        queue_running = queue_status.get("queue_running", [])
+        queue_pending = queue_status.get("queue_pending", [])
+
+        if len(queue_running) > 0 or len(queue_pending) > 0:
+            print(f"[QueueManager] WARNING: ComfyUI queue is not idle! Running: {len(queue_running)}, Pending: {len(queue_pending)}")
+            print(f"[QueueManager] This should not happen - we only submit when idle. Waiting for queue to clear...")
+
+            # Wait for queue to clear (max 2 minutes)
+            wait_time = 0
+            max_wait = 120
+            while (len(queue_running) > 0 or len(queue_pending) > 0) and wait_time < max_wait:
+                time.sleep(5)
+                wait_time += 5
+                queue_status = client.get_queue_status()
+                queue_running = queue_status.get("queue_running", [])
+                queue_pending = queue_status.get("queue_pending", [])
+                print(f"[QueueManager] Waiting for queue to clear... Running: {len(queue_running)}, Pending: {len(queue_pending)}")
+
+            if wait_time >= max_wait:
+                print(f"[QueueManager] Queue did not clear in time, aborting job")
+                update_job_status(job_id, "failed", error_message="ComfyUI queue did not clear")
+                self._notify_update(job_id, "failed")
+                return
+
         workflow = client.build_workflow(
             workflow_type=job.get("workflow_type", "txt2img"),
             prompt=job.get("prompt", ""),
@@ -465,7 +521,7 @@ class QueueManager:
             high_noise_model=get_setting("high_noise_model", "wan2.2_i2v_high_noise_14B_fp16.safetensors"),
             low_noise_model=get_setting("low_noise_model", "wan2.2_i2v_low_noise_14B_fp16.safetensors"),
         )
-        
+
         # Queue the prompt
         success, result = client.queue_prompt(workflow)
         

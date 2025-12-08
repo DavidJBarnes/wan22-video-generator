@@ -4,6 +4,7 @@ import { Button } from '@mui/material';
 import API from '../api/client';
 import { formatDate, showToast, notifySegmentAwaitingPrompt } from '../utils/helpers';
 import SubmitPromptModal from '../components/SubmitPromptModal';
+import CreateJobModal from '../components/CreateJobModal';
 import StatusChip from '../components/StatusChip';
 import './JobDetail.css';
 
@@ -14,11 +15,14 @@ export default function JobDetail() {
   const [segments, setSegments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showPromptModal, setShowPromptModal] = useState(false);
+  const [showCloneModal, setShowCloneModal] = useState(false);
   const [nextSegmentIndex, setNextSegmentIndex] = useState(0);
   const [lastJobStatus, setLastJobStatus] = useState(null);
+  const [hasNotified, setHasNotified] = useState(false);
 
   useEffect(() => {
     loadJobDetail();
+    setHasNotified(false); // Reset notification flag when job changes
 
     // Auto-refresh based on job status
     const interval = setInterval(async () => {
@@ -27,13 +31,19 @@ export default function JobDetail() {
 
         if (jobData.status === 'running') {
           loadJobDetail();
+          setHasNotified(false); // Reset when job is running
         } else if (jobData.status === 'awaiting_prompt') {
-          if (lastJobStatus !== 'awaiting_prompt') {
+          // Only notify once per awaiting_prompt transition
+          if (!hasNotified) {
+            console.log('[JobDetail] Job is awaiting prompt, sending notification');
             loadJobDetail();
             // Send notification when status just changed to awaiting_prompt
             const segs = await API.getSegments(id);
             const completedCount = segs.filter(s => s.status === 'completed').length;
             notifySegmentAwaitingPrompt(jobData.name, completedCount, completedCount + 1);
+            setHasNotified(true);
+          } else {
+            console.log('[JobDetail] Job is awaiting prompt, but already notified');
           }
         } else if (['completed', 'failed', 'cancelled'].includes(jobData.status)) {
           clearInterval(interval);
@@ -47,7 +57,7 @@ export default function JobDetail() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [id, lastJobStatus]);
+  }, [id]); // Only re-run when job ID changes
 
   async function loadJobDetail() {
     try {
@@ -125,6 +135,20 @@ export default function JobDetail() {
     } catch (error) {
       console.error('Failed to delete job:', error);
       showToast('Failed to delete job', 'error');
+    }
+  }
+
+  async function handleDeleteSegment(segmentIndex) {
+    if (!confirm(`Are you sure you want to delete Segment ${segmentIndex + 1}?`)) return;
+
+    try {
+      await API.deleteSegment(id, segmentIndex);
+      showToast('Segment deleted successfully', 'success');
+      await loadJobDetail();
+    } catch (error) {
+      console.error('Failed to delete segment:', error);
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to delete segment';
+      showToast(errorMessage, 'error');
     }
   }
 
@@ -232,6 +256,13 @@ export default function JobDetail() {
 
         {/* Action Buttons */}
         <div style={{ marginTop: '20px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <Button
+            variant="outlined"
+            onClick={() => setShowCloneModal(true)}
+            sx={{ borderColor: '#1976d2', color: '#1976d2', '&:hover': { borderColor: '#1565c0', bgcolor: 'rgba(25, 118, 210, 0.04)' } }}
+          >
+            Clone Job
+          </Button>
           {job.status === 'running' && (
             <Button variant="outlined" onClick={handleCancelJob}>
               Cancel Job
@@ -270,20 +301,39 @@ export default function JobDetail() {
         {segments.length === 0 ? (
           <div className="alert info">No segments yet</div>
         ) : (
-          segments.map((seg, index) => (
-            <div key={seg.id} className="segment-item">
-              <div className="segment-header">
-                <div>
-                  <strong>Segment {seg.segment_index + 1}</strong>
-                  {seg.status === 'running' && <span className="spinner"></span>}
-                  {seg.execution_time && (
-                    <span style={{ marginLeft: '8px', color: '#666', fontSize: '12px' }}>
-                      ({Math.round(seg.execution_time)}s)
-                    </span>
-                  )}
+          segments.map((seg, index) => {
+            // Check if this is the last segment
+            const isLastSegment = index === segments.length - 1;
+            const canDelete = job.status === 'awaiting_prompt' && isLastSegment;
+
+            return (
+              <div key={seg.id} className="segment-item">
+                <div className="segment-header">
+                  <div>
+                    <strong>Segment {seg.segment_index + 1}</strong>
+                    {seg.status === 'running' && <span className="spinner"></span>}
+                    {seg.execution_time && (
+                      <span style={{ marginLeft: '8px', color: '#666', fontSize: '12px' }}>
+                        ({Math.round(seg.execution_time)}s)
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <StatusChip status={seg.status} />
+                    {canDelete && (
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        size="small"
+                        onClick={() => handleDeleteSegment(seg.segment_index)}
+                        startIcon={<span>🗑️</span>}
+                        sx={{ minWidth: 'auto' }}
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <StatusChip status={seg.status} />
-              </div>
 
               <div className="segment-content">
                 {/* Start Image */}
@@ -292,7 +342,7 @@ export default function JobDetail() {
                   {seg.start_image_url ? (
                     <img
                       src={seg.start_image_url}
-                      alt="Start frame"
+                      alt={seg.start_image_url}
                       className="segment-image start"
                       onError={(e) => e.target.style.display = 'none'}
                     />
@@ -332,7 +382,8 @@ export default function JobDetail() {
                 </div>
               </div>
             </div>
-          ))
+            );
+          })
         )}
 
         {/* Continue or Finalize */}
@@ -378,10 +429,25 @@ export default function JobDetail() {
         <SubmitPromptModal
           jobId={id}
           segmentIndex={nextSegmentIndex}
+          defaultPrompt={lastCompletedSegment?.prompt || ''}
+          defaultHighLora={lastCompletedSegment?.high_lora || ''}
+          defaultLowLora={lastCompletedSegment?.low_lora || ''}
           onClose={() => setShowPromptModal(false)}
           onSuccess={() => {
             setShowPromptModal(false);
             loadJobDetail();
+          }}
+        />
+      )}
+
+      {showCloneModal && (
+        <CreateJobModal
+          cloneData={job}
+          onClose={() => setShowCloneModal(false)}
+          onSuccess={(newJobId) => {
+            setShowCloneModal(false);
+            showToast('Job cloned successfully', 'success');
+            navigate(`/job/${newJobId}`);
           }}
         />
       )}

@@ -1,7 +1,23 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Checkbox,
+  ListItemText,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TablePagination,
+  Paper
+} from '@mui/material';
 import API from '../api/client';
-import { formatDate } from '../utils/helpers';
+import { formatDate, notifySegmentAwaitingPrompt } from '../utils/helpers';
 import StatusChip from '../components/StatusChip';
 import './Dashboard.css';
 
@@ -9,9 +25,17 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [comfyStatus, setComfyStatus] = useState({ reachable: false });
   const [runningJobsCount, setRunningJobsCount] = useState(0);
-  const [queuedJobsCount, setQueuedJobsCount] = useState(0);
-  const [recentJobs, setRecentJobs] = useState([]);
+  const [pendingJobsCount, setPendingJobsCount] = useState(0);
+  const [awaitingPromptJobsCount, setAwaitingPromptJobsCount] = useState(0);
+  const [allJobs, setAllJobs] = useState([]);
+  const [filteredJobs, setFilteredJobs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState(['running', 'pending','awaiting_prompt']);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [notifiedJobs, setNotifiedJobs] = useState(new Set()); // Track which jobs we've notified for
+
+  const allStatuses = ['pending', 'running', 'awaiting_prompt', 'completed', 'failed', 'cancelled'];
 
   useEffect(() => {
     loadDashboard();
@@ -20,6 +44,10 @@ export default function Dashboard() {
     const interval = setInterval(loadDashboard, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    filterJobs();
+  }, [statusFilter, allJobs]);
 
   async function loadDashboard() {
     try {
@@ -30,15 +58,101 @@ export default function Dashboard() {
 
       setComfyStatus(comfy);
 
-      const allJobs = jobsData.jobs || jobsData || [];
-      setRunningJobsCount(allJobs.filter(j => j.status === 'running').length);
-      setQueuedJobsCount(allJobs.filter(j => j.status === 'queued').length);
-      setRecentJobs(allJobs.slice(0, 5));
+      const jobs = jobsData.jobs || jobsData || [];
+      setRunningJobsCount(jobs.filter(j => j.status === 'running').length);
+      setPendingJobsCount(jobs.filter(j => j.status === 'pending').length);
+      setAwaitingPromptJobsCount(jobs.filter(j => j.status === 'awaiting_prompt').length);
+
+      // Check for jobs awaiting prompt and send notifications
+      const awaitingJobs = jobs.filter(j => j.status === 'awaiting_prompt');
+      console.log('[Dashboard] Jobs awaiting prompt:', awaitingJobs.length, awaitingJobs.map(j => ({ id: j.id, name: j.name })));
+      console.log('[Dashboard] Already notified jobs:', Array.from(notifiedJobs));
+
+      for (const job of awaitingJobs) {
+        if (!notifiedJobs.has(job.id)) {
+          console.log('[Dashboard] Sending notification for job', job.id, job.name);
+          // Send notification for this job
+          try {
+            const segments = await API.getSegments(job.id);
+            const completedCount = segments.filter(s => s.status === 'completed').length;
+            notifySegmentAwaitingPrompt(job.name, completedCount, completedCount + 1);
+            // Mark this job as notified
+            setNotifiedJobs(prev => new Set([...prev, job.id]));
+          } catch (err) {
+            console.error('[Dashboard] Failed to send notification for job', job.id, err);
+          }
+        } else {
+          console.log('[Dashboard] Already notified for job', job.id, job.name);
+        }
+      }
+
+      // Clean up notifiedJobs set - remove jobs that are no longer awaiting_prompt
+      const awaitingJobIds = new Set(awaitingJobs.map(j => j.id));
+      setNotifiedJobs(prev => {
+        const updated = new Set([...prev].filter(id => awaitingJobIds.has(id)));
+        return updated;
+      });
+
+      setAllJobs(jobs);
       setLoading(false);
     } catch (error) {
       console.error('Failed to load dashboard:', error);
       setLoading(false);
     }
+  }
+
+  function filterJobs() {
+    let filtered = statusFilter.length === 0
+      ? allJobs
+      : allJobs.filter(job => statusFilter.includes(job.status));
+
+    // Sort: awaiting_prompt, running, pending (oldest first), then completed/failed/cancelled (newest first)
+    filtered.sort((a, b) => {
+      // Priority order for statuses
+      const statusPriority = {
+        'awaiting_prompt': 1,
+        'running': 2,
+        'pending': 3,
+        'completed': 4,
+        'failed': 4,  // Same priority as completed
+        'cancelled': 4  // Same priority as completed
+      };
+
+      const priorityA = statusPriority[a.status] || 99;
+      const priorityB = statusPriority[b.status] || 99;
+
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+
+      // For awaiting_prompt/running/pending, sort oldest first (by creation date)
+      // For completed/failed/cancelled, sort newest first (by completed_at or created_at)
+      if (['awaiting_prompt', 'running', 'pending'].includes(a.status)) {
+        return new Date(a.created_at) - new Date(b.created_at);
+      } else {
+        // Use completed_at if available, otherwise created_at
+        const dateA = a.completed_at ? new Date(a.completed_at) : new Date(a.created_at);
+        const dateB = b.completed_at ? new Date(b.completed_at) : new Date(b.created_at);
+        return dateB - dateA; // Descending (newest first)
+      }
+    });
+
+    setFilteredJobs(filtered);
+  }
+
+  function handleStatusFilterChange(event) {
+    const value = event.target.value;
+    setStatusFilter(value);
+    setPage(0);
+  }
+
+  function handleChangePage(event, newPage) {
+    setPage(newPage);
+  }
+
+  function handleChangeRowsPerPage(event) {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
   }
 
   function getComfyStatusClass() {
@@ -95,46 +209,93 @@ export default function Dashboard() {
         </div>
 
         <div className="card">
-          <h3>Queued Jobs</h3>
-          <div className="value">{queuedJobsCount}</div>
+          <h3>Pending Jobs</h3>
+          <div className="value">{pendingJobsCount}</div>
+        </div>
+
+        <div className="card">
+          <h3>Awaiting Prompt</h3>
+          <div className="value">{awaitingPromptJobsCount}</div>
         </div>
       </div>
 
       <h2>Recent Jobs</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Job Name</th>
-            <th>Status</th>
-            <th>Segments</th>
-            <th>Created</th>
-          </tr>
-        </thead>
-        <tbody>
-          {recentJobs.length === 0 ? (
-            <tr>
-              <td colSpan="4" style={{ textAlign: 'center', color: '#999' }}>
-                No jobs yet
-              </td>
-            </tr>
-          ) : (
-            recentJobs.map(job => (
-              <tr
-                key={job.id}
-                style={{ cursor: 'pointer' }}
-                onClick={() => navigate(`/job/${job.id}`)}
-              >
-                <td>{job.name}</td>
-                <td>
-                  <StatusChip status={job.status} />
-                </td>
-                <td>{job.completed_segments ?? 0} completed</td>
-                <td>{formatDate(job.created_at)}</td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+
+      <div className="filter-row" style={{ marginBottom: '16px' }}>
+        <FormControl sx={{ minWidth: 300 }} size="small">
+          <InputLabel>Filter by Status</InputLabel>
+          <Select
+            multiple
+            value={statusFilter}
+            onChange={handleStatusFilterChange}
+            label="Filter by Status"
+            renderValue={(selected) =>
+              selected.length === allStatuses.length
+                ? 'All Statuses'
+                : `${selected.length} status${selected.length !== 1 ? 'es' : ''} selected`
+            }
+          >
+            {allStatuses.map((status) => (
+              <MenuItem key={status} value={status}>
+                <Checkbox checked={statusFilter.indexOf(status) > -1} />
+                <ListItemText
+                  primary={<StatusChip status={status} />}
+                  sx={{ display: 'flex', alignItems: 'center' }}
+                />
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </div>
+
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell style={{fontWeight:'bold'}}>Job Name</TableCell>
+              <TableCell style={{fontWeight:'bold'}}>Status</TableCell>
+              <TableCell style={{fontWeight:'bold'}}>Segments</TableCell>
+              <TableCell style={{fontWeight:'bold'}}>Created</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {filteredJobs.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} align="center" sx={{ color: '#999' }}>
+                  No jobs match the filter
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredJobs
+                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                .map(job => (
+                  <TableRow
+                    key={job.id}
+                    hover
+                    sx={{ cursor: 'pointer' }}
+                    onClick={() => navigate(`/job/${job.id}`)}
+                  >
+                    <TableCell>{job.name}</TableCell>
+                    <TableCell>
+                      <StatusChip status={job.status} />
+                    </TableCell>
+                    <TableCell>{job.completed_segments ?? 0} completed</TableCell>
+                    <TableCell>{formatDate(job.created_at)}</TableCell>
+                  </TableRow>
+                ))
+            )}
+          </TableBody>
+        </Table>
+        <TablePagination
+          component="div"
+          count={filteredJobs.length}
+          page={page}
+          onPageChange={handleChangePage}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
+          rowsPerPageOptions={[10, 25, 50, 100]}
+        />
+      </TableContainer>
     </div>
   );
 }

@@ -47,16 +47,70 @@ export function showToast(message, type = 'info') {
 }
 
 export function notifySegmentAwaitingPrompt(jobName, completedSegmentIndex, nextSegmentIndex) {
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(`Segment ${completedSegmentIndex} Complete`, {
-      body: `${jobName}: Segment ${completedSegmentIndex} completed. Please enter a prompt for Segment ${nextSegmentIndex}.`,
-      icon: '/favicon.ico'
-    });
+  console.log('[Notification] Attempting to send notification for:', jobName);
+  console.log('[Notification] Permission status:', Notification.permission);
+
+  if (!('Notification' in window)) {
+    console.error('[Notification] Browser does not support notifications');
+    showToast('Browser does not support notifications', 'error');
+    return;
+  }
+
+  if (Notification.permission === 'denied') {
+    console.warn('[Notification] Notification permission denied by user');
+    showToast('Notifications are blocked. Please enable in browser settings.', 'warning');
+    return;
+  }
+
+  if (Notification.permission === 'default') {
+    console.warn('[Notification] Notification permission not yet requested');
+    showToast('Please allow notifications to get alerts', 'warning');
+    requestNotificationPermission();
+    return;
+  }
+
+  if (Notification.permission === 'granted') {
+    console.log('[Notification] Sending notification...');
+    try {
+      const notification = new Notification(`Segment ${completedSegmentIndex} Complete`, {
+        body: `${jobName}: Segment ${completedSegmentIndex} completed. Please enter a prompt for Segment ${nextSegmentIndex}.`,
+        icon: '/favicon.ico',
+        tag: `job-${jobName}-segment-${nextSegmentIndex}`, // Prevents duplicate notifications
+        requireInteraction: false
+      });
+
+      notification.onclick = function() {
+        window.focus();
+        notification.close();
+      };
+
+      console.log('[Notification] Notification sent successfully');
+      showToast(`Job "${jobName}" is awaiting prompt`, 'info');
+    } catch (error) {
+      console.error('[Notification] Failed to create notification:', error);
+      showToast('Failed to send notification: ' + error.message, 'error');
+    }
   }
 }
 
 export function requestNotificationPermission() {
-  if ('Notification' in window && Notification.permission === 'default') {
-    Notification.requestPermission();
+  console.log('[Notification] Requesting notification permission...');
+
+  if (!('Notification' in window)) {
+    console.error('[Notification] Browser does not support notifications');
+    return;
+  }
+
+  if (Notification.permission === 'default') {
+    Notification.requestPermission().then(permission => {
+      console.log('[Notification] Permission result:', permission);
+      if (permission === 'granted') {
+        showToast('Notifications enabled!', 'success');
+      } else if (permission === 'denied') {
+        showToast('Notifications blocked. You can enable them in browser settings.', 'warning');
+      }
+    });
+  } else {
+    console.log('[Notification] Permission already set:', Notification.permission);
   }
 }

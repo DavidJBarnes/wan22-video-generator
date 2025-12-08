@@ -5,7 +5,7 @@ import { showToast } from '../utils/helpers';
 import LoraAutocomplete from './LoraAutocomplete';
 import './CreateJobModal.css';
 
-export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl = null }) {
+export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl = null, cloneData = null }) {
   const [settings, setSettings] = useState({});
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
@@ -26,7 +26,23 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
     if (preUploadedImageUrl) {
       setImagePreview(API.getComfyUIImage(preUploadedImageUrl));
     }
-  }, [preUploadedImageUrl]);
+
+    // Pre-populate form if cloning
+    if (cloneData) {
+      setName(cloneData.name ? `${cloneData.name} (Copy)` : '');
+      setPrompt(cloneData.prompt || '');
+      setWidth(cloneData.width || cloneData.parameters?.width || 640);
+      setHeight(cloneData.height || cloneData.parameters?.height || 640);
+      setSegmentDuration(cloneData.segment_duration || cloneData.parameters?.segment_duration || 5);
+      setHighLora(cloneData.high_lora || cloneData.parameters?.high_lora || '');
+      setLowLora(cloneData.low_lora || cloneData.parameters?.low_lora || '');
+
+      // Set the input image if available - use thumbnail endpoint for proper URL
+      if (cloneData.input_image && cloneData.id) {
+        setImagePreview(API.getJobThumbnail(cloneData.id));
+      }
+    }
+  }, [preUploadedImageUrl, cloneData]);
 
   async function loadSettings() {
     try {
@@ -113,7 +129,9 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
       return;
     }
 
-    if (!preUploadedImageUrl && !imageFile) {
+    // Check if we have an image (from upload, pre-uploaded, or cloned job)
+    const hasImage = preUploadedImageUrl || imageFile || (cloneData && cloneData.input_image);
+    if (!hasImage) {
       showToast('Please select a start image', 'error');
       return;
     }
@@ -125,6 +143,9 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
 
       if (preUploadedImageUrl) {
         imageFilename = preUploadedImageUrl;
+      } else if (cloneData && cloneData.input_image && !imageFile) {
+        // Use the cloned job's input image if no new image was selected
+        imageFilename = cloneData.input_image;
       } else {
         showToast('Uploading image...', 'info');
         const uploadResult = await API.uploadImage(imageFile);
@@ -151,10 +172,10 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
         }
       };
 
-      await API.createJob(jobData);
+      const newJob = await API.createJob(jobData);
       showToast('Job created successfully', 'success');
       setUploading(false);
-      onSuccess();
+      onSuccess(newJob.id);
     } catch (error) {
       console.error('Failed to create job:', error);
       showToast('Failed to create job', 'error');
@@ -165,7 +186,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   return (
     <div className="modal-overlay">
       <div className="modal-content">
-        <h2>Create New Video Job</h2>
+        <h2>{cloneData ? 'Clone Job' : 'Create New Video Job'}</h2>
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">

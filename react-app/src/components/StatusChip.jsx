@@ -2,7 +2,6 @@ import { Chip } from '@mui/material';
 
 const STATUS_CONFIG = {
   pending: { color: 'default', label: 'Pending' },
-  queued: { color: 'default', label: 'Queued' },
   running: { color: 'primary', label: 'Running' },
   awaiting_prompt: { color: 'warning', label: 'Awaiting Prompt' },
   completed: { color: 'success', label: 'Completed' },

@@ -119,6 +119,17 @@ def init_db():
             # Column already exists, ignore
             pass
 
+        # Image ratings table - stores ratings for images in the repository
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS image_ratings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                image_path TEXT UNIQUE NOT NULL,
+                rating INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # Insert default settings if not exist
         # Note: comfyui_url should match config.py COMFYUI_SERVER_URL
         default_settings = {
@@ -576,6 +587,20 @@ def delete_job_segments(job_id: int):
         cursor.execute("DELETE FROM job_segments WHERE job_id = ?", (job_id,))
 
 
+def delete_segment(job_id: int, segment_index: int) -> bool:
+    """Delete a specific segment from a job.
+
+    Returns True if the segment was deleted, False otherwise.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM job_segments WHERE job_id = ? AND segment_index = ?",
+            (job_id, segment_index)
+        )
+        return cursor.rowcount > 0
+
+
 # ============== LoRA Library Functions ==============
 
 def get_all_loras() -> List[Dict[str, Any]]:
@@ -674,3 +699,37 @@ def bulk_upsert_loras(lora_names: List[str]):
             """, (name, utc_now_iso()))
         conn.commit()
     return len(lora_names)
+
+
+# ============== Image Rating Functions ==============
+
+def get_image_rating(image_path: str) -> Optional[int]:
+    """Get the rating for an image by its path."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT rating FROM image_ratings WHERE image_path = ?
+        """, (image_path,))
+        row = cursor.fetchone()
+        return row['rating'] if row else None
+
+
+def set_image_rating(image_path: str, rating: Optional[int]):
+    """Set or update the rating for an image."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO image_ratings (image_path, rating, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(image_path) DO UPDATE SET rating = ?, updated_at = ?
+        """, (image_path, rating, utc_now_iso(), rating, utc_now_iso()))
+        conn.commit()
+
+
+def get_all_image_ratings() -> Dict[str, int]:
+    """Get all image ratings as a dictionary mapping path to rating."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT image_path, rating FROM image_ratings WHERE rating IS NOT NULL")
+        rows = cursor.fetchall()
+        return {row['image_path']: row['rating'] for row in rows}
