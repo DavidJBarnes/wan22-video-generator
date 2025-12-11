@@ -63,6 +63,13 @@ class APIClient {
     });
   }
 
+  async updateJob(jobId, jobData) {
+    return this.request(`/jobs/${jobId}`, {
+      method: 'PUT',
+      body: jobData
+    });
+  }
+
   async deleteJob(jobId) {
     return this.request(`/jobs/${jobId}`, {
       method: 'DELETE'

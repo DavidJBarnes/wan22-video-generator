@@ -5,6 +5,12 @@ import { showToast } from '../utils/helpers';
 import LoraEditModal from '../components/LoraEditModal';
 import './LoraLibrary.css';
 
+// Clean up base_name by removing {TYPE} placeholder
+function cleanBaseName(baseName) {
+  if (!baseName) return '';
+  return baseName.replace(/\{type\}/gi, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 export default function LoraLibrary() {
   const [loras, setLoras] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +70,7 @@ export default function LoraLibrary() {
   }
 
   return (
-    <div>
+    <div className="lora-library">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <h1 style={{ margin: 0 }}>LoRA Library</h1>
         <p style={{ color: '#666' }}>{loras.length} LoRA{loras.length !== 1 ? 's' : ''} cached</p>
@@ -82,6 +88,7 @@ export default function LoraLibrary() {
             <thead>
               <tr>
                 <th>Name</th>
+                <th>Files</th>
                 <th>Rating</th>
                 <th>URL</th>
                 <th>Trigger Keywords</th>
@@ -90,12 +97,31 @@ export default function LoraLibrary() {
             </thead>
             <tbody>
               {loras.map((lora) => (
-                <tr key={lora.id}>
+                <tr key={lora.id} onClick={() => handleEdit(lora)} style={{ cursor: 'pointer' }}>
                   <td>
-                      {lora.friendly_name || ''}<br/>
-                    <code style={{ fontSize: '13px', background: '#f5f5f5', padding: '2px', borderRadius: '3px' }}>
-                      {lora.name}
-                    </code>
+                    {lora.friendly_name ? (
+                      <strong>{lora.friendly_name}</strong>
+                    ) : (
+                      <span style={{ color: '#999', fontStyle: 'italic' }}>—</span>
+                    )}
+                  </td>
+                  <td style={{ fontSize: '12px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      {lora.high_file ? (
+                        <span style={{ color: '#2e7d32' }} title={lora.high_file}>
+                          HIGH: {lora.high_file.split('/').pop()}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#999' }}>HIGH: —</span>
+                      )}
+                      {lora.low_file ? (
+                        <span style={{ color: '#1565c0' }} title={lora.low_file}>
+                          LOW: {lora.low_file.split('/').pop()}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#999' }}>LOW: —</span>
+                      )}
+                    </div>
                   </td>
                   <td>
                     <Rating value={lora.rating || 0} readOnly size="small" />
@@ -116,18 +142,11 @@ export default function LoraLibrary() {
                       <span style={{ color: '#999' }}>—</span>
                     )}
                   </td>
-                  <td>
+                  <td onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: '4px' }}>
                       <button
-                        className="btn-icon"
-                        onClick={() => handleEdit(lora)}
-                        title="Edit metadata"
-                      >
-                        ✏️
-                      </button>
-                      <button
                         className="btn-icon delete"
-                        onClick={() => handleDelete(lora.id, lora.friendly_name || lora.name)}
+                        onClick={() => handleDelete(lora.id, lora.friendly_name || lora.high_file?.split('/').pop() || 'this LoRA')}
                         title="Delete from library"
                       >
                         🗑️

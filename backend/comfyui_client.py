@@ -193,13 +193,18 @@ class ComfyUIClient:
             return ["normal", "karras", "exponential", "simple"]
 
     def get_loras(self) -> List[str]:
-        """Get list of available LoRA models from ComfyUI."""
+        """Get list of available LoRA models from ComfyUI.
+
+        Only returns LoRAs in the wan2.2/ subdirectory.
+        """
         try:
             response = self.client.get(f"{self.base_url}/models/loras")
             if response.status_code == 200:
                 loras = response.json()
                 if isinstance(loras, list):
-                    return sorted(loras)
+                    # Filter to only wan2.2 LoRAs
+                    wan_loras = [l for l in loras if l.startswith("wan2.2/")]
+                    return sorted(wan_loras)
             return []
         except Exception as e:
             print(f"[ComfyUI] Error fetching LoRAs: {e}")
@@ -236,9 +241,10 @@ class ComfyUIClient:
         seed: Optional[int] = None,
         high_lora: Optional[str] = None,
         low_lora: Optional[str] = None,
+        fps: int = 16,
     ) -> Dict[str, Any]:
         """Build a Wan2.2 i2v workflow using the pre-converted API template.
-        
+
         Delegates to workflow_templates.build_wan_i2v_workflow which injects
         user values into the pre-converted workflow constant.
         """
@@ -254,6 +260,7 @@ class ComfyUIClient:
             seed=seed,
             high_lora=high_lora,
             low_lora=low_lora,
+            fps=fps,
         )
 
     def build_workflow(

@@ -13,7 +13,8 @@
       "Bash(python:*)",
       "Bash(timeout 5 python3:*)",
       "Bash(cat:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

@@ -98,26 +98,22 @@ def init_db():
             )
         """)
 
-        # LoRA library table - caches LoRA metadata
+        # LoRA library table - grouped by base_name with high/low file variants
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS lora_library (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE NOT NULL,
+                base_name TEXT UNIQUE NOT NULL,
+                high_file TEXT,
+                low_file TEXT,
                 friendly_name TEXT,
                 url TEXT,
                 prompt_text TEXT,
                 trigger_keywords TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                rating INTEGER DEFAULT NULL,
+                created_at TEXT,
+                updated_at TEXT
             )
         """)
-
-        # Migration: Add rating column if it doesn't exist (preserves existing data)
-        try:
-            cursor.execute("ALTER TABLE lora_library ADD COLUMN rating INTEGER DEFAULT NULL")
-        except Exception:
-            # Column already exists, ignore
-            pass
 
         # Image ratings table - stores ratings for images in the repository
         cursor.execute("""
@@ -133,7 +129,7 @@ def init_db():
         # Insert default settings if not exist
         # Note: comfyui_url should match config.py COMFYUI_SERVER_URL
         default_settings = {
-            "comfyui_url": "http://3090.zero:8188",
+            "comfyui_url": "http://localhost:8188",
             "default_checkpoint": "v1-5-pruned.safetensors",
             "default_steps": "20",
             "default_cfg": "7.0",
@@ -312,6 +308,49 @@ def update_job_status(
             f"UPDATE jobs SET {', '.join(updates)} WHERE id = ?",
             params
         )
+
+
+def update_job_parameters(
+    job_id: int,
+    name: Optional[str] = None,
+    prompt: Optional[str] = None,
+    negative_prompt: Optional[str] = None,
+    parameters: Optional[Dict[str, Any]] = None
+):
+    """Update job name, prompt, and parameters (only for pending jobs)."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        updates = []
+        params = []
+
+        if name is not None:
+            updates.append("name = ?")
+            params.append(name)
+
+        if prompt is not None:
+            updates.append("prompt = ?")
+            params.append(prompt)
+
+        if negative_prompt is not None:
+            updates.append("negative_prompt = ?")
+            params.append(negative_prompt)
+
+        if parameters is not None:
+            updates.append("parameters = ?")
+            params.append(json.dumps(parameters))
+
+        if not updates:
+            return False
+
+        params.append(job_id)
+
+        cursor.execute(
+            f"UPDATE jobs SET {', '.join(updates)} WHERE id = ? AND status IN ('pending', 'awaiting_prompt')",
+            params
+        )
+
+        return cursor.rowcount > 0
 
 
 def delete_job(job_id: int) -> bool:
@@ -603,27 +642,103 @@ def delete_segment(job_id: int, segment_index: int) -> bool:
 
 # ============== LoRA Library Functions ==============
 
+import re
+
+def _normalize_base_name(base: str) -> str:
+    """Normalize base name by removing epoch numbers and other variable parts.
+
+    This allows grouping LoRAs that are the same but have different epoch numbers,
+    e.g., 'PENISLORA_22_i2v_{TYPE}_e320' and 'PENISLORA_22_i2v_{TYPE}_e496' -> same base.
+    """
+    # Remove epoch patterns like _e320, -e496, _e8, -000005, _000030, etc.
+    base = re.sub(r'[_-]e\d+', '', base)  # _e320, -e8
+    base = re.sub(r'[_-]\d{5,}', '', base)  # _000005, -000030 (5+ digits)
+    base = re.sub(r'[_-]\d+epoc', '', base)  # _100epoc, -154epoc
+    # Normalize case for grouping (lowercase the whole thing)
+    base = base.lower()
+    # Clean up any double underscores/hyphens left behind
+    base = re.sub(r'[_-]+', '_', base)
+    return base
+
+
+def _get_lora_base_and_type(filename: str) -> tuple:
+    """Extract base name and type (high/low/unknown) from a LoRA filename.
+
+    Returns (base_name, type) where type is 'high', 'low', or 'unknown'.
+    """
+    name = filename.replace('wan2.2/', '')
+
+    # First, strip epoch patterns from the original name before detecting HIGH/LOW
+    # This ensures epoch numbers don't interfere with pattern matching
+    name_stripped = re.sub(r'[_-]e\d+', '', name)  # _e320, -e8
+    name_stripped = re.sub(r'[_-]\d{5,}', '', name_stripped)  # _000005, -000030
+    name_stripped = re.sub(r'[_-]\d+epoc', '', name_stripped)  # _100epoc, -154epoc
+
+    # Patterns for HIGH variants
+    high_patterns = [
+        r'[_-]?[Hh]igh[_-]?[Nn]oise',
+        r'[_-]HIGH[_.-]',
+        r'[_-]HIGH\.',
+        r'[_-]high[_.]',
+        r'-H-',
+        r'_H\.',
+        r'[_-]HN[_-]',
+        r'_high_',
+        r'-high-',
+        r'_high\.',
+    ]
+
+    # Patterns for LOW variants
+    low_patterns = [
+        r'[_-]?[Ll]ow[_-]?[Nn]oise',
+        r'[_-]LOW[_.-]',
+        r'[_-]LOW\.',
+        r'[_-]low[_.]',
+        r'-L-',
+        r'_L\.',
+        r'[_-]LN[_-]',
+        r'_low_',
+        r'-low-',
+        r'_low\.',
+        r'[_-][Ll]ow[_-]',
+    ]
+
+    for pattern in high_patterns:
+        if re.search(pattern, name_stripped):
+            base = re.sub(pattern, '{TYPE}', name_stripped, count=1)
+            base = _normalize_base_name(base)
+            return base, 'high'
+
+    for pattern in low_patterns:
+        if re.search(pattern, name_stripped):
+            base = re.sub(pattern, '{TYPE}', name_stripped, count=1)
+            base = _normalize_base_name(base)
+            return base, 'low'
+
+    return _normalize_base_name(name_stripped), 'unknown'
+
+
 def get_all_loras() -> List[Dict[str, Any]]:
-    """Get all LoRAs from the library."""
+    """Get all grouped LoRAs from the library."""
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, name, friendly_name, url, prompt_text, trigger_keywords, rating,
-                   created_at, updated_at
+            SELECT id, base_name, high_file, low_file, friendly_name, url,
+                   prompt_text, trigger_keywords, rating, created_at, updated_at
             FROM lora_library
-            ORDER BY name ASC
+            ORDER BY COALESCE(friendly_name, base_name) ASC
         """)
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
 
 
 def get_lora(lora_id: int) -> Optional[Dict[str, Any]]:
-    """Get a LoRA by ID."""
+    """Get a grouped LoRA by ID."""
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, name, friendly_name, url, prompt_text, trigger_keywords, rating,
-                   created_at, updated_at
+            SELECT id, base_name, high_file, low_file, friendly_name, url,
+                   prompt_text, trigger_keywords, rating, created_at, updated_at
             FROM lora_library
             WHERE id = ?
         """, (lora_id,))
@@ -631,40 +746,32 @@ def get_lora(lora_id: int) -> Optional[Dict[str, Any]]:
         return dict(row) if row else None
 
 
-def get_lora_by_name(name: str) -> Optional[Dict[str, Any]]:
-    """Get a LoRA by its technical name."""
+def get_lora_by_base_name(base_name: str) -> Optional[Dict[str, Any]]:
+    """Get a grouped LoRA by its base name."""
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, name, friendly_name, url, prompt_text, trigger_keywords, rating,
-                   created_at, updated_at
+            SELECT id, base_name, high_file, low_file, friendly_name, url,
+                   prompt_text, trigger_keywords, rating, created_at, updated_at
             FROM lora_library
-            WHERE name = ?
-        """, (name,))
+            WHERE base_name = ?
+        """, (base_name,))
         row = cursor.fetchone()
         return dict(row) if row else None
 
 
-def upsert_lora(name: str, friendly_name: Optional[str] = None,
-                url: Optional[str] = None, prompt_text: Optional[str] = None,
-                trigger_keywords: Optional[str] = None) -> int:
-    """Insert or update a LoRA in the library. Returns the LoRA ID."""
+def get_lora_by_file(filename: str) -> Optional[Dict[str, Any]]:
+    """Get a grouped LoRA by either its high or low filename."""
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO lora_library (name, friendly_name, url, prompt_text, trigger_keywords, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(name) DO UPDATE SET
-                friendly_name = COALESCE(excluded.friendly_name, friendly_name),
-                url = COALESCE(excluded.url, url),
-                prompt_text = COALESCE(excluded.prompt_text, prompt_text),
-                trigger_keywords = COALESCE(excluded.trigger_keywords, trigger_keywords),
-                updated_at = excluded.updated_at
-        """, (name, friendly_name, url, prompt_text, trigger_keywords, utc_now_iso()))
-
-        # Get the ID of the inserted/updated row
-        cursor.execute("SELECT id FROM lora_library WHERE name = ?", (name,))
-        return cursor.fetchone()[0]
+            SELECT id, base_name, high_file, low_file, friendly_name, url,
+                   prompt_text, trigger_keywords, rating, created_at, updated_at
+            FROM lora_library
+            WHERE high_file = ? OR low_file = ?
+        """, (filename, filename))
+        row = cursor.fetchone()
+        return dict(row) if row else None
 
 
 def update_lora(lora_id: int, friendly_name: Optional[str] = None,
@@ -687,18 +794,58 @@ def delete_lora(lora_id: int):
         cursor.execute("DELETE FROM lora_library WHERE id = ?", (lora_id,))
 
 
-def bulk_upsert_loras(lora_names: List[str]):
-    """Bulk insert/update LoRAs from a list of names (typically from ComfyUI)."""
+def bulk_upsert_loras(lora_filenames: List[str]) -> int:
+    """Bulk insert/update LoRAs from a list of filenames (typically from ComfyUI).
+
+    Groups high/low variants together by base name.
+    Returns the number of grouped LoRAs created/updated.
+    """
+    # Group files by base name
+    groups: Dict[str, Dict[str, Optional[str]]] = {}
+
+    for filename in lora_filenames:
+        base_name, lora_type = _get_lora_base_and_type(filename)
+
+        if base_name not in groups:
+            groups[base_name] = {'high_file': None, 'low_file': None}
+
+        if lora_type == 'high':
+            groups[base_name]['high_file'] = filename
+        elif lora_type == 'low':
+            groups[base_name]['low_file'] = filename
+        else:
+            # Unknown type - store as high (single file LoRA)
+            groups[base_name]['high_file'] = filename
+
+    # Upsert each group
     with get_connection() as conn:
         cursor = conn.cursor()
-        for name in lora_names:
-            cursor.execute("""
-                INSERT INTO lora_library (name, updated_at)
-                VALUES (?, ?)
-                ON CONFLICT(name) DO UPDATE SET updated_at = excluded.updated_at
-            """, (name, utc_now_iso()))
+        now = utc_now_iso()
+
+        for base_name, files in groups.items():
+            # Check if exists
+            cursor.execute("SELECT id, high_file, low_file FROM lora_library WHERE base_name = ?", (base_name,))
+            existing = cursor.fetchone()
+
+            if existing:
+                # Update: only update file paths if new ones are provided
+                new_high = files['high_file'] or existing['high_file']
+                new_low = files['low_file'] or existing['low_file']
+                cursor.execute("""
+                    UPDATE lora_library
+                    SET high_file = ?, low_file = ?, updated_at = ?
+                    WHERE id = ?
+                """, (new_high, new_low, now, existing['id']))
+            else:
+                # Insert new
+                cursor.execute("""
+                    INSERT INTO lora_library (base_name, high_file, low_file, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (base_name, files['high_file'], files['low_file'], now, now))
+
         conn.commit()
-    return len(lora_names)
+
+    return len(groups)
 
 
 # ============== Image Rating Functions ==============

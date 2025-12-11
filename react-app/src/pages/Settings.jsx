@@ -17,6 +17,7 @@ export default function Settings() {
   const [defaultHeight, setDefaultHeight] = useState(640);
   const [defaultFps, setDefaultFps] = useState(16);
   const [defaultNegativePrompt, setDefaultNegativePrompt] = useState('');
+  const [queueWaitTimeout, setQueueWaitTimeout] = useState(30);
 
   useEffect(() => {
     loadSettings();
@@ -28,12 +29,13 @@ export default function Settings() {
       const s = data.settings || data;
       setSettings(s);
 
-      setComfyuiUrl(s.comfyui_url || 'http://3090.zero:8188');
+      setComfyuiUrl(s.comfyui_url || 'http://localhost:8188');
       setImageRepoPath(s.image_repo_path || '');
       setDefaultWidth(parseInt(s.default_width) || 640);
       setDefaultHeight(parseInt(s.default_height) || 640);
       setDefaultFps(parseInt(s.default_fps) || 16);
       setDefaultNegativePrompt(s.default_negative_prompt || 'blurry, low quality, distorted');
+      setQueueWaitTimeout(Math.round((parseInt(s.queue_wait_timeout) || 1800) / 60)); // Convert seconds to minutes
 
       setLoading(false);
     } catch (error) {
@@ -49,12 +51,13 @@ export default function Settings() {
 
     try {
       const settingsPayload = {
-        comfyui_url: comfyuiUrl || 'http://3090.zero:8188',
+        comfyui_url: comfyuiUrl || 'http://localhost:8188',
         image_repo_path: imageRepoPath,
         default_width: String(defaultWidth),
         default_height: String(defaultHeight),
         default_fps: String(defaultFps),
-        default_negative_prompt: defaultNegativePrompt
+        default_negative_prompt: defaultNegativePrompt,
+        queue_wait_timeout: String(queueWaitTimeout * 60) // Convert minutes to seconds
       };
 
       await API.updateSettings(settingsPayload);
@@ -164,10 +167,23 @@ export default function Settings() {
               type="text"
               value={comfyuiUrl}
               onChange={(e) => setComfyuiUrl(e.target.value)}
-              placeholder="http://3090.zero:8188"
+              placeholder="http://localhost:8188"
             />
             <small style={{ color: '#666', fontSize: '12px' }}>
               URL of your ComfyUI server
+            </small>
+          </div>
+          <div className="form-group">
+            <label>Queue Wait Timeout (minutes)</label>
+            <input
+              type="number"
+              value={queueWaitTimeout}
+              onChange={(e) => setQueueWaitTimeout(parseInt(e.target.value) || 30)}
+              min="1"
+              max="120"
+            />
+            <small style={{ color: '#666', fontSize: '12px' }}>
+              How long to wait for ComfyUI to finish existing jobs before timing out. Increase if you run manual jobs in ComfyUI.
             </small>
           </div>
         </div>

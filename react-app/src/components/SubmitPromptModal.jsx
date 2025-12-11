@@ -15,8 +15,7 @@ export default function SubmitPromptModal({
   onSuccess
 }) {
   const [prompt, setPrompt] = useState(defaultPrompt);
-  const [highLora, setHighLora] = useState(defaultHighLora);
-  const [lowLora, setLowLora] = useState(defaultLowLora);
+  const [selectedLora, setSelectedLora] = useState(null);
   const [loras, setLoras] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -29,50 +28,49 @@ export default function SubmitPromptModal({
       // Load from cached library instead of querying ComfyUI directly
       const data = await API.getLoraLibrary();
       const loraList = data.loras || [];
-      // Sort by technical name for stable ordering
-      loraList.sort((a, b) => a.name.localeCompare(b.name));
+      // Sort by friendly name or base name
+      loraList.sort((a, b) => {
+        const nameA = a.friendly_name || a.base_name;
+        const nameB = b.friendly_name || b.base_name;
+        return nameA.localeCompare(nameB);
+      });
       setLoras(loraList);
     } catch (error) {
       console.error('Failed to load LoRAs:', error);
     }
   }
 
-  // Helper function to build prompt text from LoRA metadata
-  function buildPromptFromLora(loraName) {
-    if (!loraName || !loras.length) return '';
-
-    const lora = loras.find(l => l.name === loraName);
-    if (!lora) return '';
-
-    const parts = [];
-
-    if (lora.prompt_text) {
-      parts.push(lora.prompt_text);
+  // When loras are loaded, find the matching LoRA from default values
+  useEffect(() => {
+    if (loras.length > 0 && (defaultHighLora || defaultLowLora)) {
+      const matchingLora = loras.find(l =>
+        l.high_file === defaultHighLora || l.low_file === defaultHighLora ||
+        l.high_file === defaultLowLora || l.low_file === defaultLowLora
+      );
+      if (matchingLora) {
+        setSelectedLora(matchingLora);
+      }
     }
-
-    if (lora.trigger_keywords) {
-      parts.push(lora.trigger_keywords);
-    }
-
-    return parts.join(', ');
-  }
+  }, [loras, defaultHighLora, defaultLowLora]);
 
   // Auto-populate prompt when LoRA is selected (only if prompt is empty)
   useEffect(() => {
-    if (prompt.trim()) {
-      // Don't overwrite existing prompt
+    if (prompt.trim() || !selectedLora) {
       return;
     }
 
-    // Try high LoRA first, then low LoRA
-    const loraToUse = highLora || lowLora;
-    if (!loraToUse) return;
-
-    const generatedPrompt = buildPromptFromLora(loraToUse);
-    if (generatedPrompt) {
-      setPrompt(generatedPrompt);
+    const parts = [];
+    if (selectedLora.prompt_text) {
+      parts.push(selectedLora.prompt_text);
     }
-  }, [highLora, lowLora, loras]);
+    if (selectedLora.trigger_keywords) {
+      parts.push(selectedLora.trigger_keywords);
+    }
+
+    if (parts.length > 0) {
+      setPrompt(parts.join(', '));
+    }
+  }, [selectedLora]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -89,8 +87,8 @@ export default function SubmitPromptModal({
         jobId,
         segmentIndex,
         prompt.trim(),
-        highLora || null,
-        lowLora || null
+        selectedLora?.high_file || null,
+        selectedLora?.low_file || null
       );
 
       showToast('Prompt submitted successfully', 'success');
@@ -133,19 +131,23 @@ export default function SubmitPromptModal({
 
         <div className="form-group">
           <LoraAutocomplete
-            label="High Noise LoRA (optional)"
-            value={highLora}
-            onChange={setHighLora}
+            label="LoRA (optional)"
+            value={selectedLora}
+            onChange={setSelectedLora}
             loras={loras}
           />
-        </div>
-        <div className="form-group">
-          <LoraAutocomplete
-            label="Low Noise LoRA (optional)"
-            value={lowLora}
-            onChange={setLowLora}
-            loras={loras}
-          />
+          {selectedLora && (
+            <div style={{ marginTop: '8px', fontSize: '12px', color: '#666', padding: '8px', background: '#f5f5f5', borderRadius: '4px' }}>
+              <div style={{ marginBottom: '4px' }}>
+                <span style={{ color: '#2e7d32', fontWeight: 500 }}>HIGH:</span>{' '}
+                {selectedLora.high_file ? selectedLora.high_file.split('/').pop() : <span style={{ color: '#999' }}>Not available</span>}
+              </div>
+              <div>
+                <span style={{ color: '#1565c0', fontWeight: 500 }}>LOW:</span>{' '}
+                {selectedLora.low_file ? selectedLora.low_file.split('/').pop() : <span style={{ color: '#999' }}>Not available</span>}
+              </div>
+            </div>
+          )}
         </div>
 
           <div className="modal-actions">

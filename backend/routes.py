@@ -15,6 +15,7 @@ from database import (
     create_job,
     delete_job,
     update_job_status,
+    update_job_parameters,
     get_all_settings,
     get_setting,
     update_settings,
@@ -64,6 +65,13 @@ class JobCreate(BaseModel):
     input_image: Optional[str] = None  # Base64 encoded or ComfyUI filename
     high_lora: Optional[str] = None  # Optional LoRA for high noise path
     low_lora: Optional[str] = None  # Optional LoRA for low noise path
+
+
+class JobUpdate(BaseModel):
+    name: Optional[str] = None
+    prompt: Optional[str] = None
+    negative_prompt: Optional[str] = None
+    parameters: Optional[Dict[str, Any]] = None
 
 
 class JobResponse(BaseModel):
@@ -179,6 +187,38 @@ async def create_new_job(job: JobCreate):
     )
     
     return get_job(job_id)
+
+
+@router.put("/jobs/{job_id}", response_model=JobResponse)
+async def update_job_endpoint(job_id: int, job_data: JobUpdate):
+    """Update a job's parameters.
+
+    Jobs with status 'pending' or 'awaiting_prompt' can be updated.
+    """
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job["status"] not in ("pending", "awaiting_prompt"):
+        raise HTTPException(status_code=400, detail="Only pending or awaiting_prompt jobs can be edited")
+
+    # Update the job
+    success = update_job_parameters(
+        job_id,
+        name=job_data.name,
+        prompt=job_data.prompt,
+        negative_prompt=job_data.negative_prompt,
+        parameters=job_data.parameters
+    )
+
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to update job")
+
+    # Also update the first segment's prompt if job prompt changed
+    if job_data.prompt is not None:
+        update_segment_prompt(job_id, 0, job_data.prompt)
+
+    return enrich_job_with_segments(get_job(job_id))
 
 
 @router.delete("/jobs/{job_id}")
@@ -543,7 +583,7 @@ async def get_queue_status():
     from database import get_pending_jobs
 
     # Check ComfyUI connection
-    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+    comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
     client = ComfyUIClient(comfyui_url)
     connected, message = client.check_connection()
     client.close()
@@ -584,7 +624,7 @@ async def stop_queue():
 @router.get("/comfyui/checkpoints")
 async def get_checkpoints():
     """Get available checkpoint models from ComfyUI."""
-    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+    comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
     client = ComfyUIClient(comfyui_url)
     checkpoints = client.get_checkpoints()
     client.close()
@@ -594,7 +634,7 @@ async def get_checkpoints():
 @router.get("/comfyui/samplers")
 async def get_samplers():
     """Get available samplers from ComfyUI."""
-    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+    comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
     client = ComfyUIClient(comfyui_url)
     samplers = client.get_samplers()
     client.close()
@@ -604,7 +644,7 @@ async def get_samplers():
 @router.get("/comfyui/schedulers")
 async def get_schedulers():
     """Get available schedulers from ComfyUI."""
-    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+    comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
     client = ComfyUIClient(comfyui_url)
     schedulers = client.get_schedulers()
     client.close()
@@ -614,7 +654,7 @@ async def get_schedulers():
 @router.get("/comfyui/loras")
 async def get_loras():
     """Get available LoRA models from ComfyUI."""
-    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+    comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
     client = ComfyUIClient(comfyui_url)
     loras = client.get_loras()
     client.close()
@@ -632,20 +672,24 @@ async def get_lora_library():
 
 @router.post("/loras/fetch")
 async def fetch_and_cache_loras():
-    """Fetch LoRAs from ComfyUI and cache them in the database."""
+    """Fetch LoRAs from ComfyUI and cache them in the database.
+
+    LoRAs are automatically grouped by base name (high/low variants combined).
+    """
     try:
-        comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+        comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
         client = ComfyUIClient(comfyui_url)
         loras = client.get_loras()
         client.close()
 
-        # Bulk insert/update LoRAs
+        # Bulk insert/update LoRAs (automatically groups high/low variants)
         count = bulk_upsert_loras(loras)
 
         return {
             "status": "success",
-            "message": f"Fetched and cached {count} LoRAs",
-            "count": count
+            "message": f"Fetched {len(loras)} files, grouped into {count} LoRAs",
+            "file_count": len(loras),
+            "grouped_count": count
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch LoRAs: {str(e)}")
@@ -697,7 +741,7 @@ async def delete_lora(lora_id: int):
 @router.get("/comfyui/status")
 async def get_comfyui_status():
     """Check ComfyUI connection status."""
-    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+    comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
     client = ComfyUIClient(comfyui_url)
     connected, message = client.check_connection()
 
@@ -724,7 +768,7 @@ async def proxy_comfyui_view(filename: str, subfolder: str = "", type: str = "in
     import httpx
     from fastapi.responses import StreamingResponse
 
-    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+    comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
 
     # Build the ComfyUI view URL
     view_url = f"{comfyui_url}/view"
@@ -764,7 +808,7 @@ async def upload_image(file: UploadFile = File(...)):
     content = await file.read()
 
     # Upload to ComfyUI
-    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+    comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
     client = ComfyUIClient(comfyui_url)
 
     filename = client.upload_image(content, file.filename)
@@ -788,7 +832,7 @@ async def upload_image_base64(image_data: str = Form(...), filename: str = Form(
         raise HTTPException(status_code=400, detail=f"Invalid base64 data: {e}")
 
     # Upload to ComfyUI
-    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+    comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
     client = ComfyUIClient(comfyui_url)
 
     result_filename = client.upload_image(content, filename)
@@ -962,7 +1006,7 @@ async def select_image_from_repo(image_path: str = Form(...)):
         raise HTTPException(status_code=500, detail=f"Failed to read image: {str(e)}")
 
     # Upload to ComfyUI
-    comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+    comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
     client = ComfyUIClient(comfyui_url)
 
     try:

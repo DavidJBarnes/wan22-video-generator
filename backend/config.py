@@ -1,7 +1,7 @@
 """Configuration settings for the Wan2.2 Video Generator app."""
 
 # ComfyUI Server Configuration
-COMFYUI_SERVER_URL = "http://3090.zero:8188"
+COMFYUI_SERVER_URL = "http://localhost:8188"
 
 # Default Generation Parameters
 DEFAULT_WIDTH = 512

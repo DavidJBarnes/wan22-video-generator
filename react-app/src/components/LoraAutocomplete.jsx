@@ -1,62 +1,57 @@
 import { Autocomplete, TextField } from '@mui/material';
 
-export default function LoraAutocomplete({ label, value, onChange, loras }) {
-  // Convert loras array to objects if they're strings (for backward compatibility)
-  const loraOptions = loras.map(lora => {
-    if (typeof lora === 'string') {
-      return { name: lora, friendly_name: null };
-    }
-    return lora;
-  });
+// Clean up base_name by removing {TYPE} placeholder
+function cleanBaseName(baseName) {
+  if (!baseName) return '';
+  return baseName.replace(/\{type\}/gi, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
-  // Find the current lora object from value
-  const currentLora = loraOptions.find(l => l.name === value) || null;
+export default function LoraAutocomplete({ label, value, onChange, loras }) {
+  // value is now the full LoRA object (or null)
+  // loras are grouped LoRA objects with base_name, high_file, low_file
 
   return (
     <Autocomplete
-      value={currentLora}
+      value={value}
       onChange={(event, newValue) => {
-        // When a selection is made, return the technical name
-        if (newValue && typeof newValue === 'object') {
-          onChange(newValue.name || '');
-        } else if (typeof newValue === 'string') {
-          onChange(newValue);
-        } else {
-          onChange('');
-        }
+        // Pass the full LoRA object (or null) back to parent
+        onChange(newValue);
       }}
-      inputValue={value || ''}
-      onInputChange={(event, newInputValue, reason) => {
-        // Only update for typing, not for reset
-        if (reason === 'input') {
-          onChange(newInputValue || '');
-        }
-      }}
-      options={loraOptions}
+      options={loras}
       getOptionLabel={(option) => {
-        if (typeof option === 'string') return option;
-        return option.friendly_name || option.name || '';
+        if (!option) return '';
+        return option.friendly_name || cleanBaseName(option.base_name) || '';
+      }}
+      isOptionEqualToValue={(option, value) => {
+        if (!option || !value) return false;
+        return option.id === value.id;
       }}
       renderOption={(props, option) => {
-        const displayName = option.friendly_name || option.name;
-        const isCustom = option.friendly_name && option.friendly_name !== option.name;
+        const cleanedBaseName = cleanBaseName(option.base_name);
+        const displayName = option.friendly_name || cleanedBaseName;
+        const hasCustomName = option.friendly_name && option.friendly_name !== cleanedBaseName;
+        const hasBothFiles = option.high_file && option.low_file;
 
         return (
-          <li {...props} key={option.id || option.name}>
+          <li {...props} key={option.id}>
             <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-              <div style={{ fontWeight: isCustom ? 500 : 400 }}>
+              <div style={{ fontWeight: hasCustomName ? 500 : 400, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {displayName}
+                {!hasBothFiles && (
+                  <span style={{ fontSize: '10px', color: '#f57c00', background: '#fff3e0', padding: '1px 4px', borderRadius: '2px' }}>
+                    {option.high_file ? 'HIGH only' : 'LOW only'}
+                  </span>
+                )}
               </div>
-              {isCustom && (
+              {hasCustomName && (
                 <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>
-                  {option.name}
+                  {cleanedBaseName}
                 </div>
               )}
             </div>
           </li>
         );
       }}
-      freeSolo
       renderInput={(params) => (
         <TextField
           {...params}

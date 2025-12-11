@@ -5,6 +5,7 @@ import API from '../api/client';
 import { formatDate, showToast, notifySegmentAwaitingPrompt } from '../utils/helpers';
 import SubmitPromptModal from '../components/SubmitPromptModal';
 import CreateJobModal from '../components/CreateJobModal';
+import EditJobModal from '../components/EditJobModal';
 import StatusChip from '../components/StatusChip';
 import './JobDetail.css';
 
@@ -16,9 +17,11 @@ export default function JobDetail() {
   const [loading, setLoading] = useState(true);
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [showCloneModal, setShowCloneModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [nextSegmentIndex, setNextSegmentIndex] = useState(0);
   const [lastJobStatus, setLastJobStatus] = useState(null);
   const [hasNotified, setHasNotified] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState(null);
 
   useEffect(() => {
     loadJobDetail();
@@ -177,6 +180,7 @@ export default function JobDetail() {
   const width = job.width ?? params.width ?? 640;
   const height = job.height ?? params.height ?? 640;
   const segmentDuration = job.segment_duration ?? params.segment_duration ?? 5;
+  const fps = job.fps ?? params.fps ?? 16;
 
   const lastCompletedSegment = segments.filter(s => s.status === 'completed').pop();
 
@@ -243,6 +247,10 @@ export default function JobDetail() {
             <div className="value">{segmentDuration}s per segment</div>
           </div>
           <div className="detail-meta-item">
+            <label>FPS</label>
+            <div className="value">{fps} fps</div>
+          </div>
+          <div className="detail-meta-item">
             <label>Created</label>
             <div className="value">{formatDate(job.created_at)}</div>
           </div>
@@ -256,6 +264,15 @@ export default function JobDetail() {
 
         {/* Action Buttons */}
         <div style={{ marginTop: '20px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          {(job.status === 'pending' || job.status === 'awaiting_prompt') && (
+            <Button
+              variant="contained"
+              onClick={() => setShowEditModal(true)}
+              sx={{ bgcolor: '#ff9800', '&:hover': { bgcolor: '#f57c00' } }}
+            >
+              Edit Settings
+            </Button>
+          )}
           <Button
             variant="outlined"
             onClick={() => setShowCloneModal(true)}
@@ -343,7 +360,8 @@ export default function JobDetail() {
                     <img
                       src={seg.start_image_url}
                       alt={seg.start_image_url}
-                      className="segment-image start"
+                      className="segment-image start clickable"
+                      onClick={() => setLightboxImage(seg.start_image_url)}
                       onError={(e) => e.target.style.display = 'none'}
                     />
                   ) : (
@@ -367,7 +385,8 @@ export default function JobDetail() {
                     <img
                       src={seg.end_frame_url}
                       alt="End frame"
-                      className="segment-image end"
+                      className="segment-image end clickable"
+                      onClick={() => setLightboxImage(seg.end_frame_url)}
                       onError={(e) => e.target.style.display = 'none'}
                     />
                   ) : seg.status === 'running' ? (
@@ -450,6 +469,38 @@ export default function JobDetail() {
             navigate(`/job/${newJobId}`);
           }}
         />
+      )}
+
+      {showEditModal && (
+        <EditJobModal
+          job={job}
+          onClose={() => setShowEditModal(false)}
+          onSuccess={() => {
+            setShowEditModal(false);
+            loadJobDetail();
+          }}
+        />
+      )}
+
+      {/* Image Lightbox */}
+      {lightboxImage && (
+        <div
+          className="lightbox-overlay"
+          onClick={() => setLightboxImage(null)}
+        >
+          <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
+            <img src={lightboxImage} alt="Full size" />
+            <button
+              className="lightbox-close"
+              onClick={() => setLightboxImage(null)}
+            >
+              ×
+            </button>
+            <div className="lightbox-info">
+              Click outside or press × to close
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
