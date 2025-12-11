@@ -4,6 +4,12 @@ import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import './CreateJobModal.css';
 
+// Clean up base_name by removing {TYPE} placeholder
+function cleanBaseName(baseName) {
+  if (!baseName) return '';
+  return baseName.replace(/\{type\}/gi, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 export default function LoraEditModal({ lora, onClose, onSave }) {
   const [friendlyName, setFriendlyName] = useState(lora.friendly_name || '');
   const [url, setUrl] = useState(lora.url || '');
@@ -41,9 +47,19 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
         <h2>Edit LoRA Metadata</h2>
 
         <div style={{ marginBottom: '16px', padding: '12px', background: '#f5f5f5', borderRadius: '4px' }}>
-          <strong style={{ fontSize: '12px', color: '#666' }}>Technical Name:</strong>
-          <div style={{ marginTop: '4px' }}>
-            <code style={{ fontSize: '13px' }}>{lora.name}</code>
+          <strong style={{ fontSize: '12px', color: '#666' }}>Base Name:</strong>
+          <div style={{ marginTop: '4px', marginBottom: '8px' }}>
+            <code style={{ fontSize: '13px' }}>{cleanBaseName(lora.base_name)}</code>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px' }}>
+            <div>
+              <span style={{ color: '#2e7d32', fontWeight: 500 }}>HIGH:</span>{' '}
+              <code>{lora.high_file ? lora.high_file.split('/').pop() : '—'}</code>
+            </div>
+            <div>
+              <span style={{ color: '#1565c0', fontWeight: 500 }}>LOW:</span>{' '}
+              <code>{lora.low_file ? lora.low_file.split('/').pop() : '—'}</code>
+            </div>
           </div>
         </div>
 
@@ -111,7 +127,7 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
               value={promptText}
               onChange={(e) => setPromptText(e.target.value)}
               multiline
-              rows={4}
+              rows={2}
               placeholder="Describe what this LoRA does and how to use it..."
               fullWidth
               variant="outlined"

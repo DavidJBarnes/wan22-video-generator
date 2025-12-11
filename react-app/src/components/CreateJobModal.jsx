@@ -11,11 +11,11 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   const [prompt, setPrompt] = useState('');
   const [width, setWidth] = useState(640);
   const [height, setHeight] = useState(640);
+  const [fps, setFps] = useState(16);
   const [segmentDuration, setSegmentDuration] = useState(5);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
-  const [highLora, setHighLora] = useState('');
-  const [lowLora, setLowLora] = useState('');
+  const [selectedLora, setSelectedLora] = useState(null); // Grouped LoRA object
   const [loras, setLoras] = useState([]);
   const [uploading, setUploading] = useState(false);
 
@@ -33,9 +33,8 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
       setPrompt(cloneData.prompt || '');
       setWidth(cloneData.width || cloneData.parameters?.width || 640);
       setHeight(cloneData.height || cloneData.parameters?.height || 640);
+      setFps(cloneData.fps || cloneData.parameters?.fps || 16);
       setSegmentDuration(cloneData.segment_duration || cloneData.parameters?.segment_duration || 5);
-      setHighLora(cloneData.high_lora || cloneData.parameters?.high_lora || '');
-      setLowLora(cloneData.low_lora || cloneData.parameters?.low_lora || '');
 
       // Set the input image if available - use thumbnail endpoint for proper URL
       if (cloneData.input_image && cloneData.id) {
@@ -44,6 +43,19 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
     }
   }, [preUploadedImageUrl, cloneData]);
 
+  // When loras are loaded and we have cloneData, find the matching LoRA
+  useEffect(() => {
+    if (cloneData && loras.length > 0) {
+      const highLoraFile = cloneData.high_lora || cloneData.parameters?.high_lora;
+      if (highLoraFile) {
+        const matchingLora = loras.find(l => l.high_file === highLoraFile || l.low_file === highLoraFile);
+        if (matchingLora) {
+          setSelectedLora(matchingLora);
+        }
+      }
+    }
+  }, [cloneData, loras]);
+
   async function loadSettings() {
     try {
       const data = await API.getSettings();
@@ -51,6 +63,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
       setSettings(s);
       setWidth(parseInt(s.default_width) || 640);
       setHeight(parseInt(s.default_height) || 640);
+      setFps(parseInt(s.default_fps) || 16);
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
@@ -61,50 +74,36 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
       // Load from cached library instead of querying ComfyUI directly
       const data = await API.getLoraLibrary();
       const loraList = data.loras || [];
-      // Sort by technical name for stable ordering
-      loraList.sort((a, b) => a.name.localeCompare(b.name));
+      // Sort by friendly name or base name
+      loraList.sort((a, b) => {
+        const nameA = a.friendly_name || a.base_name;
+        const nameB = b.friendly_name || b.base_name;
+        return nameA.localeCompare(nameB);
+      });
       setLoras(loraList);
     } catch (error) {
       console.error('Failed to load LoRAs:', error);
     }
   }
 
-  // Helper function to build prompt text from LoRA metadata
-  function buildPromptFromLora(loraName) {
-    if (!loraName || !loras.length) return '';
-
-    const lora = loras.find(l => l.name === loraName);
-    if (!lora) return '';
-
-    const parts = [];
-
-    if (lora.prompt_text) {
-      parts.push(lora.prompt_text);
-    }
-
-    if (lora.trigger_keywords) {
-      parts.push(lora.trigger_keywords);
-    }
-
-    return parts.join(', ');
-  }
-
   // Auto-populate prompt when LoRA is selected (only if prompt is empty)
   useEffect(() => {
-    if (prompt.trim()) {
-      // Don't overwrite existing prompt
+    if (prompt.trim() || !selectedLora) {
       return;
     }
 
-    // Try high LoRA first, then low LoRA
-    const loraToUse = highLora || lowLora;
-    if (!loraToUse) return;
-
-    const generatedPrompt = buildPromptFromLora(loraToUse);
-    if (generatedPrompt) {
-      setPrompt(generatedPrompt);
+    const parts = [];
+    if (selectedLora.prompt_text) {
+      parts.push(selectedLora.prompt_text);
     }
-  }, [highLora, lowLora, loras]);
+    if (selectedLora.trigger_keywords) {
+      parts.push(selectedLora.trigger_keywords);
+    }
+
+    if (parts.length > 0) {
+      setPrompt(parts.join(', '));
+    }
+  }, [selectedLora]);
 
   function handleImageChange(e) {
     const file = e.target.files[0];
@@ -163,11 +162,12 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
         workflow_type: 'i2v',
         negative_prompt: settings.default_negative_prompt || '',
         input_image: imageFilename,
-        high_lora: highLora || null,
-        low_lora: lowLora || null,
+        high_lora: selectedLora?.high_file || null,
+        low_lora: selectedLora?.low_file || null,
         parameters: {
           width,
           height,
+          fps,
           segment_duration: segmentDuration
         }
       };
@@ -226,20 +226,36 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
             </div>
           </div>
 
-          <div className="form-group">
-            <FormControl fullWidth variant="outlined" size="small">
-              <InputLabel>Segment Duration</InputLabel>
-              <Select
-                value={segmentDuration}
-                onChange={(e) => setSegmentDuration(parseInt(e.target.value))}
-                label="Segment Duration"
-              >
-                <MenuItem value={3}>3 seconds</MenuItem>
-                <MenuItem value={4}>4 seconds</MenuItem>
-                <MenuItem value={5}>5 seconds</MenuItem>
-              </Select>
-              <FormHelperText>Add segments one at a time. Click "Finalize & Merge" when done.</FormHelperText>
-            </FormControl>
+          <div className="form-row">
+            <div className="form-group">
+              <FormControl fullWidth variant="outlined" size="small">
+                <InputLabel>Segment Duration</InputLabel>
+                <Select
+                  value={segmentDuration}
+                  onChange={(e) => setSegmentDuration(parseInt(e.target.value))}
+                  label="Segment Duration"
+                >
+                  <MenuItem value={3}>3 seconds</MenuItem>
+                  <MenuItem value={4}>4 seconds</MenuItem>
+                  <MenuItem value={5}>5 seconds</MenuItem>
+                </Select>
+              </FormControl>
+            </div>
+            <div className="form-group">
+              <FormControl fullWidth variant="outlined" size="small">
+                <InputLabel>FPS</InputLabel>
+                <Select
+                  value={fps}
+                  onChange={(e) => setFps(parseInt(e.target.value))}
+                  label="FPS"
+                >
+                  <MenuItem value={8}>8 fps</MenuItem>
+                  <MenuItem value={12}>12 fps</MenuItem>
+                  <MenuItem value={16}>16 fps</MenuItem>
+                  <MenuItem value={24}>24 fps</MenuItem>
+                </Select>
+              </FormControl>
+            </div>
           </div>
 
           <div className="form-group">
@@ -279,20 +295,23 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
 
             <div className="form-group">
               <LoraAutocomplete
-                label="High Noise LoRA (optional)"
-                value={highLora}
-                onChange={setHighLora}
+                label="LoRA (optional)"
+                value={selectedLora}
+                onChange={setSelectedLora}
                 loras={loras}
               />
-            </div>
-
-            <div className="form-group">
-              <LoraAutocomplete
-                label="Low Noise LoRA (optional)"
-                value={lowLora}
-                onChange={setLowLora}
-                loras={loras}
-              />
+              {selectedLora && (
+                <div style={{ marginTop: '8px', fontSize: '12px', color: '#666', padding: '8px', background: '#f5f5f5', borderRadius: '4px' }}>
+                  <div style={{ marginBottom: '4px' }}>
+                    <span style={{ color: '#2e7d32', fontWeight: 500 }}>HIGH:</span>{' '}
+                    {selectedLora.high_file ? selectedLora.high_file.split('/').pop() : <span style={{ color: '#999' }}>Not available</span>}
+                  </div>
+                  <div>
+                    <span style={{ color: '#1565c0', fontWeight: 500 }}>LOW:</span>{' '}
+                    {selectedLora.low_file ? selectedLora.low_file.split('/').pop() : <span style={{ color: '#999' }}>Not available</span>}
+                  </div>
+                </div>
+              )}
             </div>
 
           <div className="modal-actions">

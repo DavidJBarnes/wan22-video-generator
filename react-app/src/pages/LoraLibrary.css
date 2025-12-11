@@ -2,10 +2,13 @@
 
 .lora-library {
   padding: 24px;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .lora-library table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   background: white;
 }
@@ -21,6 +24,9 @@
 .lora-library table td {
   padding: 12px;
   border-bottom: 1px solid #f0f0f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-wrap: break-word;
 }
 
 .lora-library table tbody tr:hover {
@@ -29,4 +35,35 @@
 
 .lora-library table tbody tr:last-child td {
   border-bottom: none;
+}
+
+/* Column widths */
+.lora-library table th:nth-child(1),
+.lora-library table td:nth-child(1) {
+  width: 20%;
+}
+
+.lora-library table th:nth-child(2),
+.lora-library table td:nth-child(2) {
+  width: 30%;
+}
+
+.lora-library table th:nth-child(3),
+.lora-library table td:nth-child(3) {
+  width: 10%;
+}
+
+.lora-library table th:nth-child(4),
+.lora-library table td:nth-child(4) {
+  width: 8%;
+}
+
+.lora-library table th:nth-child(5),
+.lora-library table td:nth-child(5) {
+  width: 20%;
+}
+
+.lora-library table th:nth-child(6),
+.lora-library table td:nth-child(6) {
+  width: 12%;
 }

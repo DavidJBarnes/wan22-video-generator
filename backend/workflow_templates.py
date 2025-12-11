@@ -219,9 +219,10 @@ def build_wan_i2v_workflow(
     seed: Optional[int] = None,
     high_lora: Optional[str] = None,
     low_lora: Optional[str] = None,
+    fps: int = 16,
 ) -> Dict[str, Any]:
     """Build a Wan2.2 i2v workflow by injecting values into the pre-converted template.
-    
+
     Args:
         prompt: Positive prompt describing the video
         negative_prompt: Negative prompt (things to avoid)
@@ -234,7 +235,8 @@ def build_wan_i2v_workflow(
         seed: Random seed (auto-generated if not provided)
         high_lora: Optional LoRA for high noise path (None = use default)
         low_lora: Optional LoRA for low noise path (None = use default)
-    
+        fps: Frames per second for output video (default 16)
+
     Returns:
         ComfyUI API workflow dict ready to submit
     """
@@ -283,5 +285,9 @@ def build_wan_i2v_workflow(
     workflow["119"]["inputs"]["lora_name"] = low_lora_name
     print(f"[Workflow] Set high LoRA: {high_lora_name}")
     print(f"[Workflow] Set low LoRA: {low_lora_name}")
-    
+
+    # Override FPS (node 94 - CreateVideo)
+    workflow["94"]["inputs"]["fps"] = fps
+    print(f"[Workflow] Set FPS: {fps}")
+
     return workflow

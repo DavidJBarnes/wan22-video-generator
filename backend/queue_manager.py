@@ -4,8 +4,14 @@ import os
 import threading
 import time
 import urllib.parse
+import json
+import logging
 from typing import Optional, Callable
 from datetime import datetime
+
+# Configure logging for better debugging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
+logger = logging.getLogger(__name__)
 
 from database import (
     get_pending_jobs,
@@ -86,7 +92,7 @@ class QueueManager:
 
     def _get_client(self) -> ComfyUIClient:
         """Get or create ComfyUI client with current settings."""
-        comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+        comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
 
         if self._client is None or self._client.base_url != comfyui_url:
             if self._client:
@@ -125,7 +131,7 @@ class QueueManager:
         try:
             # Get ComfyUI client
             client = self._get_client()
-            comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+            comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
             print(f"[QueueManager] Using ComfyUI URL: {comfyui_url}")
 
             # Check ComfyUI connection
@@ -245,7 +251,7 @@ class QueueManager:
         
         # Get job parameters
         params = job.get("parameters") or {}
-        fps = int(get_setting("default_fps", "16"))
+        fps = int(params.get("fps", get_setting("default_fps", "16")))
         segment_duration = int(params.get("segment_duration", 5))
         frames = fps * segment_duration + 1
         
@@ -283,24 +289,27 @@ class QueueManager:
         queue_pending = queue_status.get("queue_pending", [])
 
         if len(queue_running) > 0 or len(queue_pending) > 0:
-            print(f"[QueueManager] WARNING: ComfyUI queue is not idle! Running: {len(queue_running)}, Pending: {len(queue_pending)}")
-            print(f"[QueueManager] This should not happen - we only submit when idle. Waiting for queue to clear...")
+            logger.info(f"[Job {job_id}] ComfyUI queue is busy. Running: {len(queue_running)}, Pending: {len(queue_pending)}. Waiting for it to finish...")
 
-            # Wait for queue to clear (max 2 minutes)
+            # Wait for queue to clear (configurable timeout, default 30 minutes)
             wait_time = 0
-            max_wait = 120
+            max_wait = int(get_setting("queue_wait_timeout", "1800"))  # seconds
             while (len(queue_running) > 0 or len(queue_pending) > 0) and wait_time < max_wait:
-                time.sleep(5)
-                wait_time += 5
+                time.sleep(10)  # Check every 10 seconds
+                wait_time += 10
                 queue_status = client.get_queue_status()
                 queue_running = queue_status.get("queue_running", [])
                 queue_pending = queue_status.get("queue_pending", [])
-                print(f"[QueueManager] Waiting for queue to clear... Running: {len(queue_running)}, Pending: {len(queue_pending)}")
+                if wait_time % 60 == 0:  # Log every minute
+                    logger.info(f"[Job {job_id}] Still waiting for ComfyUI queue... Running: {len(queue_running)}, Pending: {len(queue_pending)} ({wait_time}s elapsed)")
 
             if wait_time >= max_wait:
-                print(f"[QueueManager] Queue did not clear in time, aborting segment {segment_index}")
-                update_segment_status(job_id, segment_index, "failed", error_message="ComfyUI queue did not clear")
+                error_msg = f"ComfyUI queue did not clear after {max_wait // 60} minutes. Queue had {len(queue_running)} running and {len(queue_pending)} pending jobs."
+                logger.error(f"[Job {job_id}] Segment {segment_index}: {error_msg}")
+                update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
                 return False
+
+            logger.info(f"[Job {job_id}] ComfyUI queue cleared after {wait_time}s, proceeding with segment {segment_index}")
 
         # Build the workflow using the Wan2.2 i2v workflow builder directly
         # This ensures LoRA parameters are passed correctly
@@ -316,16 +325,37 @@ class QueueManager:
             seed=params.get("seed"),
             high_lora=high_lora,
             low_lora=low_lora,
+            fps=fps,
         )
 
         # Queue the prompt
-        print(f"[QueueManager] Queuing segment {segment_index} workflow to ComfyUI...")
+        logger.info(f"[Job {job_id}] Queuing segment {segment_index} workflow to ComfyUI...")
         success, result = client.queue_prompt(workflow)
-        print(f"[QueueManager] queue_prompt result: success={success}, result={result}")
-        
+        logger.info(f"[Job {job_id}] queue_prompt result: success={success}, result={result[:200] if isinstance(result, str) else result}")
+
         if not success:
-            print(f"[QueueManager] Failed to queue segment {segment_index}: {result}")
-            update_segment_status(job_id, segment_index, "failed", error_message=result)
+            # Log detailed workflow info on failure for debugging
+            workflow_summary = {
+                "prompt": (segment.get("prompt") or job.get("prompt", ""))[:100] + "...",
+                "input_image": input_image,
+                "dimensions": f"{params.get('width', 640)}x{params.get('height', 640)}",
+                "frames": frames,
+                "fps": fps,
+                "high_lora": high_lora,
+                "low_lora": low_lora,
+            }
+            logger.error(f"[Job {job_id}] Segment {segment_index} FAILED to queue!")
+            logger.error(f"[Job {job_id}] Error: {result}")
+            logger.error(f"[Job {job_id}] Workflow summary: {json.dumps(workflow_summary, indent=2)}")
+
+            # Provide more helpful error message to user
+            error_msg = result
+            if "not found" in result.lower():
+                error_msg = f"ComfyUI error: {result}. Check that the input image and LoRA files exist."
+            elif "node" in result.lower():
+                error_msg = f"ComfyUI workflow error: {result}. There may be a missing node or invalid configuration."
+
+            update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
             return False
         
         prompt_id = result
@@ -336,7 +366,7 @@ class QueueManager:
 
     def _wait_for_segment_completion(self, job_id: int, segment_index: int, prompt_id: str, client: ComfyUIClient) -> bool:
         """Wait for a segment to complete and process its outputs."""
-        comfyui_url = get_setting("comfyui_url", "http://3090.zero:8188")
+        comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
         max_wait = 600  # 10 minutes max per segment
         waited = 0
         
@@ -395,37 +425,49 @@ class QueueManager:
                                 # Update the next segment's start image
                                 update_segment_start_image(job_id, segment_index + 1, end_frame_url)
 
-                                print(f"[QueueManager] Segment {segment_index} fully processed")
+                                logger.info(f"[Job {job_id}] Segment {segment_index} fully processed")
                                 return True
                             else:
-                                print(f"[QueueManager] ERROR: Failed to upload last frame for segment {segment_index}")
+                                error_msg = f"Failed to upload last frame to ComfyUI for segment {segment_index}"
+                                logger.error(f"[Job {job_id}] {error_msg}")
+                                update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
+                                return False
                         else:
-                            print(f"[QueueManager] ERROR: Failed to extract last frame from {video_path}")
+                            error_msg = f"Failed to extract last frame from video at {video_path}"
+                            logger.error(f"[Job {job_id}] {error_msg}")
+                            update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
+                            return False
                     else:
-                        print(f"[QueueManager] ERROR: Failed to download video from {video_url}")
+                        error_msg = f"Failed to download video from ComfyUI: {video_url}"
+                        logger.error(f"[Job {job_id}] {error_msg}")
+                        update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
+                        return False
                 else:
-                    print(f"[QueueManager] No video output found for segment {segment_index}")
+                    logger.warning(f"[Job {job_id}] No video output found for segment {segment_index}. Media URLs: {media_urls}")
                     # Still mark as completed but without video
                     update_segment_status(job_id, segment_index, "completed")
                     return True
-                
+
                 # If we got here, something failed in post-processing
                 update_segment_status(job_id, segment_index, "failed", error_message="Post-processing failed")
                 return False
             
             if status.get("status") == "error":
                 error = status.get("error", "Unknown error")
-                update_segment_status(job_id, segment_index, "failed", error_message=error)
+                logger.error(f"[Job {job_id}] Segment {segment_index} reported error from ComfyUI: {error}")
+                update_segment_status(job_id, segment_index, "failed", error_message=f"ComfyUI error: {error}")
                 return False
-            
+
             time.sleep(self._status_poll_interval)
             waited += self._status_poll_interval
-        
+
         # Timeout
         if waited >= max_wait:
-            update_segment_status(job_id, segment_index, "failed", error_message="Segment timed out")
+            error_msg = f"Segment {segment_index} timed out after {max_wait}s waiting for ComfyUI to complete"
+            logger.error(f"[Job {job_id}] {error_msg}")
+            update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
             return False
-        
+
         return False
 
     def _finalize_job(self, job_id: int):
@@ -473,35 +515,38 @@ class QueueManager:
         print(f"[QueueManager] Processing job {job_id} as single segment")
         
         params = job.get("parameters") or {}
-        fps = int(get_setting("default_fps", "16"))
+        fps = int(params.get("fps", get_setting("default_fps", "16")))
         segment_duration = int(params.get("segment_duration", 5))
         frames = fps * segment_duration + 1
-        
+
         # Check if ComfyUI queue is idle before submitting
         queue_status = client.get_queue_status()
         queue_running = queue_status.get("queue_running", [])
         queue_pending = queue_status.get("queue_pending", [])
 
         if len(queue_running) > 0 or len(queue_pending) > 0:
-            print(f"[QueueManager] WARNING: ComfyUI queue is not idle! Running: {len(queue_running)}, Pending: {len(queue_pending)}")
-            print(f"[QueueManager] This should not happen - we only submit when idle. Waiting for queue to clear...")
+            logger.info(f"[Job {job_id}] ComfyUI queue is busy. Running: {len(queue_running)}, Pending: {len(queue_pending)}. Waiting for it to finish...")
 
-            # Wait for queue to clear (max 2 minutes)
+            # Wait for queue to clear (configurable timeout, default 30 minutes)
             wait_time = 0
-            max_wait = 120
+            max_wait = int(get_setting("queue_wait_timeout", "1800"))  # seconds
             while (len(queue_running) > 0 or len(queue_pending) > 0) and wait_time < max_wait:
-                time.sleep(5)
-                wait_time += 5
+                time.sleep(10)
+                wait_time += 10
                 queue_status = client.get_queue_status()
                 queue_running = queue_status.get("queue_running", [])
                 queue_pending = queue_status.get("queue_pending", [])
-                print(f"[QueueManager] Waiting for queue to clear... Running: {len(queue_running)}, Pending: {len(queue_pending)}")
+                if wait_time % 60 == 0:
+                    logger.info(f"[Job {job_id}] Still waiting for ComfyUI queue... Running: {len(queue_running)}, Pending: {len(queue_pending)} ({wait_time}s elapsed)")
 
             if wait_time >= max_wait:
-                print(f"[QueueManager] Queue did not clear in time, aborting job")
-                update_job_status(job_id, "failed", error_message="ComfyUI queue did not clear")
+                error_msg = f"ComfyUI queue did not clear after {max_wait // 60} minutes. Queue had {len(queue_running)} running and {len(queue_pending)} pending jobs."
+                logger.error(f"[Job {job_id}] {error_msg}")
+                update_job_status(job_id, "failed", error_message=error_msg)
                 self._notify_update(job_id, "failed")
                 return
+
+            logger.info(f"[Job {job_id}] ComfyUI queue cleared after {wait_time}s, proceeding")
 
         workflow = client.build_workflow(
             workflow_type=job.get("workflow_type", "txt2img"),

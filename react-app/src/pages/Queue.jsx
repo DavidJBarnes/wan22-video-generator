@@ -15,8 +15,7 @@ import {
   TableHead,
   TableRow,
   TablePagination,
-  Paper,
-  Chip
+  Paper
 } from '@mui/material';
 import API from '../api/client';
 import { formatDate, showToast } from '../utils/helpers';
@@ -228,16 +227,7 @@ export default function Queue() {
                       </TableCell>
                       <TableCell>{formatDate(job.created_at)}</TableCell>
                       <TableCell>
-                        <StatusChip status={job.status} />
-
-                        {position && (
-                                                  <Chip
-                                                    label={`Position ${position}`}
-                                                    size="small"
-                                                    sx={{ ml: 1, height: 20, fontSize: '0.75rem' }}
-                                                    color="default"
-                                                  />
-                                                )}
+                        <StatusChip status={job.status} queuePosition={position} />
                       </TableCell>
                       <TableCell>{job.completed_segments ?? 0} completed</TableCell>
                     </TableRow>

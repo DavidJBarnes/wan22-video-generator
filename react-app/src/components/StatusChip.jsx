@@ -9,12 +9,18 @@ const STATUS_CONFIG = {
   cancelled: { color: 'default', label: 'Cancelled' },
 };
 
-export default function StatusChip({ status }) {
+export default function StatusChip({ status, queuePosition }) {
   const config = STATUS_CONFIG[status] || { color: 'default', label: status };
+
+  // Combine pending status with queue position
+  let label = config.label;
+  if (status === 'pending' && queuePosition) {
+    label = `Pending - #${queuePosition}`;
+  }
 
   return (
     <Chip
-      label={config.label}
+      label={label}
       color={config.color}
       size="small"
       sx={{ fontWeight: 500 }}
