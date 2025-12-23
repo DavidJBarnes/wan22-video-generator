@@ -185,6 +185,7 @@ export default function JobDetail() {
         {job.status === 'completed' ? (
           <div>
             <video
+              key={`video-${id}-${job.completed_at}`}
               controls
               style={{ width: '100%', maxWidth: '800px', borderRadius: '4px' }}
               src={API.getJobVideo(id)}
@@ -195,7 +196,7 @@ export default function JobDetail() {
               <Button
                 variant="contained"
                 href={API.getJobVideo(id)}
-                download={`${job.name}.mp4`}
+                download={`${job.name}.webm`}
               >
                 Download Video
               </Button>
