@@ -374,26 +374,27 @@ async def get_job_video(job_id: int):
     if not output_images:
         raise HTTPException(status_code=404, detail="No video available for this job")
     
-    # Find the video file (first .mp4 in output_images)
+    # Find the video file (first .webm or .mp4 in output_images)
     video_path = None
     for path in output_images:
-        if path.endswith('.mp4'):
+        if path.endswith('.webm') or path.endswith('.mp4'):
             video_path = path
             break
-    
+
     if not video_path:
         raise HTTPException(status_code=404, detail="No video file found")
-    
+
     # Check if file exists
     if not os.path.exists(video_path):
         raise HTTPException(status_code=404, detail=f"Video file not found on disk")
 
-    # Get the actual filename from the path
+    # Get the actual filename and determine media type
     actual_filename = os.path.basename(video_path)
+    media_type = "video/webm" if video_path.endswith('.webm') else "video/mp4"
 
     return FileResponse(
         video_path,
-        media_type="video/mp4",
+        media_type=media_type,
         filename=actual_filename
     )
 

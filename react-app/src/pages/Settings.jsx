@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@mui/material';
 import API from '../api/client';
-import { showToast, requestNotificationPermission } from '../utils/helpers';
+import { showToast } from '../utils/helpers';
 import './Settings.css';
 
 export default function Settings() {
@@ -84,63 +84,6 @@ export default function Settings() {
       console.error('Failed to fetch LoRAs:', error);
       showToast('Failed to fetch LoRAs from ComfyUI', 'error');
       setFetchingLoras(false);
-    }
-  }
-
-  function handleTestNotification() {
-    console.log('[Settings] Testing notification...');
-
-    if (!('Notification' in window)) {
-      showToast('Your browser does not support notifications', 'error');
-      return;
-    }
-
-    if (Notification.permission === 'denied') {
-      showToast('Notifications are blocked. Please enable them in your browser settings.', 'error');
-      return;
-    }
-
-    if (Notification.permission === 'default') {
-      showToast('Requesting notification permission...', 'info');
-      requestNotificationPermission();
-      return;
-    }
-
-    if (Notification.permission === 'granted') {
-      try {
-        const notification = new Notification('Test Notification', {
-          body: 'Browser notifications are working correctly!',
-          icon: '/favicon.ico',
-          tag: 'test-notification'
-        });
-
-        notification.onclick = function() {
-          window.focus();
-          notification.close();
-        };
-
-        showToast('Test notification sent!', 'success');
-      } catch (error) {
-        console.error('[Settings] Failed to send test notification:', error);
-        showToast('Failed to send notification: ' + error.message, 'error');
-      }
-    }
-  }
-
-  function getNotificationStatus() {
-    if (!('Notification' in window)) {
-      return { status: 'unsupported', color: 'red', text: 'Not Supported' };
-    }
-
-    switch (Notification.permission) {
-      case 'granted':
-        return { status: 'granted', color: 'green', text: 'Enabled' };
-      case 'denied':
-        return { status: 'denied', color: 'red', text: 'Blocked' };
-      case 'default':
-        return { status: 'default', color: 'orange', text: 'Not Requested' };
-      default:
-        return { status: 'unknown', color: 'gray', text: 'Unknown' };
     }
   }
 
@@ -280,62 +223,6 @@ export default function Settings() {
           </button>
         </div>
       </form>
-
-      {/* Notifications Section */}
-      <div className="card settings-section" style={{ marginTop: '24px' }}>
-        <h2>Browser Notifications</h2>
-        <div style={{ marginBottom: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-            <span style={{ fontWeight: 500 }}>Status:</span>
-            <span
-              style={{
-                padding: '4px 12px',
-                borderRadius: '4px',
-                background: getNotificationStatus().color === 'green' ? '#d4edda' :
-                           getNotificationStatus().color === 'red' ? '#f8d7da' :
-                           getNotificationStatus().color === 'orange' ? '#fff3cd' : '#e2e3e5',
-                color: getNotificationStatus().color === 'green' ? '#155724' :
-                       getNotificationStatus().color === 'red' ? '#721c24' :
-                       getNotificationStatus().color === 'orange' ? '#856404' : '#383d41',
-                fontSize: '14px',
-                fontWeight: 500
-              }}
-            >
-              {getNotificationStatus().text}
-            </span>
-          </div>
-          <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
-            Enable browser notifications to receive alerts when jobs require prompt input.
-          </p>
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <Button
-              variant="contained"
-              onClick={handleTestNotification}
-              disabled={getNotificationStatus().status === 'unsupported'}
-            >
-              Test Notification
-            </Button>
-            {getNotificationStatus().status === 'denied' && (
-              <Button
-                variant="outlined"
-                onClick={() => {
-                  showToast('Please check your browser settings to enable notifications for this site', 'info');
-                }}
-              >
-                How to Enable
-              </Button>
-            )}
-            {getNotificationStatus().status === 'default' && (
-              <Button
-                variant="outlined"
-                onClick={requestNotificationPermission}
-              >
-                Request Permission
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

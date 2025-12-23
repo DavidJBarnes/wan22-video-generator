@@ -17,7 +17,7 @@ import {
   Paper
 } from '@mui/material';
 import API from '../api/client';
-import { formatDate, notifySegmentAwaitingPrompt } from '../utils/helpers';
+import { formatDate } from '../utils/helpers';
 import StatusChip from '../components/StatusChip';
 import './Dashboard.css';
 
@@ -33,7 +33,6 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState(['running', 'pending','awaiting_prompt']);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [notifiedJobs, setNotifiedJobs] = useState(new Set()); // Track which jobs we've notified for
 
   const allStatuses = ['pending', 'running', 'awaiting_prompt', 'completed', 'failed', 'cancelled'];
 
@@ -62,36 +61,6 @@ export default function Dashboard() {
       setRunningJobsCount(jobs.filter(j => j.status === 'running').length);
       setPendingJobsCount(jobs.filter(j => j.status === 'pending').length);
       setAwaitingPromptJobsCount(jobs.filter(j => j.status === 'awaiting_prompt').length);
-
-      // Check for jobs awaiting prompt and send notifications
-      const awaitingJobs = jobs.filter(j => j.status === 'awaiting_prompt');
-      console.log('[Dashboard] Jobs awaiting prompt:', awaitingJobs.length, awaitingJobs.map(j => ({ id: j.id, name: j.name })));
-      console.log('[Dashboard] Already notified jobs:', Array.from(notifiedJobs));
-
-      for (const job of awaitingJobs) {
-        if (!notifiedJobs.has(job.id)) {
-          console.log('[Dashboard] Sending notification for job', job.id, job.name);
-          // Send notification for this job
-          try {
-            const segments = await API.getSegments(job.id);
-            const completedCount = segments.filter(s => s.status === 'completed').length;
-            notifySegmentAwaitingPrompt(job.name, completedCount, completedCount + 1);
-            // Mark this job as notified
-            setNotifiedJobs(prev => new Set([...prev, job.id]));
-          } catch (err) {
-            console.error('[Dashboard] Failed to send notification for job', job.id, err);
-          }
-        } else {
-          console.log('[Dashboard] Already notified for job', job.id, job.name);
-        }
-      }
-
-      // Clean up notifiedJobs set - remove jobs that are no longer awaiting_prompt
-      const awaitingJobIds = new Set(awaitingJobs.map(j => j.id));
-      setNotifiedJobs(prev => {
-        const updated = new Set([...prev].filter(id => awaitingJobIds.has(id)));
-        return updated;
-      });
 
       setAllJobs(jobs);
       setLoading(false);

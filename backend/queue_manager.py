@@ -313,6 +313,10 @@ class QueueManager:
 
         # Build the workflow using the Wan2.2 i2v workflow builder directly
         # This ensures LoRA parameters are passed correctly
+        # Build output prefix from job name
+        job_name = job.get("name", f"job_{job_id}")
+        output_prefix = f"{job_name}_seg{segment_index}"
+
         workflow = client.build_wan_i2v_workflow(
             prompt=segment.get("prompt") or job.get("prompt", ""),
             negative_prompt=job.get("negative_prompt", get_setting("default_negative_prompt", "")),
@@ -326,6 +330,7 @@ class QueueManager:
             high_lora=high_lora,
             low_lora=low_lora,
             fps=fps,
+            output_prefix=output_prefix,
         )
 
         # Queue the prompt

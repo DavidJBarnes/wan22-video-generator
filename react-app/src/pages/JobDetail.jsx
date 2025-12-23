@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@mui/material';
 import API from '../api/client';
-import { formatDate, showToast, notifySegmentAwaitingPrompt } from '../utils/helpers';
+import { formatDate, showToast } from '../utils/helpers';
 import SubmitPromptModal from '../components/SubmitPromptModal';
 import CreateJobModal from '../components/CreateJobModal';
 import EditJobModal from '../components/EditJobModal';
@@ -20,34 +20,18 @@ export default function JobDetail() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [nextSegmentIndex, setNextSegmentIndex] = useState(0);
   const [lastJobStatus, setLastJobStatus] = useState(null);
-  const [hasNotified, setHasNotified] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
 
   useEffect(() => {
     loadJobDetail();
-    setHasNotified(false); // Reset notification flag when job changes
 
     // Auto-refresh based on job status
     const interval = setInterval(async () => {
       try {
         const jobData = await API.getJob(id);
 
-        if (jobData.status === 'running') {
+        if (jobData.status === 'running' || jobData.status === 'awaiting_prompt') {
           loadJobDetail();
-          setHasNotified(false); // Reset when job is running
-        } else if (jobData.status === 'awaiting_prompt') {
-          // Only notify once per awaiting_prompt transition
-          if (!hasNotified) {
-            console.log('[JobDetail] Job is awaiting prompt, sending notification');
-            loadJobDetail();
-            // Send notification when status just changed to awaiting_prompt
-            const segs = await API.getSegments(id);
-            const completedCount = segs.filter(s => s.status === 'completed').length;
-            notifySegmentAwaitingPrompt(jobData.name, completedCount, completedCount + 1);
-            setHasNotified(true);
-          } else {
-            console.log('[JobDetail] Job is awaiting prompt, but already notified');
-          }
         } else if (['completed', 'failed', 'cancelled'].includes(jobData.status)) {
           clearInterval(interval);
           loadJobDetail();

@@ -6,7 +6,9 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - backend_output:/app/output
+      - ~/backups/comfyui_queue.db:/app/comfyui_queue.db:z
+      - /home/david/projects/RawMaterials:/home/david/projects/RawMaterials:z
+      - ./backend/output:/app/output:z
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
@@ -23,5 +25,3 @@ services:
       - backend
     restart: unless-stopped
 
-volumes:
-  backend_output:
