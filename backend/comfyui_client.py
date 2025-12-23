@@ -242,6 +242,7 @@ class ComfyUIClient:
         high_lora: Optional[str] = None,
         low_lora: Optional[str] = None,
         fps: int = 16,
+        output_prefix: str = "",
     ) -> Dict[str, Any]:
         """Build a Wan2.2 i2v workflow using the pre-converted API template.
 
@@ -261,6 +262,7 @@ class ComfyUIClient:
             high_lora=high_lora,
             low_lora=low_lora,
             fps=fps,
+            output_prefix=output_prefix,
         )
 
     def build_workflow(

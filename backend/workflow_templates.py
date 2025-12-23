@@ -207,6 +207,16 @@ DEFAULT_HIGH_LORA = "wan2.2/NSFW-22-H-e8.safetensors"
 DEFAULT_LOW_LORA = "wan2.2/NSFW-22-L-e8.safetensors"
 
 
+def _sanitize_filename(name: str) -> str:
+    """Convert a string to a filesystem-friendly format."""
+    # Replace spaces with underscores, keep only alphanumeric, dash, underscore
+    safe = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in name)
+    # Collapse multiple underscores and strip
+    while '__' in safe:
+        safe = safe.replace('__', '_')
+    return safe.strip('_')
+
+
 def build_wan_i2v_workflow(
     prompt: str,
     negative_prompt: str = "",
@@ -220,6 +230,7 @@ def build_wan_i2v_workflow(
     high_lora: Optional[str] = None,
     low_lora: Optional[str] = None,
     fps: int = 16,
+    output_prefix: str = "",
 ) -> Dict[str, Any]:
     """Build a Wan2.2 i2v workflow by injecting values into the pre-converted template.
 
@@ -236,6 +247,7 @@ def build_wan_i2v_workflow(
         high_lora: Optional LoRA for high noise path (None = use default)
         low_lora: Optional LoRA for low noise path (None = use default)
         fps: Frames per second for output video (default 16)
+        output_prefix: Filename prefix for output video (sanitized job name)
 
     Returns:
         ComfyUI API workflow dict ready to submit
@@ -289,5 +301,15 @@ def build_wan_i2v_workflow(
     # Override FPS (node 94 - CreateVideo)
     workflow["94"]["inputs"]["fps"] = fps
     print(f"[Workflow] Set FPS: {fps}")
+
+    # Override output filename prefix (node 108 - SaveVideo)
+    # Use sanitized job name instead of "video/ComfyUI" subdirectory
+    if output_prefix:
+        safe_prefix = _sanitize_filename(output_prefix)
+        workflow["108"]["inputs"]["filename_prefix"] = safe_prefix
+        print(f"[Workflow] Set output prefix: {safe_prefix}")
+    else:
+        # Default to ComfyUI (no subdirectory)
+        workflow["108"]["inputs"]["filename_prefix"] = "ComfyUI"
 
     return workflow

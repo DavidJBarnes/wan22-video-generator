@@ -101,14 +101,9 @@ export default function ImageRepo() {
       const datePatternA = nameA.match(/^(\d{4})-(\d{2})-(\d{2})$/);
       const datePatternB = nameB.match(/^(\d{4})-(\d{2})-(\d{2})$/);
 
-      // If both are date-formatted folders, sort chronologically
+      // If both are date-formatted folders, always sort newest first
       if (datePatternA && datePatternB) {
-        // YYYY-MM-DD format is already sortable by string comparison
-        if (sortOrder === 'name-asc') {
-          return nameA.localeCompare(nameB);  // Chronological order
-        } else if (sortOrder === 'name-desc') {
-          return nameB.localeCompare(nameA);  // Reverse chronological
-        }
+        return nameB.localeCompare(nameA);  // Newest first
       }
 
       // For non-date items, use regular alphabetical sorting
@@ -148,14 +143,18 @@ export default function ImageRepo() {
     }
   }
 
-  function openImagePreview(image) {
+  const [selectedImageIndex, setSelectedImageIndex] = useState(-1);
+
+  function openImagePreview(image, index) {
     setSelectedImage(image);
+    setSelectedImageIndex(index);
     setShowPreviewModal(true);
   }
 
   function handleClosePreview() {
     setShowPreviewModal(false);
     setSelectedImage(null);
+    setSelectedImageIndex(-1);
     // Reload directory to reflect any rating changes
     loadDirectory(currentPath);
   }
@@ -164,15 +163,36 @@ export default function ImageRepo() {
     // Close preview modal and open job modal
     setShowPreviewModal(false);
     setSelectedImage(null);
+    setSelectedImageIndex(-1);
     setPreUploadedImage(imageUrl);
     setShowJobModal(true);
   }
 
   function handleDeleteImage() {
-    // Close preview modal and reload directory
-    setShowPreviewModal(false);
-    setSelectedImage(null);
-    loadDirectory(currentPath);
+    // Remove deleted image from local state and navigate to next
+    const newImages = images.filter((_, i) => i !== selectedImageIndex);
+    setAllImages(allImages.filter(img => img.path !== selectedImage.path));
+
+    if (newImages.length === 0) {
+      // No more images, close modal
+      setImages(newImages);
+      setShowPreviewModal(false);
+      setSelectedImage(null);
+      setSelectedImageIndex(-1);
+    } else {
+      // Navigate to next (or previous if we were at the end)
+      const nextIndex = selectedImageIndex >= newImages.length ? newImages.length - 1 : selectedImageIndex;
+      setImages(newImages);
+      setSelectedImage(newImages[nextIndex]);
+      setSelectedImageIndex(nextIndex);
+    }
+  }
+
+  function handleNavigateImage(newIndex) {
+    if (newIndex >= 0 && newIndex < images.length) {
+      setSelectedImage(images[newIndex]);
+      setSelectedImageIndex(newIndex);
+    }
   }
 
   return (
@@ -311,11 +331,11 @@ export default function ImageRepo() {
                 </div>
               ))}
 
-              {images.map(image => (
+              {images.map((image, index) => (
                 <div
                   key={image.path}
                   className="repo-item image"
-                  onClick={() => openImagePreview(image)}
+                  onClick={() => openImagePreview(image, index)}
                 >
                   <div className="repo-item-preview">
                     <img
@@ -344,11 +364,11 @@ export default function ImageRepo() {
                 </div>
               ))}
 
-              {images.map(image => (
+              {images.map((image, index) => (
                 <div
                   key={image.path}
                   className="repo-list-item image"
-                  onClick={() => openImagePreview(image)}
+                  onClick={() => openImagePreview(image, index)}
                 >
                   <span className="repo-list-icon">🖼️</span>
                   <span className="repo-list-name">{image.name}</span>
@@ -365,9 +385,12 @@ export default function ImageRepo() {
       {showPreviewModal && selectedImage && (
         <ImagePreviewModal
           image={selectedImage}
+          images={images}
+          currentIndex={selectedImageIndex}
           onClose={handleClosePreview}
           onCreateJob={handleCreateJobFromPreview}
           onDelete={handleDeleteImage}
+          onNavigate={handleNavigateImage}
         />
       )}
 

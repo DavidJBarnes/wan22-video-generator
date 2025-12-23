@@ -88,14 +88,28 @@ def stitch_videos(video_paths: List[str], output_path: str) -> bool:
         return False
     
     if len(video_paths) == 1:
-        # Just copy the single video
+        # Re-encode single video to WebM for Firefox compatibility
         try:
-            import shutil
-            shutil.copy(video_paths[0], output_path)
-            print(f"[VideoUtils] Single video copied to {output_path}")
-            return True
+            cmd = [
+                "ffmpeg",
+                "-y",
+                "-i", video_paths[0],
+                "-c:v", "libvpx-vp9",
+                "-crf", "30",
+                "-b:v", "0",
+                "-pix_fmt", "yuv420p",
+                "-deadline", "realtime",
+                output_path
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0 and os.path.exists(output_path):
+                print(f"[VideoUtils] Single video encoded to {output_path}")
+                return True
+            else:
+                print(f"[VideoUtils] ffmpeg error: {result.stderr}")
+                return False
         except Exception as e:
-            print(f"[VideoUtils] Error copying video: {e}")
+            print(f"[VideoUtils] Error encoding video: {e}")
             return False
     
     try:
@@ -107,14 +121,18 @@ def stitch_videos(video_paths: List[str], output_path: str) -> bool:
                 f.write(f"file '{escaped_path}'\n")
             concat_file = f.name
         
-        # Use ffmpeg concat demuxer
+        # Use VP9/WebM for native Firefox support (no H.264 codec issues)
         cmd = [
             "ffmpeg",
-            "-y",  # Overwrite output file if exists
+            "-y",
             "-f", "concat",
             "-safe", "0",
             "-i", concat_file,
-            "-c", "copy",  # Copy streams without re-encoding
+            "-c:v", "libvpx-vp9",
+            "-crf", "30",  # Quality (lower = better, 30 is good balance)
+            "-b:v", "0",  # Variable bitrate
+            "-pix_fmt", "yuv420p",
+            "-deadline", "realtime",  # Faster encoding
             output_path
         ]
         
@@ -160,35 +178,34 @@ def get_segment_frame_path(job_id: int, segment_index: int, frame_type: str = "l
     return str(job_dir / f"segment_{segment_index}_{frame_type}_frame.jpg")
 
 
+def _sanitize_filename(name: str) -> str:
+    """Convert a string to a filesystem-friendly format."""
+    # Replace spaces with underscores, keep only alphanumeric, dash, underscore
+    safe = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in name)
+    # Collapse multiple underscores and strip
+    while '__' in safe:
+        safe = safe.replace('__', '_')
+    return safe.strip('_')
+
+
 def get_final_video_path(job_id: int, job_name: str = None, finalized_at: str = None) -> str:
     """Get the path where the final stitched video should be stored.
 
     Args:
         job_id: The job ID
         job_name: Optional job name to include in filename
-        finalized_at: Optional datetime string when job was finalized
+        finalized_at: Optional datetime string when job was finalized (unused, kept for compatibility)
 
     Returns:
         Path to the final video file
     """
     job_dir = get_job_output_dir(job_id)
 
-    if job_name and finalized_at:
-        # Create filename-friendly version: JobName_YYYY-MM-DD_HH-MM-SS.mp4
-        # Remove or replace characters that aren't filesystem-friendly
-        safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in job_name)
-        safe_name = safe_name.strip().replace(' ', '_')
-
-        # Parse datetime and format as YYYY-MM-DD_HH-MM-SS
-        from datetime import datetime
-        try:
-            dt = datetime.fromisoformat(finalized_at.replace('Z', '+00:00'))
-            datetime_str = dt.strftime('%Y-%m-%d_%H-%M-%S')
-            filename = f"{safe_name}_{datetime_str}.mp4"
-        except (ValueError, AttributeError):
-            # Fallback if datetime parsing fails
-            filename = f"{safe_name}.mp4"
+    if job_name:
+        # Create filename-friendly version: JobName_00001.webm
+        safe_name = _sanitize_filename(job_name)
+        filename = f"{safe_name}_00001.webm"
     else:
-        filename = "final_video.mp4"
+        filename = f"job_{job_id}_00001.webm"
 
     return str(job_dir / filename)

@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
@@ -7,14 +6,8 @@ import JobDetail from './pages/JobDetail';
 import ImageRepo from './pages/ImageRepo';
 import LoraLibrary from './pages/LoraLibrary';
 import Settings from './pages/Settings';
-import { requestNotificationPermission } from './utils/helpers';
 
 function App() {
-  useEffect(() => {
-    // Request notification permission when the app loads
-    requestNotificationPermission();
-  }, []);
-
   return (
     <BrowserRouter>
       <Routes>
