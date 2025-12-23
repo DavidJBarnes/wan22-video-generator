@@ -8,7 +8,7 @@ services:
     volumes:
       - ~/backups/comfyui_queue.db:/app/comfyui_queue.db:z
       - /home/david/projects/RawMaterials:/home/david/projects/RawMaterials:z
-      - ./backend/output:/app/output:z
+      - ~/backups/video_output:/app/output:z
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped

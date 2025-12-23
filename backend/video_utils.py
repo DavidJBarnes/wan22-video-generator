@@ -99,6 +99,8 @@ def stitch_videos(video_paths: List[str], output_path: str) -> bool:
                 "-b:v", "0",
                 "-pix_fmt", "yuv420p",
                 "-deadline", "realtime",
+                "-cpu-used", "8",  # Max speed (0-8, higher = faster)
+                "-row-mt", "1",  # Multi-threaded row encoding
                 output_path
             ]
             result = subprocess.run(cmd, capture_output=True, text=True)
@@ -132,7 +134,9 @@ def stitch_videos(video_paths: List[str], output_path: str) -> bool:
             "-crf", "30",  # Quality (lower = better, 30 is good balance)
             "-b:v", "0",  # Variable bitrate
             "-pix_fmt", "yuv420p",
-            "-deadline", "realtime",  # Faster encoding
+            "-deadline", "realtime",
+            "-cpu-used", "8",  # Max speed (0-8, higher = faster)
+            "-row-mt", "1",  # Multi-threaded row encoding
             output_path
         ]
         
