@@ -32,3 +32,49 @@
 .video-card-actions .MuiIconButton-root {
   color: white;
 }
+
+/* Video Modal */
+.video-modal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-modal-content {
+  background: #1a1a1a;
+  border-radius: 8px;
+  outline: none;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.video-modal-title {
+  padding: 16px 16px 8px;
+  color: white;
+}
+
+.video-modal-player {
+  max-width: 100%;
+  max-height: calc(90vh - 120px);
+  border-radius: 0 0 8px 8px;
+}
+
+.video-modal-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+}
+
+.video-modal-actions .MuiIconButton-root {
+  color: white;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.video-modal-actions .MuiIconButton-root:hover {
+  background: rgba(0, 0, 0, 0.6);
+}
