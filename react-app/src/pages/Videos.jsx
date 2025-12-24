@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Card,
   CardContent,
@@ -9,16 +8,17 @@ import {
   Grid,
   Box,
   IconButton,
-  Tooltip
+  Tooltip,
+  Modal
 } from '@mui/material';
 import API from '../api/client';
 import { formatDate } from '../utils/helpers';
 import './Videos.css';
 
 export default function Videos() {
-  const navigate = useNavigate();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedVideo, setSelectedVideo] = useState(null);
 
   useEffect(() => {
     loadVideos();
@@ -76,7 +76,7 @@ export default function Videos() {
           {videos.map(job => (
             <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={job.id}>
               <Card className="video-card">
-                <CardActionArea onClick={() => navigate(`/job/${job.id}`)}>
+                <CardActionArea onClick={() => setSelectedVideo(job)}>
                   <CardMedia
                     component="video"
                     src={API.getJobVideo(job.id)}
@@ -114,6 +114,40 @@ export default function Videos() {
           ))}
         </Grid>
       )}
+
+      <Modal
+        open={!!selectedVideo}
+        onClose={() => setSelectedVideo(null)}
+        className="video-modal"
+      >
+        <Box className="video-modal-content">
+          {selectedVideo && (
+            <>
+              <Typography variant="h6" className="video-modal-title">
+                {selectedVideo.name}
+              </Typography>
+              <video
+                src={API.getJobVideo(selectedVideo.id)}
+                controls
+                autoPlay
+                className="video-modal-player"
+              />
+              <Box className="video-modal-actions">
+                <Tooltip title="Download">
+                  <IconButton
+                    onClick={(e) => handleDownload(selectedVideo.id, selectedVideo.name, e)}
+                  >
+                    <span style={{ fontSize: '20px' }}>⬇</span>
+                  </IconButton>
+                </Tooltip>
+                <IconButton onClick={() => setSelectedVideo(null)}>
+                  <span style={{ fontSize: '20px' }}>✕</span>
+                </IconButton>
+              </Box>
+            </>
+          )}
+        </Box>
+      </Modal>
     </div>
   );
 }
