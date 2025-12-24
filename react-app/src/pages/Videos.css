@@ -1,0 +1,34 @@
+.video-card {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.video-preview {
+  height: 180px;
+  object-fit: cover;
+  background-color: #1a1a1a;
+}
+
+.video-card-content {
+  flex-grow: 1;
+}
+
+.video-card-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.video-card:hover .video-card-actions {
+  opacity: 1;
+}
+
+.video-card-actions .MuiIconButton-root {
+  color: white;
+}

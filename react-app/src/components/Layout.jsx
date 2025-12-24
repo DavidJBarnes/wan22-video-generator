@@ -12,6 +12,9 @@ export default function Layout() {
         <NavLink to="/queue" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
           <span>📋</span> Job Queue
         </NavLink>
+        <NavLink to="/videos" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+          <span>🎬</span> Videos
+        </NavLink>
         <NavLink to="/images" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
           <span>🖼️</span> Image Repo
         </NavLink>
