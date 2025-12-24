@@ -11,7 +11,6 @@ import {
   Tooltip,
   Modal,
   TextField,
-  InputAdornment,
   Pagination
 } from '@mui/material';
 import API from '../api/client';
@@ -115,9 +114,7 @@ export default function Videos() {
   if (loading) {
     return (
       <div className="videos-page">
-        <div className="videos-header">
-          <h1>Videos</h1>
-        </div>
+        <h1>Videos</h1>
         <p>Loading...</p>
       </div>
     );
@@ -125,21 +122,16 @@ export default function Videos() {
 
   return (
     <div className="videos-page">
-      <div className="videos-header">
-        <h1>Videos</h1>
+      <h1>Videos</h1>
+      <div className="videos-search-wrapper">
         <TextField
           className="videos-search"
+          label="Search"
           placeholder="Search by name or LoRA..."
           size="small"
+          variant="outlined"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <span>🔍</span>
-              </InputAdornment>
-            ),
-          }}
         />
       </div>
 
