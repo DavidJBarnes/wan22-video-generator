@@ -187,7 +187,7 @@ export default function JobDetail() {
             <video
               key={`video-${id}-${job.completed_at}`}
               controls
-              style={{ width: '100%', maxWidth: '800px', borderRadius: '4px' }}
+              style={{ width: '100%', maxWidth: width >= height ? '500px' : '300px', borderRadius: '4px' }}
               src={API.getJobVideo(id)}
             >
               Your browser does not support video playback.
@@ -243,6 +243,18 @@ export default function JobDetail() {
             <div className="detail-meta-item">
               <label>Completed</label>
               <div className="value">{formatDate(job.completed_at)}</div>
+            </div>
+          )}
+          {job.input_image && (
+            <div className="detail-meta-item">
+              <label>Starting Image</label>
+              <div className="value" style={{
+                fontFamily: 'monospace',
+                fontSize: '12px',
+                wordBreak: 'break-all'
+              }}>
+                {job.input_image.split('/').slice(-3).join('/')}
+              </div>
             </div>
           )}
         </div>

@@ -201,8 +201,8 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
             />
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+            <div style={{ flex: 1 }}>
               <TextField
                 label="Width"
                 type="number"
@@ -213,7 +213,28 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                 size="small"
               />
             </div>
-            <div className="form-group">
+            <button
+              type="button"
+              onClick={() => {
+                const temp = width;
+                setWidth(height);
+                setHeight(temp);
+              }}
+              style={{
+                background: 'none',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                padding: '2px 5px',
+                fontSize: '12px',
+                color: '#666',
+                lineHeight: 1
+              }}
+              title="Swap width and height"
+            >
+              ↔
+            </button>
+            <div style={{ flex: 1 }}>
               <TextField
                 label="Height"
                 type="number"
@@ -238,6 +259,8 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                   <MenuItem value={3}>3 seconds</MenuItem>
                   <MenuItem value={4}>4 seconds</MenuItem>
                   <MenuItem value={5}>5 seconds</MenuItem>
+                  <MenuItem value={8}>8 seconds</MenuItem>
+                  <MenuItem value={10}>10 seconds</MenuItem>
                 </Select>
               </FormControl>
             </div>

@@ -100,6 +100,18 @@ class APIClient {
     });
   }
 
+  async moveJobUp(jobId) {
+    return this.request(`/jobs/${jobId}/move-up`, {
+      method: 'POST'
+    });
+  }
+
+  async moveJobDown(jobId) {
+    return this.request(`/jobs/${jobId}/move-down`, {
+      method: 'POST'
+    });
+  }
+
   // ============== Settings ==============
 
   async getSettings() {
@@ -312,6 +324,26 @@ class APIClient {
   async deleteLora(loraId) {
     return this.request(`/loras/${loraId}`, {
       method: 'DELETE'
+    });
+  }
+
+  async refreshLoraPreview(loraId) {
+    return this.request(`/loras/${loraId}/refresh-preview`, {
+      method: 'POST'
+    });
+  }
+
+  getLoraPreviewUrl(loraId) {
+    return `${API_BASE_URL}/loras/${loraId}/preview`;
+  }
+
+  async getHiddenLoras() {
+    return this.request('/loras/hidden');
+  }
+
+  async restoreHiddenLora(filename) {
+    return this.request(`/loras/hidden/restore?filename=${encodeURIComponent(filename)}`, {
+      method: 'POST'
     });
   }
 }

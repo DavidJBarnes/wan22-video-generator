@@ -90,6 +90,18 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Add priority column for queue ordering (lower number = higher priority)
+        try:
+            cursor.execute("ALTER TABLE jobs ADD COLUMN priority INTEGER DEFAULT 0")
+            # Initialize existing jobs with priority based on creation order
+            cursor.execute("""
+                UPDATE jobs SET priority = (
+                    SELECT COUNT(*) FROM jobs j2 WHERE j2.created_at <= jobs.created_at
+                )
+            """)
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Settings table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -110,10 +122,17 @@ def init_db():
                 prompt_text TEXT,
                 trigger_keywords TEXT,
                 rating INTEGER DEFAULT NULL,
+                preview_image_url TEXT,
                 created_at TEXT,
                 updated_at TEXT
             )
         """)
+
+        # Migration: Add preview_image_url column if it doesn't exist
+        try:
+            cursor.execute("ALTER TABLE lora_library ADD COLUMN preview_image_url TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
         # Image ratings table - stores ratings for images in the repository
         cursor.execute("""
@@ -123,6 +142,15 @@ def init_db():
                 rating INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Hidden LoRAs table - tracks LoRA files user wants hidden from library
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS hidden_loras (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename TEXT UNIQUE NOT NULL,
+                hidden_at TEXT NOT NULL
             )
         """)
 
@@ -161,9 +189,12 @@ def create_job(
     """Create a new job and return its ID."""
     with get_connection() as conn:
         cursor = conn.cursor()
+        # Get max priority to add new job at end of queue
+        cursor.execute("SELECT COALESCE(MAX(priority), 0) + 1 FROM jobs")
+        next_priority = cursor.fetchone()[0]
         cursor.execute("""
-            INSERT INTO jobs (name, prompt, negative_prompt, workflow_type, parameters, input_image, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO jobs (name, prompt, negative_prompt, workflow_type, parameters, input_image, created_at, priority)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             name,
             prompt,
@@ -171,7 +202,8 @@ def create_job(
             workflow_type,
             json.dumps(parameters) if parameters else None,
             input_image,
-            utc_now_iso()
+            utc_now_iso(),
+            next_priority
         ))
         return cursor.lastrowid
 
@@ -199,13 +231,107 @@ def get_all_jobs(limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
 
 
 def get_pending_jobs() -> List[Dict[str, Any]]:
-    """Get all pending jobs ordered by creation time."""
+    """Get all pending jobs ordered by priority (lower number = higher priority)."""
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT * FROM jobs WHERE status = 'pending' ORDER BY created_at ASC"
+            "SELECT * FROM jobs WHERE status = 'pending' ORDER BY priority ASC, created_at ASC"
         )
         return [_row_to_job_dict(row) for row in cursor.fetchall()]
+
+
+def move_job_up(job_id: int) -> bool:
+    """Move a job up in the queue (decrease priority number to run sooner).
+
+    Swaps priority with the job that has the next lower priority number.
+    Returns True if the job was moved, False if it's already at the top.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Get current job's priority
+        cursor.execute("SELECT priority FROM jobs WHERE id = ? AND status = 'pending'", (job_id,))
+        row = cursor.fetchone()
+        if not row:
+            return False
+        current_priority = row[0]
+
+        # Find the job with the next lower priority (the one above in queue)
+        cursor.execute("""
+            SELECT id, priority FROM jobs
+            WHERE status = 'pending' AND priority < ?
+            ORDER BY priority DESC LIMIT 1
+        """, (current_priority,))
+        swap_row = cursor.fetchone()
+
+        if not swap_row:
+            return False  # Already at top
+
+        swap_id, swap_priority = swap_row
+
+        # Swap priorities
+        cursor.execute("UPDATE jobs SET priority = ? WHERE id = ?", (swap_priority, job_id))
+        cursor.execute("UPDATE jobs SET priority = ? WHERE id = ?", (current_priority, swap_id))
+
+        return True
+
+
+def move_job_down(job_id: int) -> bool:
+    """Move a job down in the queue (increase priority number to run later).
+
+    Swaps priority with the job that has the next higher priority number.
+    Returns True if the job was moved, False if it's already at the bottom.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Get current job's priority
+        cursor.execute("SELECT priority FROM jobs WHERE id = ? AND status = 'pending'", (job_id,))
+        row = cursor.fetchone()
+        if not row:
+            return False
+        current_priority = row[0]
+
+        # Find the job with the next higher priority (the one below in queue)
+        cursor.execute("""
+            SELECT id, priority FROM jobs
+            WHERE status = 'pending' AND priority > ?
+            ORDER BY priority ASC LIMIT 1
+        """, (current_priority,))
+        swap_row = cursor.fetchone()
+
+        if not swap_row:
+            return False  # Already at bottom
+
+        swap_id, swap_priority = swap_row
+
+        # Swap priorities
+        cursor.execute("UPDATE jobs SET priority = ? WHERE id = ?", (swap_priority, job_id))
+        cursor.execute("UPDATE jobs SET priority = ? WHERE id = ?", (current_priority, swap_id))
+
+        return True
+
+
+def move_job_to_bottom(job_id: int) -> bool:
+    """Move a job to the bottom of the queue (set priority to MAX + 1).
+
+    Used when retrying a job so it goes to the end of the queue.
+    Returns True if the job was moved, False if job not found.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Verify job exists
+        cursor.execute("SELECT id FROM jobs WHERE id = ?", (job_id,))
+        if not cursor.fetchone():
+            return False
+
+        # Get max priority and set this job to max + 1
+        cursor.execute("SELECT COALESCE(MAX(priority), 0) + 1 FROM jobs")
+        next_priority = cursor.fetchone()[0]
+
+        cursor.execute("UPDATE jobs SET priority = ? WHERE id = ?", (next_priority, job_id))
+        return True
 
 
 def reset_orphaned_running_jobs():
@@ -650,12 +776,18 @@ def _normalize_base_name(base: str) -> str:
     This allows grouping LoRAs that are the same but have different epoch numbers,
     e.g., 'PENISLORA_22_i2v_{TYPE}_e320' and 'PENISLORA_22_i2v_{TYPE}_e496' -> same base.
     """
+    # Remove .safetensors extension
+    base = re.sub(r'\.safetensors$', '', base, flags=re.IGNORECASE)
+    # Remove {TYPE} placeholder (before lowercase conversion)
+    base = re.sub(r'\{TYPE\}', '', base)
     # Remove epoch patterns like _e320, -e496, _e8, -000005, _000030, etc.
     base = re.sub(r'[_-]e\d+', '', base)  # _e320, -e8
     base = re.sub(r'[_-]\d{5,}', '', base)  # _000005, -000030 (5+ digits)
     base = re.sub(r'[_-]\d+epoc', '', base)  # _100epoc, -154epoc
     # Normalize case for grouping (lowercase the whole thing)
     base = base.lower()
+    # Strip leading/trailing separators and spaces
+    base = base.strip('_- ')
     # Clean up any double underscores/hyphens left behind
     base = re.sub(r'[_-]+', '_', base)
     return base
@@ -676,6 +808,7 @@ def _get_lora_base_and_type(filename: str) -> tuple:
 
     # Patterns for HIGH variants
     high_patterns = [
+        r'^\d*[Hh]igh [Nn]oise[_-]',  # "23High noise-" prefix pattern
         r'[_-]?[Hh]igh[_-]?[Nn]oise',
         r'[_-]HIGH[_.-]',
         r'[_-]HIGH\.',
@@ -690,6 +823,7 @@ def _get_lora_base_and_type(filename: str) -> tuple:
 
     # Patterns for LOW variants
     low_patterns = [
+        r'^\d*[Ll]ow [Nn]oise[_-]',  # "56Low noise-" prefix pattern
         r'[_-]?[Ll]ow[_-]?[Nn]oise',
         r'[_-]LOW[_.-]',
         r'[_-]LOW\.',
@@ -724,7 +858,7 @@ def get_all_loras() -> List[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, base_name, high_file, low_file, friendly_name, url,
-                   prompt_text, trigger_keywords, rating, created_at, updated_at
+                   prompt_text, trigger_keywords, rating, preview_image_url, created_at, updated_at
             FROM lora_library
             ORDER BY COALESCE(friendly_name, base_name) ASC
         """)
@@ -738,7 +872,7 @@ def get_lora(lora_id: int) -> Optional[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, base_name, high_file, low_file, friendly_name, url,
-                   prompt_text, trigger_keywords, rating, created_at, updated_at
+                   prompt_text, trigger_keywords, rating, preview_image_url, created_at, updated_at
             FROM lora_library
             WHERE id = ?
         """, (lora_id,))
@@ -752,7 +886,7 @@ def get_lora_by_base_name(base_name: str) -> Optional[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, base_name, high_file, low_file, friendly_name, url,
-                   prompt_text, trigger_keywords, rating, created_at, updated_at
+                   prompt_text, trigger_keywords, rating, preview_image_url, created_at, updated_at
             FROM lora_library
             WHERE base_name = ?
         """, (base_name,))
@@ -766,7 +900,7 @@ def get_lora_by_file(filename: str) -> Optional[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, base_name, high_file, low_file, friendly_name, url,
-                   prompt_text, trigger_keywords, rating, created_at, updated_at
+                   prompt_text, trigger_keywords, rating, preview_image_url, created_at, updated_at
             FROM lora_library
             WHERE high_file = ? OR low_file = ?
         """, (filename, filename))
@@ -776,15 +910,46 @@ def get_lora_by_file(filename: str) -> Optional[Dict[str, Any]]:
 
 def update_lora(lora_id: int, friendly_name: Optional[str] = None,
                 url: Optional[str] = None, prompt_text: Optional[str] = None,
-                trigger_keywords: Optional[str] = None, rating: Optional[int] = None):
-    """Update LoRA metadata."""
+                trigger_keywords: Optional[str] = None, rating: Optional[int] = None,
+                preview_image_url: Optional[str] = None, _update_preview: bool = False):
+    """Update LoRA metadata.
+
+    Only updates fields that are explicitly provided. For preview_image_url,
+    set _update_preview=True to actually update it (prevents accidental overwrites).
+    """
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
+
+        # Build dynamic update query - only update fields that should change
+        updates = []
+        values = []
+
+        # Always update these fields (they're part of the form)
+        updates.append("friendly_name = ?")
+        values.append(friendly_name)
+        updates.append("url = ?")
+        values.append(url)
+        updates.append("prompt_text = ?")
+        values.append(prompt_text)
+        updates.append("trigger_keywords = ?")
+        values.append(trigger_keywords)
+        updates.append("rating = ?")
+        values.append(rating)
+
+        # Only update preview_image_url if explicitly requested
+        if _update_preview:
+            updates.append("preview_image_url = ?")
+            values.append(preview_image_url)
+
+        updates.append("updated_at = ?")
+        values.append(utc_now_iso())
+        values.append(lora_id)
+
+        cursor.execute(f"""
             UPDATE lora_library
-            SET friendly_name = ?, url = ?, prompt_text = ?, trigger_keywords = ?, rating = ?, updated_at = ?
+            SET {', '.join(updates)}
             WHERE id = ?
-        """, (friendly_name, url, prompt_text, trigger_keywords, rating, utc_now_iso(), lora_id))
+        """, values)
 
 
 def delete_lora(lora_id: int):
@@ -798,12 +963,20 @@ def bulk_upsert_loras(lora_filenames: List[str]) -> int:
     """Bulk insert/update LoRAs from a list of filenames (typically from ComfyUI).
 
     Groups high/low variants together by base name.
+    Skips any files that are in the hidden list.
     Returns the number of grouped LoRAs created/updated.
     """
+    # Get hidden files to skip
+    hidden_files = get_hidden_lora_filenames()
+
     # Group files by base name
     groups: Dict[str, Dict[str, Optional[str]]] = {}
 
     for filename in lora_filenames:
+        # Skip hidden files
+        if filename in hidden_files:
+            continue
+
         base_name, lora_type = _get_lora_base_and_type(filename)
 
         if base_name not in groups:
@@ -846,6 +1019,65 @@ def bulk_upsert_loras(lora_filenames: List[str]) -> int:
         conn.commit()
 
     return len(groups)
+
+
+# ============== Hidden LoRA Functions ==============
+
+def hide_lora_file(filename: str) -> bool:
+    """Add a LoRA file to the hidden list.
+
+    Returns True if added, False if already hidden.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO hidden_loras (filename, hidden_at)
+                VALUES (?, ?)
+            """, (filename, utc_now_iso()))
+            return True
+        except sqlite3.IntegrityError:
+            return False  # Already hidden
+
+
+def unhide_lora_file(filename: str) -> bool:
+    """Remove a LoRA file from the hidden list.
+
+    Returns True if removed, False if wasn't hidden.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM hidden_loras WHERE filename = ?", (filename,))
+        return cursor.rowcount > 0
+
+
+def get_hidden_loras() -> List[Dict[str, Any]]:
+    """Get all hidden LoRA filenames."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, filename, hidden_at
+            FROM hidden_loras
+            ORDER BY hidden_at DESC
+        """)
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+def is_lora_hidden(filename: str) -> bool:
+    """Check if a LoRA file is in the hidden list."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM hidden_loras WHERE filename = ?", (filename,))
+        return cursor.fetchone() is not None
+
+
+def get_hidden_lora_filenames() -> set:
+    """Get set of all hidden LoRA filenames for efficient lookup."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT filename FROM hidden_loras")
+        return {row['filename'] for row in cursor.fetchall()}
 
 
 # ============== Image Rating Functions ==============
