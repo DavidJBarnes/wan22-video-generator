@@ -344,6 +344,14 @@ export default function JobDetail() {
             <div className="value">{fps} fps</div>
           </div>
           <div className="detail-meta-item">
+            <label>Face Swap</label>
+            <div className="value">
+              {params.faceswap_enabled
+                ? (params.faceswap_image?.replace('.safetensors.png', '') || 'Enabled')
+                : 'N/A'}
+            </div>
+          </div>
+          <div className="detail-meta-item">
             <label>Created</label>
             <div className="value">{formatDate(job.created_at)}</div>
           </div>
