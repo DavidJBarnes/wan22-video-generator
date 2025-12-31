@@ -210,6 +210,8 @@ def build_wan_i2v_workflow(
     loras: Optional[List[Dict[str, str]]] = None,
     fps: int = 16,
     output_prefix: str = "",
+    faceswap_enabled: bool = False,
+    faceswap_image: str = "",
 ) -> Dict[str, Any]:
     """Build a Wan2.2 i2v workflow by injecting values into the pre-converted template.
 
@@ -229,6 +231,8 @@ def build_wan_i2v_workflow(
                If empty/None, no user LoRAs are applied (only lightx2v acceleration)
         fps: Frames per second for output video (default 16)
         output_prefix: Filename prefix for output video (sanitized job name)
+        faceswap_enabled: Whether to enable face swapping via ReActor
+        faceswap_image: Filename of the face image to swap in (in ComfyUI input folder)
 
     Returns:
         ComfyUI API workflow dict ready to submit
@@ -331,14 +335,67 @@ def build_wan_i2v_workflow(
     workflow["94"]["inputs"]["fps"] = fps
     print(f"[Workflow] Set FPS: {fps}")
 
-    # Override output filename prefix (node 108 - SaveVideo)
-    # Use sanitized job name instead of "video/ComfyUI" subdirectory
-    if output_prefix:
-        safe_prefix = _sanitize_filename(output_prefix)
+    # Override output filename prefix
+    safe_prefix = _sanitize_filename(output_prefix) if output_prefix else "ComfyUI"
+
+    # Handle faceswap or standard output
+    if faceswap_enabled:
+        print(f"[Workflow] Faceswap enabled with image: {faceswap_image}")
+
+        # Remove standard SaveVideo node (we'll use VHS_VideoCombine instead)
+        del workflow["108"]
+
+        # Add LoadImage node for face swap source (node 188)
+        workflow["188"] = {
+            "class_type": "LoadImage",
+            "inputs": {
+                "image": faceswap_image
+            },
+            "_meta": {"title": "Face Swap Source"}
+        }
+
+        # Add ReActorFaceSwapOpt node (node 183)
+        # Takes decoded frames from node 87 (VAEDecode) and swaps faces
+        workflow["183"] = {
+            "class_type": "ReActorFaceSwapOpt",
+            "inputs": {
+                "enabled": True,
+                "swap_model": "inswapper_128.onnx",
+                "facedetection": "retinaface_resnet50",
+                "face_restore_model": "codeformer-v0.1.0.pth",
+                "face_restore_visibility": 1,
+                "codeformer_weight": 1,
+                "input_image": ["87", 0],  # Decoded video frames from VAEDecode
+                "source_image": ["188", 0]  # Face to swap in
+            },
+            "_meta": {"title": "ReActor Face Swap"}
+        }
+
+        # Add VHS_VideoCombine node (node 186)
+        # Combines face-swapped frames into video
+        workflow["186"] = {
+            "class_type": "VHS_VideoCombine",
+            "inputs": {
+                "frame_rate": fps,
+                "loop_count": 0,
+                "filename_prefix": safe_prefix,
+                "format": "video/h264-mp4",
+                "pix_fmt": "yuv420p",
+                "crf": 15,
+                "save_metadata": True,
+                "trim_to_audio": False,
+                "pingpong": False,
+                "save_output": True,
+                "images": ["183", 0]  # Face-swapped frames from ReActor
+            },
+            "_meta": {"title": "Video Combine (Faceswap)"}
+        }
+
+        print(f"[Workflow] Added faceswap nodes: 188 (LoadImage), 183 (ReActor), 186 (VHS_VideoCombine)")
+        print(f"[Workflow] Removed node 108 (SaveVideo)")
+    else:
+        # Standard output via SaveVideo (node 108)
         workflow["108"]["inputs"]["filename_prefix"] = safe_prefix
         print(f"[Workflow] Set output prefix: {safe_prefix}")
-    else:
-        # Default to ComfyUI (no subdirectory)
-        workflow["108"]["inputs"]["filename_prefix"] = "ComfyUI"
 
     return workflow

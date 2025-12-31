@@ -242,6 +242,8 @@ class ComfyUIClient:
         loras: Optional[List[Dict[str, str]]] = None,
         fps: int = 16,
         output_prefix: str = "",
+        faceswap_enabled: bool = False,
+        faceswap_image: str = "",
     ) -> Dict[str, Any]:
         """Build a Wan2.2 i2v workflow using the pre-converted API template.
 
@@ -252,6 +254,8 @@ class ComfyUIClient:
             loras: Optional list of LoRA pairs (max 2). Each dict has:
                    - high_file: LoRA filename for high noise pass
                    - low_file: LoRA filename for low noise pass
+            faceswap_enabled: Whether to enable face swapping via ReActor
+            faceswap_image: Filename of the face image to swap in
         """
         return _build_wan_i2v_workflow(
             prompt=prompt,
@@ -266,6 +270,8 @@ class ComfyUIClient:
             loras=loras,
             fps=fps,
             output_prefix=output_prefix,
+            faceswap_enabled=faceswap_enabled,
+            faceswap_image=faceswap_image,
         )
 
     def build_workflow(

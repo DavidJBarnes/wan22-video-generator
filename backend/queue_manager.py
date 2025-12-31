@@ -345,6 +345,10 @@ class QueueManager:
         job_name = job.get("name", f"job_{job_id}")
         output_prefix = f"{job_name}_seg{segment_index}"
 
+        # Get faceswap settings from job parameters
+        faceswap_enabled = params.get("faceswap_enabled", False)
+        faceswap_image = params.get("faceswap_image", "")
+
         workflow = client.build_wan_i2v_workflow(
             prompt=segment.get("prompt") or job.get("prompt", ""),
             negative_prompt=job.get("negative_prompt", get_setting("default_negative_prompt", "")),
@@ -358,6 +362,8 @@ class QueueManager:
             loras=loras if loras else None,
             fps=fps,
             output_prefix=output_prefix,
+            faceswap_enabled=faceswap_enabled,
+            faceswap_image=faceswap_image,
         )
 
         # Queue the prompt
