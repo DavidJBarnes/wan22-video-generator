@@ -127,6 +127,8 @@ docker compose up -d --build
 docker compose logs -f backend
 ```
 
+**Important**: Always run `docker compose up -d --build` after making frontend (react-app) or backend changes. The app runs in Docker, so code changes won't take effect until containers are rebuilt.
+
 ### Volumes
 - `~/backups/comfyui_queue.db:/app/comfyui_queue.db` - Persistent database
 - Host image directories mounted with `:z` flag (SELinux/Fedora)

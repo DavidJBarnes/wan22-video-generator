@@ -9,12 +9,16 @@ export default function SubmitPromptModal({
   jobId,
   segmentIndex,
   defaultPrompt = '',
-  defaultLoras = [],  // Array of {high_file, low_file} pairs
+  defaultLoras = [],  // Array of {high_file, high_weight, low_file, low_weight} pairs
   onClose,
   onSuccess
 }) {
   const [prompt, setPrompt] = useState(defaultPrompt);
-  const [selectedLoras, setSelectedLoras] = useState([null, null]);  // Two LoRA slots
+  // Two LoRA slots, each with lora object and weights
+  const [selectedLoras, setSelectedLoras] = useState([
+    { lora: null, highWeight: 1, lowWeight: 1 },
+    { lora: null, highWeight: 1, lowWeight: 1 }
+  ]);
   const [loras, setLoras] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -42,7 +46,10 @@ export default function SubmitPromptModal({
   // When loras are loaded, find matching LoRAs from default values
   useEffect(() => {
     if (loras.length > 0 && defaultLoras && defaultLoras.length > 0) {
-      const newSelectedLoras = [null, null];
+      const newSelectedLoras = [
+        { lora: null, highWeight: 1, lowWeight: 1 },
+        { lora: null, highWeight: 1, lowWeight: 1 }
+      ];
 
       defaultLoras.slice(0, 2).forEach((defaultLora, idx) => {
         if (defaultLora && (defaultLora.high_file || defaultLora.low_file)) {
@@ -51,12 +58,16 @@ export default function SubmitPromptModal({
             l.high_file === defaultLora.low_file || l.low_file === defaultLora.low_file
           );
           if (matchingLora) {
-            newSelectedLoras[idx] = matchingLora;
+            newSelectedLoras[idx] = {
+              lora: matchingLora,
+              highWeight: defaultLora.high_weight || 1,
+              lowWeight: defaultLora.low_weight || 1
+            };
           }
         }
       });
 
-      if (newSelectedLoras[0] || newSelectedLoras[1]) {
+      if (newSelectedLoras[0].lora || newSelectedLoras[1].lora) {
         setSelectedLoras(newSelectedLoras);
       }
     }
@@ -64,7 +75,7 @@ export default function SubmitPromptModal({
 
   // Auto-populate prompt when first LoRA is selected (only if prompt is empty)
   useEffect(() => {
-    const firstLora = selectedLoras[0];
+    const firstLora = selectedLoras[0].lora;
     if (prompt.trim() || !firstLora) {
       return;
     }
@@ -93,12 +104,14 @@ export default function SubmitPromptModal({
     setSubmitting(true);
 
     try {
-      // Build loras array from selected LoRAs (filter out empty slots)
+      // Build loras array from selected LoRAs with weights (filter out empty slots)
       const lorasArray = selectedLoras
-        .filter(lora => lora && (lora.high_file || lora.low_file))
-        .map(lora => ({
-          high_file: lora.high_file || null,
-          low_file: lora.low_file || null
+        .filter(slot => slot.lora && (slot.lora.high_file || slot.lora.low_file))
+        .map(slot => ({
+          high_file: slot.lora.high_file || null,
+          high_weight: slot.highWeight,
+          low_file: slot.lora.low_file || null,
+          low_weight: slot.lowWeight
         }));
 
       await API.submitSegmentPrompt(
@@ -125,7 +138,7 @@ export default function SubmitPromptModal({
         {defaultPrompt && (
           <div style={{ marginBottom: '16px', padding: '12px', background: '#e3f2fd', borderRadius: '4px', border: '1px solid #90caf9' }}>
             <span style={{ fontSize: '13px', color: '#1976d2' }}>
-              ℹ️ Values pre-filled from previous segment. Modify as needed.
+              Values pre-filled from previous segment. Modify as needed.
             </span>
           </div>
         )}
@@ -145,48 +158,93 @@ export default function SubmitPromptModal({
             />
           </div>
 
-
-        <div className="form-group">
-          <LoraAutocomplete
-            label="LoRA 1 (optional)"
-            value={selectedLoras[0]}
-            onChange={(lora) => setSelectedLoras([lora, selectedLoras[1]])}
-            loras={loras}
-          />
-          {selectedLoras[0] && (
-            <div style={{ marginTop: '8px', fontSize: '12px', color: '#666', padding: '8px', background: '#f5f5f5', borderRadius: '4px' }}>
-              <div style={{ marginBottom: '4px' }}>
-                <span style={{ color: '#2e7d32', fontWeight: 500 }}>HIGH:</span>{' '}
-                {selectedLoras[0].high_file ? selectedLoras[0].high_file.split('/').pop() : <span style={{ color: '#999' }}>Not available</span>}
+          {/* LoRA 1 */}
+          <div className="form-group">
+            <label style={{ marginBottom: '8px', display: 'block' }}>LoRA 1 (optional)</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <div style={{ flex: 1 }}>
+                <LoraAutocomplete
+                  label=""
+                  value={selectedLoras[0].lora}
+                  onChange={(lora) => setSelectedLoras([
+                    { ...selectedLoras[0], lora },
+                    selectedLoras[1]
+                  ])}
+                  loras={loras}
+                />
               </div>
-              <div>
-                <span style={{ color: '#1565c0', fontWeight: 500 }}>LOW:</span>{' '}
-                {selectedLoras[0].low_file ? selectedLoras[0].low_file.split('/').pop() : <span style={{ color: '#999' }}>Not available</span>}
-              </div>
+              <TextField
+                type="number"
+                label="High"
+                size="small"
+                value={selectedLoras[0].highWeight}
+                onChange={(e) => setSelectedLoras([
+                  { ...selectedLoras[0], highWeight: parseFloat(e.target.value) || 0 },
+                  selectedLoras[1]
+                ])}
+                inputProps={{ min: 0, max: 2, step: 0.1 }}
+                sx={{ width: '80px' }}
+                disabled={!selectedLoras[0].lora}
+              />
+              <TextField
+                type="number"
+                label="Low"
+                size="small"
+                value={selectedLoras[0].lowWeight}
+                onChange={(e) => setSelectedLoras([
+                  { ...selectedLoras[0], lowWeight: parseFloat(e.target.value) || 0 },
+                  selectedLoras[1]
+                ])}
+                inputProps={{ min: 0, max: 2, step: 0.1 }}
+                sx={{ width: '80px' }}
+                disabled={!selectedLoras[0].lora}
+              />
             </div>
-          )}
-        </div>
+          </div>
 
-        <div className="form-group">
-          <LoraAutocomplete
-            label="LoRA 2 (optional)"
-            value={selectedLoras[1]}
-            onChange={(lora) => setSelectedLoras([selectedLoras[0], lora])}
-            loras={loras}
-          />
-          {selectedLoras[1] && (
-            <div style={{ marginTop: '8px', fontSize: '12px', color: '#666', padding: '8px', background: '#f5f5f5', borderRadius: '4px' }}>
-              <div style={{ marginBottom: '4px' }}>
-                <span style={{ color: '#2e7d32', fontWeight: 500 }}>HIGH:</span>{' '}
-                {selectedLoras[1].high_file ? selectedLoras[1].high_file.split('/').pop() : <span style={{ color: '#999' }}>Not available</span>}
+          {/* LoRA 2 */}
+          <div className="form-group">
+            <label style={{ marginBottom: '8px', display: 'block' }}>LoRA 2 (optional)</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+              <div style={{ flex: 1 }}>
+                <LoraAutocomplete
+                  label=""
+                  value={selectedLoras[1].lora}
+                  onChange={(lora) => setSelectedLoras([
+                    selectedLoras[0],
+                    { ...selectedLoras[1], lora }
+                  ])}
+                  loras={loras}
+                />
               </div>
-              <div>
-                <span style={{ color: '#1565c0', fontWeight: 500 }}>LOW:</span>{' '}
-                {selectedLoras[1].low_file ? selectedLoras[1].low_file.split('/').pop() : <span style={{ color: '#999' }}>Not available</span>}
-              </div>
+              <TextField
+                type="number"
+                label="High"
+                size="small"
+                value={selectedLoras[1].highWeight}
+                onChange={(e) => setSelectedLoras([
+                  selectedLoras[0],
+                  { ...selectedLoras[1], highWeight: parseFloat(e.target.value) || 0 }
+                ])}
+                inputProps={{ min: 0, max: 2, step: 0.1 }}
+                sx={{ width: '80px' }}
+                disabled={!selectedLoras[1].lora}
+              />
+              <TextField
+                type="number"
+                label="Low"
+                size="small"
+                value={selectedLoras[1].lowWeight}
+                onChange={(e) => setSelectedLoras([
+                  selectedLoras[0],
+                  { ...selectedLoras[1], lowWeight: parseFloat(e.target.value) || 0 }
+                ])}
+                inputProps={{ min: 0, max: 2, step: 0.1 }}
+                sx={{ width: '80px' }}
+                disabled={!selectedLoras[1].lora}
+              />
             </div>
-          )}
-        </div>
+          </div>
 
           <div className="modal-actions">
             <Button

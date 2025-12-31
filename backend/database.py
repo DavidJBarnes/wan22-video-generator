@@ -12,50 +12,79 @@ def utc_now_iso():
     return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
-def serialize_loras(loras: Optional[List[str]]) -> Optional[str]:
-    """Serialize a list of LoRA filenames to JSON string for database storage.
+def serialize_loras(loras: Optional[List[Dict[str, Any]]]) -> Optional[str]:
+    """Serialize a list of LoRA objects to JSON string for database storage.
 
     Args:
-        loras: List of LoRA filenames, or None
+        loras: List of LoRA dicts with 'file' and optional 'weight' keys, or None.
+               Can also accept list of strings (filenames) for backward compatibility.
 
     Returns:
-        JSON string like '["file1.safetensors", "file2.safetensors"]', or None if empty
+        JSON string like '[{"file": "f1.safetensors", "weight": 1.0}, ...]', or None if empty
     """
     if not loras:
         return None
-    # Filter out None/empty values
-    loras = [l for l in loras if l]
-    if not loras:
+
+    # Normalize to list of dicts with file and weight
+    normalized = []
+    for l in loras:
+        if not l:
+            continue
+        if isinstance(l, str):
+            # Backward compat: plain filename string
+            normalized.append({"file": l, "weight": 1.0})
+        elif isinstance(l, dict):
+            if l.get("file"):
+                normalized.append({
+                    "file": l["file"],
+                    "weight": float(l.get("weight", 1.0))
+                })
+
+    if not normalized:
         return None
-    return json.dumps(loras)
+    return json.dumps(normalized)
 
 
-def parse_loras(db_value: Optional[str]) -> List[str]:
-    """Parse LoRA data from database, handling both old and new formats.
+def parse_loras(db_value: Optional[str]) -> List[Dict[str, Any]]:
+    """Parse LoRA data from database, handling multiple formats.
 
     Args:
         db_value: Database value - could be:
             - None (no LoRAs)
-            - Single filename string (old format): "wan2.2/lora.safetensors"
-            - JSON array string (new format): '["wan2.2/lora1.safetensors", "wan2.2/lora2.safetensors"]'
+            - Single filename string (legacy): "wan2.2/lora.safetensors"
+            - JSON array of strings (old): '["wan2.2/lora1.safetensors", ...]'
+            - JSON array of objects (new): '[{"file": "...", "weight": 1.0}, ...]'
 
     Returns:
-        List of LoRA filenames (may be empty)
+        List of LoRA dicts with 'file' and 'weight' keys (may be empty)
     """
     if not db_value:
         return []
 
-    # Try parsing as JSON first (new format)
+    # Try parsing as JSON first
     if db_value.startswith('['):
         try:
             parsed = json.loads(db_value)
             if isinstance(parsed, list):
-                return [l for l in parsed if l]  # Filter None/empty
+                result = []
+                for item in parsed:
+                    if not item:
+                        continue
+                    if isinstance(item, str):
+                        # Old format: plain filename
+                        result.append({"file": item, "weight": 1.0})
+                    elif isinstance(item, dict) and item.get("file"):
+                        # New format: object with file and weight
+                        result.append({
+                            "file": item["file"],
+                            "weight": float(item.get("weight", 1.0))
+                        })
+                return result
         except json.JSONDecodeError:
             pass
 
-    # Fall back to treating as single filename (old format)
-    return [db_value]
+    # Fall back to treating as single filename (legacy format)
+    return [{"file": db_value, "weight": 1.0}]
 
 # Use absolute path to avoid issues with current working directory
 from pathlib import Path
@@ -198,6 +227,36 @@ def init_db():
                 filename TEXT UNIQUE NOT NULL,
                 hidden_at TEXT NOT NULL
             )
+        """)
+
+        # Uploaded images table - tracks images uploaded to ComfyUI for deduplication
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS uploaded_images (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                content_hash TEXT UNIQUE NOT NULL,
+                comfyui_filename TEXT NOT NULL,
+                original_filename TEXT,
+                uploaded_at TEXT NOT NULL
+            )
+        """)
+
+        # Job activity logs - tracks key events for debugging
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS job_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id INTEGER NOT NULL,
+                segment_index INTEGER,
+                timestamp TEXT NOT NULL,
+                level TEXT NOT NULL,
+                message TEXT NOT NULL,
+                details TEXT,
+                FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+            )
+        """)
+
+        # Index for fast log retrieval by job
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_job_logs_job_id ON job_logs(job_id)
         """)
 
         # Insert default settings if not exist
@@ -584,6 +643,63 @@ def update_settings(settings: Dict[str, str]):
             )
 
 
+# ============== Job Logging Functions ==============
+
+def add_job_log(
+    job_id: int,
+    level: str,
+    message: str,
+    segment_index: Optional[int] = None,
+    details: Optional[str] = None
+):
+    """Add a log entry for a job.
+
+    Args:
+        job_id: The job ID
+        level: Log level (INFO, WARN, ERROR)
+        message: Short log message
+        segment_index: Optional segment index if log is segment-specific
+        details: Optional detailed information (JSON string or text)
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO job_logs (job_id, segment_index, timestamp, level, message, details)
+               VALUES (?, ?, datetime('now'), ?, ?, ?)""",
+            (job_id, segment_index, level, message, details)
+        )
+
+
+def get_job_logs(job_id: int, limit: int = 100) -> List[Dict[str, Any]]:
+    """Get log entries for a job, ordered by timestamp descending.
+
+    Args:
+        job_id: The job ID
+        limit: Maximum number of logs to return
+
+    Returns:
+        List of log entries as dictionaries
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT id, job_id, segment_index, timestamp, level, message, details
+               FROM job_logs
+               WHERE job_id = ?
+               ORDER BY timestamp DESC, id DESC
+               LIMIT ?""",
+            (job_id, limit)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def clear_job_logs(job_id: int):
+    """Delete all log entries for a job."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM job_logs WHERE job_id = ?", (job_id,))
+
+
 # ============== Segment Functions ==============
 
 def create_first_segment(
@@ -894,6 +1010,7 @@ def _get_lora_base_and_type(filename: str) -> tuple:
         r'[_-]HIGH\.',
         r'[_-]high[_.]',
         r'-H-',
+        r'-H\.',  # -H at end of name (before extension)
         r'_H\.',
         r'[_-]HN[_-]',
         r'_high_',
@@ -909,6 +1026,7 @@ def _get_lora_base_and_type(filename: str) -> tuple:
         r'[_-]LOW\.',
         r'[_-]low[_.]',
         r'-L-',
+        r'-L\.',  # -L at end of name (before extension)
         r'_L\.',
         r'[_-]LN[_-]',
         r'_low_',
@@ -1039,44 +1157,70 @@ def delete_lora(lora_id: int):
         cursor.execute("DELETE FROM lora_library WHERE id = ?", (lora_id,))
 
 
+def _get_existing_filenames(cursor) -> set:
+    """Get all filenames currently in the lora_library (both high and low)."""
+    cursor.execute("SELECT high_file, low_file FROM lora_library")
+    existing = set()
+    for row in cursor.fetchall():
+        if row['high_file']:
+            existing.add(row['high_file'])
+        if row['low_file']:
+            existing.add(row['low_file'])
+    return existing
+
+
 def bulk_upsert_loras(lora_filenames: List[str]) -> int:
     """Bulk insert/update LoRAs from a list of filenames (typically from ComfyUI).
 
     Groups high/low variants together by base name.
     Skips any files that are in the hidden list.
+    Deduplicates based on actual .safetensors filename - if a file already exists
+    in the database, it won't be processed again.
     Returns the number of grouped LoRAs created/updated.
     """
     # Get hidden files to skip
     hidden_files = get_hidden_lora_filenames()
 
-    # Group files by base name
-    groups: Dict[str, Dict[str, Optional[str]]] = {}
-
-    for filename in lora_filenames:
-        # Skip hidden files
-        if filename in hidden_files:
-            continue
-
-        base_name, lora_type = _get_lora_base_and_type(filename)
-
-        if base_name not in groups:
-            groups[base_name] = {'high_file': None, 'low_file': None}
-
-        if lora_type == 'high':
-            groups[base_name]['high_file'] = filename
-        elif lora_type == 'low':
-            groups[base_name]['low_file'] = filename
-        else:
-            # Unknown type - store as high (single file LoRA)
-            groups[base_name]['high_file'] = filename
-
-    # Upsert each group
     with get_connection() as conn:
         cursor = conn.cursor()
+
+        # Get all filenames already in the database for deduplication
+        existing_filenames = _get_existing_filenames(cursor)
+
+        # Group files by base name, skipping files already in the database
+        groups: Dict[str, Dict[str, Optional[str]]] = {}
+
+        for filename in lora_filenames:
+            # Skip hidden files
+            if filename in hidden_files:
+                continue
+
+            # Skip text-to-video LoRAs (this app only handles i2v)
+            if '_t2v_' in filename.lower():
+                continue
+
+            # Skip files that already exist in the database (dedup by actual filename)
+            if filename in existing_filenames:
+                continue
+
+            base_name, lora_type = _get_lora_base_and_type(filename)
+
+            if base_name not in groups:
+                groups[base_name] = {'high_file': None, 'low_file': None}
+
+            if lora_type == 'high':
+                groups[base_name]['high_file'] = filename
+            elif lora_type == 'low':
+                groups[base_name]['low_file'] = filename
+            else:
+                # Unknown type - store as high (single file LoRA)
+                groups[base_name]['high_file'] = filename
+
+        # Upsert each group
         now = utc_now_iso()
 
         for base_name, files in groups.items():
-            # Check if exists
+            # Check if exists by base_name
             cursor.execute("SELECT id, high_file, low_file FROM lora_library WHERE base_name = ?", (base_name,))
             existing = cursor.fetchone()
 
@@ -1099,6 +1243,94 @@ def bulk_upsert_loras(lora_filenames: List[str]) -> int:
         conn.commit()
 
     return len(groups)
+
+
+def cleanup_duplicate_loras() -> dict:
+    """Find and remove duplicate LoRA entries based on actual .safetensors filename.
+
+    If the same filename appears in multiple rows, keeps the row with the most
+    metadata (friendly_name, rating, url, etc.) and removes the filename from others.
+    Returns a dict with cleanup stats.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Get all rows
+        cursor.execute("""
+            SELECT id, base_name, high_file, low_file, friendly_name, url,
+                   prompt_text, trigger_keywords, rating, preview_image_url
+            FROM lora_library
+        """)
+        rows = [dict(row) for row in cursor.fetchall()]
+
+        # Track which filenames we've seen and which row "owns" them
+        # filename -> (row_id, metadata_score)
+        filename_owners: Dict[str, tuple] = {}
+        duplicates_found = []
+
+        def metadata_score(row):
+            """Score how much metadata a row has (higher = more metadata)."""
+            score = 0
+            if row['friendly_name']:
+                score += 10
+            if row['rating']:
+                score += 5
+            if row['url']:
+                score += 3
+            if row['prompt_text']:
+                score += 2
+            if row['trigger_keywords']:
+                score += 2
+            if row['preview_image_url']:
+                score += 2
+            return score
+
+        # First pass: determine which row should own each filename
+        for row in rows:
+            row_score = metadata_score(row)
+
+            for file_col in ['high_file', 'low_file']:
+                filename = row[file_col]
+                if not filename:
+                    continue
+
+                if filename not in filename_owners:
+                    filename_owners[filename] = (row['id'], row_score, file_col)
+                else:
+                    existing_id, existing_score, existing_col = filename_owners[filename]
+                    if row_score > existing_score:
+                        # This row has more metadata, it should own the filename
+                        duplicates_found.append((existing_id, filename, existing_col))
+                        filename_owners[filename] = (row['id'], row_score, file_col)
+                    else:
+                        # Existing row keeps ownership
+                        duplicates_found.append((row['id'], filename, file_col))
+
+        # Second pass: remove duplicate filenames from non-owner rows
+        removed_count = 0
+        for row_id, filename, file_col in duplicates_found:
+            cursor.execute(f"""
+                UPDATE lora_library
+                SET {file_col} = NULL, updated_at = ?
+                WHERE id = ? AND {file_col} = ?
+            """, (utc_now_iso(), row_id, filename))
+            if cursor.rowcount > 0:
+                removed_count += 1
+
+        # Third pass: delete rows that now have no files
+        cursor.execute("""
+            DELETE FROM lora_library
+            WHERE high_file IS NULL AND low_file IS NULL
+        """)
+        deleted_empty_rows = cursor.rowcount
+
+        conn.commit()
+
+    return {
+        'duplicates_found': len(duplicates_found),
+        'duplicates_removed': removed_count,
+        'empty_rows_deleted': deleted_empty_rows
+    }
 
 
 # ============== Hidden LoRA Functions ==============
@@ -1192,3 +1424,46 @@ def get_all_image_ratings() -> Dict[str, int]:
         cursor.execute("SELECT image_path, rating FROM image_ratings WHERE rating IS NOT NULL")
         rows = cursor.fetchall()
         return {row['image_path']: row['rating'] for row in rows}
+
+
+# ============== Uploaded Images Functions (Deduplication) ==============
+
+import hashlib
+
+
+def get_image_by_hash(content_hash: str) -> Optional[Dict[str, Any]]:
+    """Check if an image with this hash has already been uploaded.
+
+    Returns the existing record if found, None otherwise.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, content_hash, comfyui_filename, original_filename, uploaded_at
+            FROM uploaded_images
+            WHERE content_hash = ?
+        """, (content_hash,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def store_uploaded_image(content_hash: str, comfyui_filename: str, original_filename: str = None) -> bool:
+    """Store a record of an uploaded image for future deduplication.
+
+    Returns True if stored, False if hash already exists.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO uploaded_images (content_hash, comfyui_filename, original_filename, uploaded_at)
+                VALUES (?, ?, ?, ?)
+            """, (content_hash, comfyui_filename, original_filename, utc_now_iso()))
+            return True
+        except sqlite3.IntegrityError:
+            return False  # Hash already exists
+
+
+def compute_image_hash(image_data: bytes) -> str:
+    """Compute SHA256 hash of image data."""
+    return hashlib.sha256(image_data).hexdigest()
