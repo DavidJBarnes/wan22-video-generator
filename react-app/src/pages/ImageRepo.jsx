@@ -144,19 +144,33 @@ export default function ImageRepo() {
   }
 
   const [selectedImageIndex, setSelectedImageIndex] = useState(-1);
+  const [savedScrollTop, setSavedScrollTop] = useState(0);
 
   function openImagePreview(image, index) {
+    // Save scroll position of .main-content (not window - window doesn't scroll in this layout)
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+      setSavedScrollTop(mainContent.scrollTop);
+    }
     setSelectedImage(image);
     setSelectedImageIndex(index);
     setShowPreviewModal(true);
   }
 
   function handleClosePreview() {
+    const scrollToRestore = savedScrollTop;
     setShowPreviewModal(false);
     setSelectedImage(null);
     setSelectedImageIndex(-1);
-    // Reload directory to reflect any rating changes
-    loadDirectory(currentPath);
+    // Reload directory to reflect any rating changes, then restore scroll
+    loadDirectory(currentPath).then(() => {
+      requestAnimationFrame(() => {
+        const mainContent = document.querySelector('.main-content');
+        if (mainContent) {
+          mainContent.scrollTop = scrollToRestore;
+        }
+      });
+    });
   }
 
   function handleCreateJobFromPreview(imageUrl) {
@@ -346,7 +360,14 @@ export default function ImageRepo() {
                       }}
                     />
                   </div>
-                  <div className="repo-item-name">{image.name}</div>
+                  <div className="repo-item-name">
+                    {image.name}
+                    {image.rating && (
+                      <span style={{ marginLeft: '6px', color: '#f5a623' }}>
+                        {'★'.repeat(image.rating)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -371,7 +392,14 @@ export default function ImageRepo() {
                   onClick={() => openImagePreview(image, index)}
                 >
                   <span className="repo-list-icon">🖼️</span>
-                  <span className="repo-list-name">{image.name}</span>
+                  <span className="repo-list-name">
+                    {image.name}
+                    {image.rating && (
+                      <span style={{ marginLeft: '8px', color: '#f5a623' }}>
+                        {'★'.repeat(image.rating)}
+                      </span>
+                    )}
+                  </span>
                   <span className="repo-list-type">
                     {image.name.split('.').pop().toUpperCase()}
                   </span>

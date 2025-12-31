@@ -16,7 +16,33 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
   const [promptText, setPromptText] = useState(lora.prompt_text || '');
   const [triggerKeywords, setTriggerKeywords] = useState(lora.trigger_keywords || '');
   const [rating, setRating] = useState(lora.rating || null);
+  const [hasPreview, setHasPreview] = useState(!!lora.preview_image_url);
+  const [previewCacheBust, setPreviewCacheBust] = useState(Date.now());
   const [saving, setSaving] = useState(false);
+  const [fetchingPreview, setFetchingPreview] = useState(false);
+
+  // Get the preview URL from the cached endpoint
+  const previewUrl = hasPreview ? `${API.getLoraPreviewUrl(lora.id)}?t=${previewCacheBust}` : '';
+
+  async function handleFetchPreview() {
+    if (!url || !url.includes('civitai.com')) {
+      showToast('Enter a CivitAI URL first', 'warning');
+      return;
+    }
+
+    setFetchingPreview(true);
+    try {
+      await API.refreshLoraPreview(lora.id);
+      setHasPreview(true);
+      setPreviewCacheBust(Date.now()); // Force refresh the cached image
+      showToast('Preview fetched and cached', 'success');
+    } catch (error) {
+      console.error('Failed to fetch preview:', error);
+      showToast('Failed to fetch preview from CivitAI', 'error');
+    } finally {
+      setFetchingPreview(false);
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -29,6 +55,7 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
         prompt_text: promptText || null,
         trigger_keywords: triggerKeywords || null,
         rating: rating
+        // preview_image_url is managed by the refresh-preview endpoint
       });
 
       showToast('LoRA metadata updated', 'success');
@@ -106,6 +133,72 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
               size="small"
               helperText="Link to the LoRA's page (CivitAI, HuggingFace, etc.)"
             />
+          </div>
+
+          {/* Preview Image Section */}
+          <div className="form-group">
+            <Typography component="legend" sx={{ fontSize: '14px', mb: 1, color: '#666' }}>
+              Preview Image
+            </Typography>
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+              <div style={{
+                width: '100px',
+                height: '100px',
+                backgroundColor: '#f0f0f0',
+                borderRadius: '4px',
+                overflow: 'hidden',
+                flexShrink: 0
+              }}>
+                {previewUrl ? (
+                  previewUrl.match(/\.(mp4|webm|mov)$/i) ? (
+                    <video
+                      src={previewUrl}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      muted
+                      loop
+                      autoPlay
+                      playsInline
+                      onError={(e) => e.target.style.display = 'none'}
+                    />
+                  ) : (
+                    <img
+                      src={previewUrl}
+                      alt="Preview"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onError={(e) => e.target.style.display = 'none'}
+                    />
+                  )
+                ) : (
+                  <div style={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#999',
+                    fontSize: '11px',
+                    textAlign: 'center',
+                    padding: '8px'
+                  }}>
+                    No preview
+                  </div>
+                )}
+              </div>
+              <div style={{ flex: 1 }}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={handleFetchPreview}
+                  disabled={fetchingPreview || !url?.includes('civitai.com')}
+                  sx={{ mb: 1 }}
+                >
+                  {fetchingPreview ? 'Fetching...' : 'Fetch from CivitAI'}
+                </Button>
+                <Typography variant="caption" display="block" sx={{ color: '#666' }}>
+                  Automatically fetch preview image from CivitAI URL
+                </Typography>
+              </div>
+            </div>
           </div>
 
           <div className="form-group">

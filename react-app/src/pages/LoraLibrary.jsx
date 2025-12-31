@@ -87,39 +87,81 @@ export default function LoraLibrary() {
           <table>
             <thead>
               <tr>
+                <th style={{ width: '70px' }}>Preview</th>
                 <th>Name</th>
-                <th>Files</th>
                 <th>Rating</th>
                 <th>URL</th>
                 <th>Trigger Keywords</th>
-                <th style={{ width: '120px' }}>Actions</th>
+                <th style={{ width: '80px' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loras.map((lora) => (
                 <tr key={lora.id} onClick={() => handleEdit(lora)} style={{ cursor: 'pointer' }}>
-                  <td>
-                    {lora.friendly_name ? (
-                      <strong>{lora.friendly_name}</strong>
+                  <td style={{ padding: '4px' }}>
+                    {lora.preview_image_url ? (
+                      lora.preview_image_url.match(/\.(mp4|webm|mov)$/i) ? (
+                        <video
+                          src={API.getLoraPreviewUrl(lora.id)}
+                          style={{
+                            width: '60px',
+                            height: '60px',
+                            objectFit: 'cover',
+                            borderRadius: '4px'
+                          }}
+                          muted
+                          loop
+                          autoPlay
+                          playsInline
+                          onError={(e) => e.target.style.display = 'none'}
+                        />
+                      ) : (
+                        <img
+                          src={API.getLoraPreviewUrl(lora.id)}
+                          alt="Preview"
+                          style={{
+                            width: '60px',
+                            height: '60px',
+                            objectFit: 'cover',
+                            borderRadius: '4px'
+                          }}
+                          onError={(e) => e.target.style.display = 'none'}
+                        />
+                      )
                     ) : (
-                      <span style={{ color: '#999', fontStyle: 'italic' }}>—</span>
+                      <div style={{
+                        width: '60px',
+                        height: '60px',
+                        backgroundColor: '#f0f0f0',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#999',
+                        fontSize: '10px'
+                      }}>
+                        No preview
+                      </div>
                     )}
                   </td>
-                  <td style={{ fontSize: '12px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      {lora.high_file ? (
-                        <span style={{ color: '#2e7d32' }} title={lora.high_file}>
-                          HIGH: {lora.high_file.split('/').pop()}
-                        </span>
+                  <td>
+                    <div>
+                      {lora.friendly_name ? (
+                        <strong>{lora.friendly_name}</strong>
                       ) : (
-                        <span style={{ color: '#999' }}>HIGH: —</span>
+                        <span style={{ color: '#999', fontStyle: 'italic' }}>—</span>
                       )}
-                      {lora.low_file ? (
-                        <span style={{ color: '#1565c0' }} title={lora.low_file}>
-                          LOW: {lora.low_file.split('/').pop()}
+                    </div>
+                    <div style={{ fontSize: '11px', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                      {lora.high_file && (
+                        <span style={{ color: '#2e7d32' }} title={lora.high_file}>
+                          H: {lora.high_file.split('/').pop()}
                         </span>
-                      ) : (
-                        <span style={{ color: '#999' }}>LOW: —</span>
+                      )}
+                      {lora.low_file && (
+                        <span style={{ color: '#1565c0' }} title={lora.low_file}>
+                          L: {lora.low_file.split('/').pop()}
+                        </span>
                       )}
                     </div>
                   </td>

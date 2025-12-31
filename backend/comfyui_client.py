@@ -239,8 +239,7 @@ class ComfyUIClient:
         high_noise_model: str = "wan2.2_i2v_high_noise_14B_fp16.safetensors",
         low_noise_model: str = "wan2.2_i2v_low_noise_14B_fp16.safetensors",
         seed: Optional[int] = None,
-        high_lora: Optional[str] = None,
-        low_lora: Optional[str] = None,
+        loras: Optional[List[Dict[str, str]]] = None,
         fps: int = 16,
         output_prefix: str = "",
     ) -> Dict[str, Any]:
@@ -248,6 +247,11 @@ class ComfyUIClient:
 
         Delegates to workflow_templates.build_wan_i2v_workflow which injects
         user values into the pre-converted workflow constant.
+
+        Args:
+            loras: Optional list of LoRA pairs (max 2). Each dict has:
+                   - high_file: LoRA filename for high noise pass
+                   - low_file: LoRA filename for low noise pass
         """
         return _build_wan_i2v_workflow(
             prompt=prompt,
@@ -259,8 +263,7 @@ class ComfyUIClient:
             high_noise_model=high_noise_model,
             low_noise_model=low_noise_model,
             seed=seed,
-            high_lora=high_lora,
-            low_lora=low_lora,
+            loras=loras,
             fps=fps,
             output_prefix=output_prefix,
         )

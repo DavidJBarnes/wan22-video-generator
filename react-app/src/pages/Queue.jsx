@@ -8,6 +8,7 @@ import {
   Checkbox,
   ListItemText,
   Button,
+  IconButton,
   Table,
   TableBody,
   TableCell,
@@ -17,6 +18,8 @@ import {
   TablePagination,
   Paper
 } from '@mui/material';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import API from '../api/client';
 import { formatDate, showToast } from '../utils/helpers';
 import CreateJobModal from '../components/CreateJobModal';
@@ -84,10 +87,14 @@ export default function Queue() {
         return priorityA - priorityB;
       }
 
-      // For awaiting_prompt/running/pending, sort oldest first (by creation date)
+      // For awaiting_prompt/running, sort oldest first (by creation date)
+      // For pending, sort by priority (lower number = higher priority)
       // For completed/failed/cancelled, sort newest first (by completed_at or created_at)
-      if (['awaiting_prompt', 'running', 'pending'].includes(a.status)) {
+      if (['awaiting_prompt', 'running'].includes(a.status)) {
         return new Date(a.created_at) - new Date(b.created_at);
+      } else if (a.status === 'pending') {
+        // Sort by priority (lower number = higher in queue)
+        return (a.priority || 0) - (b.priority || 0);
       } else {
         // Use completed_at if available, otherwise created_at
         const dateA = a.completed_at ? new Date(a.completed_at) : new Date(a.created_at);
@@ -136,6 +143,28 @@ export default function Queue() {
     } catch (error) {
       console.error('Failed to delete job:', error);
       showToast('Failed to delete job', 'error');
+    }
+  }
+
+  async function handleMoveUp(jobId, event) {
+    event.stopPropagation();
+    try {
+      await API.moveJobUp(jobId);
+      await loadJobs();
+    } catch (error) {
+      console.error('Failed to move job up:', error);
+      showToast('Failed to move job', 'error');
+    }
+  }
+
+  async function handleMoveDown(jobId, event) {
+    event.stopPropagation();
+    try {
+      await API.moveJobDown(jobId);
+      await loadJobs();
+    } catch (error) {
+      console.error('Failed to move job down:', error);
+      showToast('Failed to move job', 'error');
     }
   }
 
@@ -188,6 +217,7 @@ export default function Queue() {
         <Table>
           <TableHead>
             <TableRow>
+              <TableCell style={{fontWeight:'bold', width: '60px'}}>#</TableCell>
               <TableCell style={{fontWeight:'bold'}}></TableCell>
               <TableCell style={{fontWeight:'bold'}}>Job Name</TableCell>
               <TableCell style={{fontWeight:'bold'}}>Created</TableCell>
@@ -198,7 +228,7 @@ export default function Queue() {
           <TableBody>
             {jobs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ color: '#999' }}>
+                <TableCell colSpan={6} align="center" sx={{ color: '#999' }}>
                   No jobs match the filter
                 </TableCell>
               </TableRow>
@@ -207,6 +237,9 @@ export default function Queue() {
                 .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                 .map(job => {
                   const position = getQueuePosition(job);
+                  const pendingJobs = jobs.filter(j => j.status === 'pending');
+                  const isFirstPending = position === 1;
+                  const isLastPending = position === pendingJobs.length;
                   return (
                     <TableRow
                       key={job.id}
@@ -214,6 +247,31 @@ export default function Queue() {
                       sx={{ cursor: 'pointer' }}
                       onClick={() => navigate(`/job/${job.id}`)}
                     >
+                      <TableCell sx={{ padding: '4px 8px' }}>
+                        {position ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ fontWeight: 'bold', minWidth: '20px' }}>{position}</span>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <IconButton
+                                size="small"
+                                onClick={(e) => handleMoveUp(job.id, e)}
+                                disabled={isFirstPending}
+                                sx={{ padding: '2px' }}
+                              >
+                                <KeyboardArrowUpIcon fontSize="small" />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                onClick={(e) => handleMoveDown(job.id, e)}
+                                disabled={isLastPending}
+                                sx={{ padding: '2px' }}
+                              >
+                                <KeyboardArrowDownIcon fontSize="small" />
+                              </IconButton>
+                            </div>
+                          </div>
+                        ) : null}
+                      </TableCell>
                       <TableCell>
                         <img
                           className="thumbnail"
@@ -227,7 +285,7 @@ export default function Queue() {
                       </TableCell>
                       <TableCell>{formatDate(job.created_at)}</TableCell>
                       <TableCell>
-                        <StatusChip status={job.status} queuePosition={position} />
+                        <StatusChip status={job.status} />
                       </TableCell>
                       <TableCell>{job.completed_segments ?? 0} completed</TableCell>
                     </TableRow>

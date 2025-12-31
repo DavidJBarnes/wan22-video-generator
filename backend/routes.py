@@ -5,8 +5,13 @@ from fastapi.responses import RedirectResponse, FileResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import base64
+import json
 import os
+import re
 import shutil
+import subprocess
+import tempfile
+import httpx
 from pathlib import Path
 
 from database import (
@@ -36,7 +41,13 @@ from database import (
     get_connection,
     get_image_rating,
     set_image_rating,
-    get_all_image_ratings
+    get_all_image_ratings,
+    move_job_up,
+    move_job_down,
+    move_job_to_bottom,
+    hide_lora_file,
+    unhide_lora_file,
+    get_hidden_loras as db_get_hidden_loras
 )
 from comfyui_client import ComfyUIClient
 from queue_manager import queue_manager
@@ -50,11 +61,149 @@ from config import (
     DEFAULT_NEGATIVE_PROMPT
 )
 
+
+# ============== CivitAI Preview Fetching ==============
+
+# Directory for cached LoRA preview images
+LORA_PREVIEWS_DIR = Path(__file__).parent / "output" / "lora_previews"
+LORA_PREVIEWS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def fetch_and_cache_preview(url: str, lora_id: int) -> Optional[str]:
+    """Fetch preview image from CivitAI and cache it locally.
+
+    Supports URLs like:
+    - https://civitai.com/models/1811313/model-name
+    - https://civitai.com/models/1811313
+
+    Returns the local filename if successful, or None if failed.
+    """
+    if not url:
+        return None
+
+    # Extract model ID from URL
+    match = re.search(r'civitai\.com/models/(\d+)', url)
+    if not match:
+        return None
+
+    model_id = match.group(1)
+    api_url = f"https://civitai.com/api/v1/models/{model_id}"
+
+    try:
+        # Use shorter timeout for API calls, longer for image downloads
+        with httpx.Client(timeout=10.0) as api_client:
+            # First, get the image URL from the API
+            response = api_client.get(api_url)
+            response.raise_for_status()
+            data = response.json()
+
+            # Get images from first model version
+            model_versions = data.get('modelVersions', [])
+            if not model_versions:
+                return None
+
+            images = model_versions[0].get('images', [])
+
+            # Prefer static images over videos
+            static_image = next((img for img in images if img.get('type') == 'image'), None)
+
+            if static_image:
+                image_url = static_image.get('url', '')
+                is_video = False
+            elif images:
+                # Fall back to first media (even if video)
+                image_url = images[0].get('url', '')
+                is_video = images[0].get('type') == 'video'
+            else:
+                return None
+
+            if not image_url:
+                return None
+
+            # For CivitAI URLs, request a reasonable size for images only
+            # Videos don't support resizing and return 500 error
+            if 'original=true' in image_url and not is_video:
+                image_url = image_url.replace('original=true', 'width=512')
+
+        # Use longer timeout for image download (CivitAI CDN can be slow)
+        # Must include User-Agent header or some CDNs block the request
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        with httpx.Client(timeout=60.0, headers=headers) as img_client:
+            img_response = img_client.get(image_url)
+            img_response.raise_for_status()
+
+            # Determine file extension from content-type or URL
+            content_type = img_response.headers.get('content-type', '')
+            is_video_content = 'video' in content_type or is_video
+
+            if is_video_content:
+                # For videos, extract first frame as webp for better browser compatibility
+                with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp:
+                    tmp.write(img_response.content)
+                    tmp_path = tmp.name
+
+                try:
+                    filename = f"{lora_id}.webp"
+                    filepath = LORA_PREVIEWS_DIR / filename
+                    # Extract first frame using ffmpeg
+                    result = subprocess.run([
+                        'ffmpeg', '-y', '-i', tmp_path,
+                        '-vframes', '1', '-q:v', '80',
+                        str(filepath)
+                    ], capture_output=True, timeout=30)
+
+                    if result.returncode != 0 or not filepath.exists():
+                        print(f"[CivitAI] ffmpeg failed: {result.stderr.decode()}")
+                        return None
+
+                    print(f"[CivitAI] Cached preview for LoRA {lora_id}: {filename} (extracted from video)")
+                    return filename
+                finally:
+                    os.unlink(tmp_path)
+            else:
+                # Static image - save directly
+                if 'webp' in content_type:
+                    ext = '.webp'
+                elif 'png' in content_type:
+                    ext = '.png'
+                elif 'gif' in content_type:
+                    ext = '.gif'
+                else:
+                    ext = '.jpg'
+
+                filename = f"{lora_id}{ext}"
+                filepath = LORA_PREVIEWS_DIR / filename
+                with open(filepath, 'wb') as f:
+                    f.write(img_response.content)
+
+                print(f"[CivitAI] Cached preview for LoRA {lora_id}: {filename}")
+                return filename
+
+    except Exception as e:
+        print(f"[CivitAI] Failed to fetch/cache preview for {url}: {e}")
+        return None
+
+
+def get_cached_preview_path(lora_id: int) -> Optional[Path]:
+    """Get the path to a cached preview image if it exists."""
+    for ext in ['.jpg', '.png', '.webp', '.gif', '.mp4']:
+        filepath = LORA_PREVIEWS_DIR / f"{lora_id}{ext}"
+        if filepath.exists():
+            return filepath
+    return None
+
+
 # Create router
 router = APIRouter()
 
 
 # ============== Pydantic Models ==============
+
+class LoraSelection(BaseModel):
+    """A LoRA pair selection (high + low noise variants)."""
+    high_file: Optional[str] = None  # LoRA filename for high noise pass
+    low_file: Optional[str] = None   # LoRA filename for low noise pass
+
 
 class JobCreate(BaseModel):
     name: str
@@ -63,8 +212,7 @@ class JobCreate(BaseModel):
     workflow_type: Optional[str] = "txt2img"
     parameters: Optional[Dict[str, Any]] = None
     input_image: Optional[str] = None  # Base64 encoded or ComfyUI filename
-    high_lora: Optional[str] = None  # Optional LoRA for high noise path
-    low_lora: Optional[str] = None  # Optional LoRA for low noise path
+    loras: Optional[List[LoraSelection]] = None  # 0-2 LoRA pairs
 
 
 class JobUpdate(BaseModel):
@@ -89,6 +237,7 @@ class JobResponse(BaseModel):
     created_at: Optional[str]
     started_at: Optional[str]
     completed_at: Optional[str]
+    priority: Optional[int] = None
     # Computed segment fields
     total_segments: Optional[int] = 0
     completed_segments: Optional[int] = 0
@@ -101,6 +250,8 @@ class LoraUpdate(BaseModel):
     prompt_text: Optional[str] = None
     trigger_keywords: Optional[str] = None
     rating: Optional[int] = None
+    preview_image_url: Optional[str] = None
+    fetch_preview: Optional[bool] = False  # If true, auto-fetch preview from URL
 
 
 def enrich_job_with_segments(job: Dict[str, Any]) -> Dict[str, Any]:
@@ -176,14 +327,23 @@ async def create_new_job(job: JobCreate):
         else:
             start_image_url = f"{comfyui_url}/view?filename={job.input_image}&subfolder=&type=input"
 
+    # Extract LoRA filenames from loras list (0-2 pairs)
+    high_loras = []
+    low_loras = []
+    if job.loras:
+        for lora in job.loras[:2]:  # Max 2 pairs
+            if lora.high_file or lora.low_file:
+                high_loras.append(lora.high_file)
+                low_loras.append(lora.low_file)
+
     # Create only the first segment (on-demand workflow)
     # Additional segments will be created when user provides prompts
     create_first_segment(
         job_id,
         job.prompt,
         start_image_url,
-        high_lora=job.high_lora,
-        low_lora=job.low_lora
+        high_loras=high_loras if high_loras else None,
+        low_loras=low_loras if low_loras else None
     )
     
     return get_job(job_id)
@@ -250,6 +410,40 @@ async def cancel_job(job_id: int):
     return {"status": "cancelled", "id": job_id}
 
 
+@router.post("/jobs/{job_id}/move-up")
+async def move_job_up_endpoint(job_id: int):
+    """Move a pending job up in the queue (higher priority)."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Only pending jobs can be reordered")
+
+    moved = move_job_up(job_id)
+    if not moved:
+        return {"status": "unchanged", "id": job_id, "message": "Job is already at the top of the queue"}
+
+    return {"status": "moved", "id": job_id, "direction": "up"}
+
+
+@router.post("/jobs/{job_id}/move-down")
+async def move_job_down_endpoint(job_id: int):
+    """Move a pending job down in the queue (lower priority)."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Only pending jobs can be reordered")
+
+    moved = move_job_down(job_id)
+    if not moved:
+        return {"status": "unchanged", "id": job_id, "message": "Job is already at the bottom of the queue"}
+
+    return {"status": "moved", "id": job_id, "direction": "down"}
+
+
 @router.post("/jobs/{job_id}/retry")
 async def retry_job(job_id: int):
     """Retry a failed job by resetting incomplete segments while preserving completed ones."""
@@ -275,6 +469,10 @@ async def retry_job(job_id: int):
 
     # Reset job status to pending and clear error message
     update_job_status(job_id, "pending", error_message=None)
+
+    # Move job to bottom of queue (retried jobs shouldn't jump ahead)
+    move_job_to_bottom(job_id)
+
     return {"status": "pending", "id": job_id}
 
 
@@ -442,32 +640,52 @@ async def update_segment_prompt_endpoint(
     job_id: int,
     segment_index: int,
     prompt: str = Form(...),
-    high_lora: Optional[str] = Form(None),
-    low_lora: Optional[str] = Form(None)
+    loras: Optional[str] = Form(None)  # JSON array: '[{"high_file": "...", "low_file": "..."}]'
 ):
-    """Create or update a segment with a prompt and resume job processing (on-demand workflow)."""
+    """Create or update a segment with a prompt and resume job processing (on-demand workflow).
+
+    Args:
+        loras: Optional JSON string containing array of LoRA pairs (max 2).
+               Format: '[{"high_file": "path/to/high.safetensors", "low_file": "path/to/low.safetensors"}]'
+    """
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    # Parse LoRA selections from JSON string
+    high_loras = []
+    low_loras = []
+    if loras:
+        try:
+            lora_list = json.loads(loras)
+            for lora in lora_list[:2]:  # Max 2 pairs
+                if lora.get("high_file") or lora.get("low_file"):
+                    high_loras.append(lora.get("high_file"))
+                    low_loras.append(lora.get("low_file"))
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid loras JSON format")
 
     segment = get_segment(job_id, segment_index)
 
     if not segment:
         # Segment doesn't exist - create it on-demand
-        # Get the previous segment's end frame as the start image for this segment
         if segment_index == 0:
-            raise HTTPException(status_code=400, detail="Segment 0 should already exist")
+            # Segment 0 uses the job's original input image
+            start_image_url = job.get("input_image")
+            if not start_image_url:
+                raise HTTPException(status_code=400, detail="Job has no input image")
+        else:
+            # Get the previous segment's end frame as the start image for this segment
+            previous_segment = get_segment(job_id, segment_index - 1)
+            if not previous_segment:
+                raise HTTPException(status_code=400, detail=f"Previous segment {segment_index - 1} does not exist")
 
-        previous_segment = get_segment(job_id, segment_index - 1)
-        if not previous_segment:
-            raise HTTPException(status_code=400, detail=f"Previous segment {segment_index - 1} does not exist")
+            if previous_segment.get("status") != "completed":
+                raise HTTPException(status_code=400, detail=f"Previous segment {segment_index - 1} must be completed first")
 
-        if previous_segment.get("status") != "completed":
-            raise HTTPException(status_code=400, detail=f"Previous segment {segment_index - 1} must be completed first")
-
-        start_image_url = previous_segment.get("end_frame_url")
-        if not start_image_url:
-            raise HTTPException(status_code=400, detail=f"Previous segment {segment_index - 1} has no end frame")
+            start_image_url = previous_segment.get("end_frame_url")
+            if not start_image_url:
+                raise HTTPException(status_code=400, detail=f"Previous segment {segment_index - 1} has no end frame")
 
         # Create new segment on-demand
         create_next_segment(
@@ -475,12 +693,16 @@ async def update_segment_prompt_endpoint(
             segment_index,
             prompt,
             start_image_url,
-            high_lora=high_lora,
-            low_lora=low_lora
+            high_loras=high_loras if high_loras else None,
+            low_loras=low_loras if low_loras else None
         )
     else:
         # Segment exists - update its prompt and LoRA selections
-        update_segment_prompt(job_id, segment_index, prompt, high_lora=high_lora, low_lora=low_lora)
+        update_segment_prompt(
+            job_id, segment_index, prompt,
+            high_loras=high_loras if high_loras else None,
+            low_loras=low_loras if low_loras else None
+        )
 
     # If job was waiting for prompt, set it back to pending so queue manager picks it up
     if job.get("status") == "awaiting_prompt":
@@ -696,6 +918,20 @@ async def fetch_and_cache_loras():
         raise HTTPException(status_code=500, detail=f"Failed to fetch LoRAs: {str(e)}")
 
 
+@router.get("/loras/hidden")
+async def get_hidden_loras():
+    """Get all hidden LoRA files."""
+    return db_get_hidden_loras()
+
+
+@router.post("/loras/hidden/restore")
+async def restore_hidden_lora(filename: str):
+    """Restore a hidden LoRA file so it appears on next refresh."""
+    if unhide_lora_file(filename):
+        return {"status": "restored", "filename": filename}
+    raise HTTPException(status_code=404, detail="File not found in hidden list")
+
+
 @router.get("/loras/{lora_id}")
 async def get_lora(lora_id: int):
     """Get a specific LoRA by ID."""
@@ -713,6 +949,15 @@ async def update_lora(lora_id: int, lora_data: LoraUpdate):
     if not lora:
         raise HTTPException(status_code=404, detail="LoRA not found")
 
+    # Determine preview image URL
+    preview_url = lora_data.preview_image_url
+
+    # Auto-fetch preview from CivitAI if requested
+    if lora_data.fetch_preview and lora_data.url:
+        fetched_preview = fetch_civitai_preview(lora_data.url)
+        if fetched_preview:
+            preview_url = fetched_preview
+
     # Update the LoRA
     db_update_lora(
         lora_id,
@@ -720,7 +965,8 @@ async def update_lora(lora_id: int, lora_data: LoraUpdate):
         url=lora_data.url,
         prompt_text=lora_data.prompt_text,
         trigger_keywords=lora_data.trigger_keywords,
-        rating=lora_data.rating
+        rating=lora_data.rating,
+        preview_image_url=preview_url
     )
 
     # Return updated LoRA
@@ -728,15 +974,77 @@ async def update_lora(lora_id: int, lora_data: LoraUpdate):
     return updated_lora
 
 
-@router.delete("/loras/{lora_id}")
-async def delete_lora(lora_id: int):
-    """Delete a LoRA from the library."""
+@router.get("/loras/{lora_id}/preview")
+async def get_lora_preview(lora_id: int):
+    """Serve the cached preview image for a LoRA."""
+    preview_path = get_cached_preview_path(lora_id)
+    if not preview_path:
+        raise HTTPException(status_code=404, detail="Preview not found")
+
+    # Determine correct media type based on extension
+    ext = preview_path.suffix.lower()
+    media_types = {
+        '.webp': 'image/webp',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+    }
+    media_type = media_types.get(ext, 'application/octet-stream')
+
+    return FileResponse(preview_path, media_type=media_type)
+
+
+@router.post("/loras/{lora_id}/refresh-preview")
+async def refresh_lora_preview(lora_id: int):
+    """Fetch and cache the preview image from the LoRA's CivitAI URL."""
     lora = db_get_lora(lora_id)
     if not lora:
         raise HTTPException(status_code=404, detail="LoRA not found")
 
+    if not lora.get('url'):
+        raise HTTPException(status_code=400, detail="LoRA has no URL set")
+
+    # Fetch and cache the preview image locally
+    cached_filename = fetch_and_cache_preview(lora['url'], lora_id)
+    if not cached_filename:
+        raise HTTPException(status_code=400, detail="Could not fetch preview from URL")
+
+    # Store the cached filename in the database (preserve existing field values)
+    db_update_lora(
+        lora_id,
+        friendly_name=lora.get('friendly_name'),
+        url=lora.get('url'),
+        prompt_text=lora.get('prompt_text'),
+        trigger_keywords=lora.get('trigger_keywords'),
+        rating=lora.get('rating'),
+        preview_image_url=cached_filename,
+        _update_preview=True  # Explicitly update the preview field
+    )
+
+    return {"status": "success", "preview_image_url": cached_filename}
+
+
+@router.delete("/loras/{lora_id}")
+async def delete_lora(lora_id: int):
+    """Delete a LoRA from the library and hide its files from future refreshes."""
+    lora = db_get_lora(lora_id)
+    if not lora:
+        raise HTTPException(status_code=404, detail="LoRA not found")
+
+    # Hide the files so they don't reappear on refresh
+    hidden_files = []
+    if lora.get('high_file'):
+        hide_lora_file(lora['high_file'])
+        hidden_files.append(lora['high_file'])
+    if lora.get('low_file'):
+        hide_lora_file(lora['low_file'])
+        hidden_files.append(lora['low_file'])
+
     db_delete_lora(lora_id)
-    return {"status": "deleted", "id": lora_id}
+    return {"status": "deleted", "id": lora_id, "hidden_files": hidden_files}
 
 
 @router.get("/comfyui/status")

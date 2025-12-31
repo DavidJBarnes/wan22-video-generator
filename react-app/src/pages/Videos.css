@@ -1,0 +1,106 @@
+.videos-page {
+  display: flex;
+  flex-direction: column;
+}
+
+.videos-page h1 {
+  margin-top: 0;
+}
+
+.videos-search-wrapper {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding-bottom: 16px;
+}
+
+.videos-search {
+  max-width: 400px;
+}
+
+.videos-pagination {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0;
+}
+
+.video-card {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.video-preview {
+  height: 180px;
+  object-fit: cover;
+  background-color: #1a1a1a;
+}
+
+.video-card-content {
+  flex-grow: 1;
+}
+
+.video-card-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.video-card:hover .video-card-actions {
+  opacity: 1;
+}
+
+.video-card-actions .MuiIconButton-root {
+  color: white;
+}
+
+/* Video Modal */
+.video-modal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-modal-content {
+  background: #1a1a1a;
+  border-radius: 8px;
+  outline: none;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.video-modal-title {
+  padding: 16px 16px 8px;
+  color: white;
+}
+
+.video-modal-player {
+  max-width: 100%;
+  max-height: calc(90vh - 120px);
+  border-radius: 0 0 8px 8px;
+}
+
+.video-modal-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+}
+
+.video-modal-actions .MuiIconButton-root {
+  color: white;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.video-modal-actions .MuiIconButton-root:hover {
+  background: rgba(0, 0, 0, 0.6);
+}
