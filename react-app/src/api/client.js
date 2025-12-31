@@ -56,6 +56,10 @@ class APIClient {
     return this.request(`/jobs/${jobId}`);
   }
 
+  async getJobLogs(jobId, limit = 100) {
+    return this.request(`/jobs/${jobId}/logs?limit=${limit}`);
+  }
+
   async createJob(jobData) {
     return this.request('/jobs', {
       method: 'POST',
@@ -201,12 +205,17 @@ class APIClient {
     const formData = new FormData();
     formData.append('prompt', prompt);
 
-    // Send loras as JSON array: [{high_file, low_file}, ...]
+    // Send loras as JSON array: [{high_file, high_weight, low_file, low_weight}, ...]
     if (loras && loras.length > 0) {
-      // Filter out empty entries and build the loras array
+      // Filter out empty entries and build the loras array with weights
       const loraArray = loras
         .filter(l => l && (l.high_file || l.low_file))
-        .map(l => ({ high_file: l.high_file || null, low_file: l.low_file || null }));
+        .map(l => ({
+          high_file: l.high_file || null,
+          high_weight: l.high_weight ?? 1,
+          low_file: l.low_file || null,
+          low_weight: l.low_weight ?? 1
+        }));
 
       if (loraArray.length > 0) {
         formData.append('loras', JSON.stringify(loraArray));
@@ -309,6 +318,12 @@ class APIClient {
 
   async fetchAndCacheLoras() {
     return this.request('/loras/fetch', {
+      method: 'POST'
+    });
+  }
+
+  async cleanupDuplicateLoras() {
+    return this.request('/loras/cleanup', {
       method: 'POST'
     });
   }

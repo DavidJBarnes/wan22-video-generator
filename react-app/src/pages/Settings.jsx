@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Button } from '@mui/material';
+import { Button, Chip, TextField, IconButton } from '@mui/material';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import './Settings.css';
@@ -9,6 +9,7 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fetchingLoras, setFetchingLoras] = useState(false);
+  const [cleaningLoras, setCleaningLoras] = useState(false);
   const [hiddenLoras, setHiddenLoras] = useState([]);
   const [loadingHidden, setLoadingHidden] = useState(false);
 
@@ -20,6 +21,11 @@ export default function Settings() {
   const [defaultFps, setDefaultFps] = useState(16);
   const [defaultNegativePrompt, setDefaultNegativePrompt] = useState('');
   const [queueWaitTimeout, setQueueWaitTimeout] = useState(30);
+  const [segmentExecutionTimeout, setSegmentExecutionTimeout] = useState(20);
+  const [namePrefixes, setNamePrefixes] = useState([]);
+  const [nameDescriptions, setNameDescriptions] = useState([]);
+  const [newPrefix, setNewPrefix] = useState('');
+  const [newDescription, setNewDescription] = useState('');
 
   useEffect(() => {
     loadSettings();
@@ -39,6 +45,17 @@ export default function Settings() {
       setDefaultFps(parseInt(s.default_fps) || 16);
       setDefaultNegativePrompt(s.default_negative_prompt || 'blurry, low quality, distorted');
       setQueueWaitTimeout(Math.round((parseInt(s.queue_wait_timeout) || 1800) / 60)); // Convert seconds to minutes
+      setSegmentExecutionTimeout(Math.round((parseInt(s.segment_execution_timeout) || 1200) / 60)); // Convert seconds to minutes
+
+      // Parse job naming presets
+      try {
+        const prefixes = JSON.parse(s.job_name_prefixes || '[]');
+        setNamePrefixes(Array.isArray(prefixes) ? prefixes : []);
+      } catch { setNamePrefixes([]); }
+      try {
+        const descriptions = JSON.parse(s.job_name_descriptions || '[]');
+        setNameDescriptions(Array.isArray(descriptions) ? descriptions : []);
+      } catch { setNameDescriptions([]); }
 
       setLoading(false);
     } catch (error) {
@@ -71,6 +88,30 @@ export default function Settings() {
     }
   }
 
+  function handleAddPrefix() {
+    const trimmed = newPrefix.trim();
+    if (trimmed && !namePrefixes.includes(trimmed)) {
+      setNamePrefixes([...namePrefixes, trimmed]);
+      setNewPrefix('');
+    }
+  }
+
+  function handleRemovePrefix(prefix) {
+    setNamePrefixes(namePrefixes.filter(p => p !== prefix));
+  }
+
+  function handleAddDescription() {
+    const trimmed = newDescription.trim();
+    if (trimmed && !nameDescriptions.includes(trimmed)) {
+      setNameDescriptions([...nameDescriptions, trimmed]);
+      setNewDescription('');
+    }
+  }
+
+  function handleRemoveDescription(desc) {
+    setNameDescriptions(nameDescriptions.filter(d => d !== desc));
+  }
+
   async function handleSave(e) {
     e.preventDefault();
     setSaving(true);
@@ -83,7 +124,10 @@ export default function Settings() {
         default_height: String(defaultHeight),
         default_fps: String(defaultFps),
         default_negative_prompt: defaultNegativePrompt,
-        queue_wait_timeout: String(queueWaitTimeout * 60) // Convert minutes to seconds
+        queue_wait_timeout: String(queueWaitTimeout * 60), // Convert minutes to seconds
+        segment_execution_timeout: String(segmentExecutionTimeout * 60), // Convert minutes to seconds
+        job_name_prefixes: JSON.stringify(namePrefixes),
+        job_name_descriptions: JSON.stringify(nameDescriptions)
       };
 
       await API.updateSettings(settingsPayload);
@@ -110,6 +154,20 @@ export default function Settings() {
       console.error('Failed to fetch LoRAs:', error);
       showToast('Failed to fetch LoRAs from ComfyUI', 'error');
       setFetchingLoras(false);
+    }
+  }
+
+  async function handleCleanupLoras() {
+    setCleaningLoras(true);
+
+    try {
+      const result = await API.cleanupDuplicateLoras();
+      showToast(result.message, 'success');
+      setCleaningLoras(false);
+    } catch (error) {
+      console.error('Failed to cleanup LoRAs:', error);
+      showToast('Failed to cleanup duplicate LoRAs', 'error');
+      setCleaningLoras(false);
     }
   }
 
@@ -155,6 +213,19 @@ export default function Settings() {
               How long to wait for ComfyUI to finish existing jobs before timing out. Increase if you run manual jobs in ComfyUI.
             </small>
           </div>
+          <div className="form-group">
+            <label>Segment Execution Timeout (minutes)</label>
+            <input
+              type="number"
+              value={segmentExecutionTimeout}
+              onChange={(e) => setSegmentExecutionTimeout(parseInt(e.target.value) || 20)}
+              min="5"
+              max="60"
+            />
+            <small style={{ color: '#666', fontSize: '12px' }}>
+              Max time for ComfyUI to generate a single video segment. Increase for high-resolution or high-FPS videos.
+            </small>
+          </div>
         </div>
 
         {/* Image Repository */}
@@ -174,19 +245,96 @@ export default function Settings() {
           </div>
         </div>
 
+        {/* Job Naming Presets */}
+        <div className="card settings-section">
+          <h2>Job Naming Presets</h2>
+          <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
+            Quick-select options for naming jobs. Names are built as "Prefix - Description".
+          </p>
+
+          <div className="form-group">
+            <label>Prefixes</label>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+              <TextField
+                size="small"
+                value={newPrefix}
+                onChange={(e) => setNewPrefix(e.target.value)}
+                placeholder="Add prefix..."
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddPrefix())}
+                sx={{ flex: 1 }}
+              />
+              <Button variant="outlined" size="small" onClick={handleAddPrefix}>
+                Add
+              </Button>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {namePrefixes.map((prefix) => (
+                <Chip
+                  key={prefix}
+                  label={prefix}
+                  onDelete={() => handleRemovePrefix(prefix)}
+                  size="small"
+                />
+              ))}
+              {namePrefixes.length === 0 && (
+                <span style={{ color: '#999', fontStyle: 'italic', fontSize: '13px' }}>No prefixes added</span>
+              )}
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>Descriptions</label>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+              <TextField
+                size="small"
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
+                placeholder="Add description..."
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddDescription())}
+                sx={{ flex: 1 }}
+              />
+              <Button variant="outlined" size="small" onClick={handleAddDescription}>
+                Add
+              </Button>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {nameDescriptions.map((desc) => (
+                <Chip
+                  key={desc}
+                  label={desc}
+                  onDelete={() => handleRemoveDescription(desc)}
+                  size="small"
+                />
+              ))}
+              {nameDescriptions.length === 0 && (
+                <span style={{ color: '#999', fontStyle: 'italic', fontSize: '13px' }}>No descriptions added</span>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* LoRA Library */}
         <div className="card settings-section">
           <h2>LoRA Library</h2>
           <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
             Fetch and cache LoRA models from ComfyUI. Cached LoRAs can be managed in the LoRA Library page.
           </p>
-          <Button
-            variant="contained"
-            onClick={handleFetchLoras}
-            disabled={fetchingLoras}
-          >
-            {fetchingLoras ? 'Fetching...' : 'Fetch LoRAs from ComfyUI'}
-          </Button>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <Button
+              variant="contained"
+              onClick={handleFetchLoras}
+              disabled={fetchingLoras}
+            >
+              {fetchingLoras ? 'Fetching...' : 'Fetch LoRAs from ComfyUI'}
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={handleCleanupLoras}
+              disabled={cleaningLoras}
+            >
+              {cleaningLoras ? 'Cleaning...' : 'Cleanup Duplicates'}
+            </Button>
+          </div>
         </div>
 
         {/* Hidden LoRAs */}

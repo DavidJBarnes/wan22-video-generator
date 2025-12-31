@@ -21,6 +21,9 @@ export default function JobDetail() {
   const [nextSegmentIndex, setNextSegmentIndex] = useState(0);
   const [lastJobStatus, setLastJobStatus] = useState(null);
   const [lightboxImage, setLightboxImage] = useState(null);
+  const [logs, setLogs] = useState([]);
+  const [logsExpanded, setLogsExpanded] = useState(false);
+  const [loraLibrary, setLoraLibrary] = useState([]);
 
   useEffect(() => {
     loadJobDetail();
@@ -48,13 +51,17 @@ export default function JobDetail() {
 
   async function loadJobDetail() {
     try {
-      const [jobData, segmentsData] = await Promise.all([
+      const [jobData, segmentsData, logsData, loraData] = await Promise.all([
         API.getJob(id),
-        API.getSegments(id)
+        API.getSegments(id),
+        API.getJobLogs(id),
+        API.getLoraLibrary()
       ]);
 
       setJob(jobData);
       setSegments(segmentsData);
+      setLogs(logsData.logs || []);
+      setLoraLibrary(loraData.loras || []);
       setLoading(false);
 
       // Calculate next segment index for prompt submission
@@ -182,6 +189,38 @@ export default function JobDetail() {
     return [value];
   }
 
+  // Helper to extract file from lora data (handles both old string format and new object format)
+  function getLoraFile(loraData) {
+    if (!loraData) return null;
+    if (typeof loraData === 'string') return loraData;
+    if (typeof loraData === 'object' && loraData.file) return loraData.file;
+    return null;
+  }
+
+  function getLoraWeight(loraData) {
+    if (!loraData) return 1;
+    if (typeof loraData === 'object' && loraData.weight !== undefined) return loraData.weight;
+    return 1;
+  }
+
+  // Look up friendly name from LoRA library by filename
+  function getLoraFriendlyName(filename) {
+    if (!filename) return null;
+    // Extract just the filename if it's a path
+    const baseName = filename.split('/').pop();
+    // Find matching LoRA in library (check both high_file and low_file)
+    const match = loraLibrary.find(l =>
+      l.high_file === filename || l.low_file === filename ||
+      (l.high_file && l.high_file.split('/').pop() === baseName) ||
+      (l.low_file && l.low_file.split('/').pop() === baseName)
+    );
+    if (match) {
+      return match.friendly_name || match.base_name || baseName.replace('.safetensors', '');
+    }
+    // Fallback to cleaned filename
+    return baseName.replace('.safetensors', '');
+  }
+
   // Build defaultLoras array for SubmitPromptModal
   function buildDefaultLoras(segment) {
     if (!segment) return [];
@@ -194,13 +233,18 @@ export default function JobDetail() {
       const h = highLoras[i] || null;
       const l = lowLoras[i] || null;
       if (h || l) {
-        result.push({ high_file: h, low_file: l });
+        result.push({
+          high_file: getLoraFile(h),
+          high_weight: getLoraWeight(h),
+          low_file: getLoraFile(l),
+          low_weight: getLoraWeight(l)
+        });
       }
     }
     return result;
   }
 
-  // Format LoRAs for display
+  // Format LoRAs for display (includes weights and friendly names)
   function formatLorasDisplay(highLora, lowLora) {
     const highLoras = parseLoraArray(highLora);
     const lowLoras = parseLoraArray(lowLora);
@@ -212,10 +256,21 @@ export default function JobDetail() {
     const maxLen = Math.max(highLoras.length, lowLoras.length);
     const pairs = [];
     for (let i = 0; i < maxLen; i++) {
-      const h = highLoras[i] ? highLoras[i].split('/').pop() : null;
-      const l = lowLoras[i] ? lowLoras[i].split('/').pop() : null;
+      const hFile = getLoraFile(highLoras[i]);
+      const lFile = getLoraFile(lowLoras[i]);
+      const hWeight = getLoraWeight(highLoras[i]);
+      const lWeight = getLoraWeight(lowLoras[i]);
+      // Use friendly name lookup instead of raw filename
+      const h = hFile ? getLoraFriendlyName(hFile) : null;
+      const l = lFile ? getLoraFriendlyName(lFile) : null;
       if (h || l) {
-        pairs.push({ high: h, low: l, index: i + 1 });
+        pairs.push({
+          high: h,
+          highWeight: hWeight,
+          low: l,
+          lowWeight: lWeight,
+          index: i + 1
+        });
       }
     }
     return { pairs, count: pairs.length };
@@ -429,13 +484,46 @@ export default function JobDetail() {
                     if (loraInfo.count === 0) {
                       return <div><strong>LoRAs:</strong> N/A</div>;
                     }
-                    return loraInfo.pairs.map((pair, idx) => (
-                      <div key={idx} style={{ marginTop: idx > 0 ? '4px' : 0 }}>
-                        <strong>LoRA {pair.index}:</strong>{' '}
-                        <span style={{ color: '#2e7d32' }}>H:</span> {pair.high || 'N/A'}{' '}
-                        <span style={{ color: '#1565c0' }}>L:</span> {pair.low || 'N/A'}
+                    return (
+                      <div style={{ marginTop: '8px' }}>
+                        <strong>LoRAs:</strong>
+                        <table style={{
+                          marginTop: '6px',
+                          fontSize: '13px',
+                          borderCollapse: 'collapse',
+                          width: '100%'
+                        }}>
+                          <thead>
+                            <tr style={{ borderBottom: '1px solid #ddd' }}>
+                              <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: 600, color: '#666', width: '30px' }}>#</th>
+                              <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: 600, color: '#2e7d32' }}>High LoRA</th>
+                              <th style={{ padding: '6px 12px', textAlign: 'center', fontWeight: 600, color: '#2e7d32', width: '50px' }}>Wt</th>
+                              <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: 600, color: '#1565c0' }}>Low LoRA</th>
+                              <th style={{ padding: '6px 12px', textAlign: 'center', fontWeight: 600, color: '#1565c0', width: '50px' }}>Wt</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {loraInfo.pairs.map((pair, idx) => (
+                              <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
+                                <td style={{ padding: '6px 12px', color: '#999' }}>{pair.index}</td>
+                                <td style={{ padding: '6px 12px', color: '#2e7d32' }}>
+                                  {pair.high || '-'}
+                                </td>
+                                <td style={{ padding: '6px 12px', textAlign: 'center', color: '#666' }}>
+                                  {pair.high ? pair.highWeight : '-'}
+                                </td>
+                                <td style={{ padding: '6px 12px', color: '#1565c0' }}>
+                                  {pair.low || '-'}
+                                </td>
+                                <td style={{ padding: '6px 12px', textAlign: 'center', color: '#666' }}>
+                                  {pair.low ? pair.lowWeight : '-'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                    ));
+                    );
                   })()}
                 </div>
 
@@ -501,6 +589,98 @@ export default function JobDetail() {
                 Finalize & Merge
               </Button>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Activity Log */}
+      <div className="card" style={{ marginTop: '24px' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            cursor: 'pointer'
+          }}
+          onClick={() => setLogsExpanded(!logsExpanded)}
+        >
+          <h2 style={{ marginTop: 0, marginBottom: 0 }}>
+            Activity Log {logs.length > 0 && <span style={{ color: '#666', fontWeight: 'normal' }}>({logs.length})</span>}
+          </h2>
+          <span style={{ fontSize: '20px', color: '#666' }}>
+            {logsExpanded ? '▼' : '▶'}
+          </span>
+        </div>
+
+        {logsExpanded && (
+          <div style={{ marginTop: '16px' }}>
+            {logs.length === 0 ? (
+              <p style={{ color: '#666', fontStyle: 'italic' }}>No activity logs yet</p>
+            ) : (
+              <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid #ddd' }}>
+                      <th style={{ textAlign: 'left', padding: '8px', width: '140px' }}>Time</th>
+                      <th style={{ textAlign: 'left', padding: '8px', width: '60px' }}>Level</th>
+                      <th style={{ textAlign: 'left', padding: '8px', width: '50px' }}>Seg</th>
+                      <th style={{ textAlign: 'left', padding: '8px' }}>Message</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {logs.map((log) => {
+                      const levelColors = {
+                        INFO: { bg: '#e3f2fd', text: '#1565c0' },
+                        WARN: { bg: '#fff3e0', text: '#ef6c00' },
+                        ERROR: { bg: '#ffebee', text: '#c62828' }
+                      };
+                      const levelStyle = levelColors[log.level] || { bg: '#f5f5f5', text: '#666' };
+
+                      return (
+                        <tr key={log.id} style={{ borderBottom: '1px solid #eee' }}>
+                          <td style={{ padding: '8px', fontFamily: 'monospace', fontSize: '12px', color: '#666' }}>
+                            {new Date(log.timestamp).toLocaleString()}
+                          </td>
+                          <td style={{ padding: '8px' }}>
+                            <span style={{
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              backgroundColor: levelStyle.bg,
+                              color: levelStyle.text,
+                              fontWeight: 500,
+                              fontSize: '11px'
+                            }}>
+                              {log.level}
+                            </span>
+                          </td>
+                          <td style={{ padding: '8px', textAlign: 'center', color: '#666' }}>
+                            {log.segment_index !== null ? log.segment_index + 1 : '-'}
+                          </td>
+                          <td style={{ padding: '8px' }}>
+                            <div>{log.message}</div>
+                            {log.details && (
+                              <pre style={{
+                                margin: '4px 0 0 0',
+                                padding: '8px',
+                                backgroundColor: '#f5f5f5',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-word',
+                                maxHeight: '100px',
+                                overflow: 'auto'
+                              }}>
+                                {log.details}
+                              </pre>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>
