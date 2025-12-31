@@ -141,6 +141,7 @@ docker compose logs -f backend
 ## Git Guidelines
 
 - **Never commit binary files** such as videos (.mp4, .webm), images (.jpg, .png), or other media assets
+- **No personal names or explicit material** in code or commits - use generic placeholders (e.g., "Face 1", "face_01.png")
 
 ## Development Notes
 
