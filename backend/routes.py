@@ -5,6 +5,7 @@ from fastapi.responses import RedirectResponse, FileResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import base64
+import json
 import os
 import re
 import shutil
@@ -198,6 +199,12 @@ router = APIRouter()
 
 # ============== Pydantic Models ==============
 
+class LoraSelection(BaseModel):
+    """A LoRA pair selection (high + low noise variants)."""
+    high_file: Optional[str] = None  # LoRA filename for high noise pass
+    low_file: Optional[str] = None   # LoRA filename for low noise pass
+
+
 class JobCreate(BaseModel):
     name: str
     prompt: str
@@ -205,8 +212,7 @@ class JobCreate(BaseModel):
     workflow_type: Optional[str] = "txt2img"
     parameters: Optional[Dict[str, Any]] = None
     input_image: Optional[str] = None  # Base64 encoded or ComfyUI filename
-    high_lora: Optional[str] = None  # Optional LoRA for high noise path
-    low_lora: Optional[str] = None  # Optional LoRA for low noise path
+    loras: Optional[List[LoraSelection]] = None  # 0-2 LoRA pairs
 
 
 class JobUpdate(BaseModel):
@@ -321,14 +327,23 @@ async def create_new_job(job: JobCreate):
         else:
             start_image_url = f"{comfyui_url}/view?filename={job.input_image}&subfolder=&type=input"
 
+    # Extract LoRA filenames from loras list (0-2 pairs)
+    high_loras = []
+    low_loras = []
+    if job.loras:
+        for lora in job.loras[:2]:  # Max 2 pairs
+            if lora.high_file or lora.low_file:
+                high_loras.append(lora.high_file)
+                low_loras.append(lora.low_file)
+
     # Create only the first segment (on-demand workflow)
     # Additional segments will be created when user provides prompts
     create_first_segment(
         job_id,
         job.prompt,
         start_image_url,
-        high_lora=job.high_lora,
-        low_lora=job.low_lora
+        high_loras=high_loras if high_loras else None,
+        low_loras=low_loras if low_loras else None
     )
     
     return get_job(job_id)
@@ -625,13 +640,30 @@ async def update_segment_prompt_endpoint(
     job_id: int,
     segment_index: int,
     prompt: str = Form(...),
-    high_lora: Optional[str] = Form(None),
-    low_lora: Optional[str] = Form(None)
+    loras: Optional[str] = Form(None)  # JSON array: '[{"high_file": "...", "low_file": "..."}]'
 ):
-    """Create or update a segment with a prompt and resume job processing (on-demand workflow)."""
+    """Create or update a segment with a prompt and resume job processing (on-demand workflow).
+
+    Args:
+        loras: Optional JSON string containing array of LoRA pairs (max 2).
+               Format: '[{"high_file": "path/to/high.safetensors", "low_file": "path/to/low.safetensors"}]'
+    """
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    # Parse LoRA selections from JSON string
+    high_loras = []
+    low_loras = []
+    if loras:
+        try:
+            lora_list = json.loads(loras)
+            for lora in lora_list[:2]:  # Max 2 pairs
+                if lora.get("high_file") or lora.get("low_file"):
+                    high_loras.append(lora.get("high_file"))
+                    low_loras.append(lora.get("low_file"))
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid loras JSON format")
 
     segment = get_segment(job_id, segment_index)
 
@@ -661,12 +693,16 @@ async def update_segment_prompt_endpoint(
             segment_index,
             prompt,
             start_image_url,
-            high_lora=high_lora,
-            low_lora=low_lora
+            high_loras=high_loras if high_loras else None,
+            low_loras=low_loras if low_loras else None
         )
     else:
         # Segment exists - update its prompt and LoRA selections
-        update_segment_prompt(job_id, segment_index, prompt, high_lora=high_lora, low_lora=low_lora)
+        update_segment_prompt(
+            job_id, segment_index, prompt,
+            high_loras=high_loras if high_loras else None,
+            low_loras=low_loras if low_loras else None
+        )
 
     # If job was waiting for prompt, set it back to pending so queue manager picks it up
     if job.get("status") == "awaiting_prompt":

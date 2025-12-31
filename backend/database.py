@@ -11,6 +11,52 @@ def utc_now_iso():
     """Return current UTC time as ISO string with Z suffix for proper browser parsing."""
     return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
+
+def serialize_loras(loras: Optional[List[str]]) -> Optional[str]:
+    """Serialize a list of LoRA filenames to JSON string for database storage.
+
+    Args:
+        loras: List of LoRA filenames, or None
+
+    Returns:
+        JSON string like '["file1.safetensors", "file2.safetensors"]', or None if empty
+    """
+    if not loras:
+        return None
+    # Filter out None/empty values
+    loras = [l for l in loras if l]
+    if not loras:
+        return None
+    return json.dumps(loras)
+
+
+def parse_loras(db_value: Optional[str]) -> List[str]:
+    """Parse LoRA data from database, handling both old and new formats.
+
+    Args:
+        db_value: Database value - could be:
+            - None (no LoRAs)
+            - Single filename string (old format): "wan2.2/lora.safetensors"
+            - JSON array string (new format): '["wan2.2/lora1.safetensors", "wan2.2/lora2.safetensors"]'
+
+    Returns:
+        List of LoRA filenames (may be empty)
+    """
+    if not db_value:
+        return []
+
+    # Try parsing as JSON first (new format)
+    if db_value.startswith('['):
+        try:
+            parsed = json.loads(db_value)
+            if isinstance(parsed, list):
+                return [l for l in parsed if l]  # Filter None/empty
+        except json.JSONDecodeError:
+            pass
+
+    # Fall back to treating as single filename (old format)
+    return [db_value]
+
 # Use absolute path to avoid issues with current working directory
 from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parent
@@ -544,20 +590,28 @@ def create_first_segment(
     job_id: int,
     initial_prompt: str,
     start_image_url: str,
-    high_lora: Optional[str] = None,
-    low_lora: Optional[str] = None
+    high_loras: Optional[List[str]] = None,
+    low_loras: Optional[List[str]] = None
 ):
     """Create the first segment for a job (on-demand workflow).
 
     In the new workflow, segments are created on-demand as prompts are provided.
     This creates segment 0 with the initial prompt, start image, and LoRA selections.
+
+    Args:
+        job_id: The job ID
+        initial_prompt: The prompt for segment 0
+        start_image_url: ComfyUI image URL for the starting image
+        high_loras: List of high noise LoRA filenames (max 2)
+        low_loras: List of low noise LoRA filenames (max 2)
     """
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora)
             VALUES (?, ?, 'pending', ?, ?, ?, ?)
-        """, (job_id, 0, initial_prompt, start_image_url, high_lora, low_lora))
+        """, (job_id, 0, initial_prompt, start_image_url,
+              serialize_loras(high_loras), serialize_loras(low_loras)))
 
 
 def create_next_segment(
@@ -565,19 +619,28 @@ def create_next_segment(
     segment_index: int,
     prompt: str,
     start_image_url: str,
-    high_lora: Optional[str] = None,
-    low_lora: Optional[str] = None
+    high_loras: Optional[List[str]] = None,
+    low_loras: Optional[List[str]] = None
 ):
     """Create the next segment for a job (on-demand workflow).
 
     Creates a new segment with the provided prompt and settings.
+
+    Args:
+        job_id: The job ID
+        segment_index: The segment index (1, 2, 3, ...)
+        prompt: The prompt for this segment
+        start_image_url: ComfyUI image URL for the starting image
+        high_loras: List of high noise LoRA filenames (max 2)
+        low_loras: List of low noise LoRA filenames (max 2)
     """
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora)
             VALUES (?, ?, 'pending', ?, ?, ?, ?)
-        """, (job_id, segment_index, prompt, start_image_url, high_lora, low_lora))
+        """, (job_id, segment_index, prompt, start_image_url,
+              serialize_loras(high_loras), serialize_loras(low_loras)))
 
 
 def create_segments_for_job(
@@ -585,13 +648,21 @@ def create_segments_for_job(
     total_segments: int,
     initial_prompt: str,
     start_image_url: str,
-    high_lora: Optional[str] = None,
-    low_lora: Optional[str] = None
+    high_loras: Optional[List[str]] = None,
+    low_loras: Optional[List[str]] = None
 ):
     """Create segment records for a job (legacy function for backward compatibility).
 
     Only segment 0 gets the initial prompt, start image, and LoRA selections.
     Subsequent segments are created with no prompt - user must provide one after each segment completes.
+
+    Args:
+        job_id: The job ID
+        total_segments: Number of segments to create
+        initial_prompt: The prompt for segment 0
+        start_image_url: ComfyUI image URL for the starting image
+        high_loras: List of high noise LoRA filenames (max 2)
+        low_loras: List of low noise LoRA filenames (max 2)
     """
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -601,7 +672,8 @@ def create_segments_for_job(
                 cursor.execute("""
                     INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora)
                     VALUES (?, ?, 'pending', ?, ?, ?, ?)
-                """, (job_id, i, initial_prompt, start_image_url, high_lora, low_lora))
+                """, (job_id, i, initial_prompt, start_image_url,
+                      serialize_loras(high_loras), serialize_loras(low_loras)))
             else:
                 # Subsequent segments start with no prompt - user provides after previous segment completes
                 cursor.execute("""
@@ -698,26 +770,34 @@ def update_segment_prompt(
     job_id: int,
     segment_index: int,
     prompt: str,
-    high_lora: Optional[str] = None,
-    low_lora: Optional[str] = None
+    high_loras: Optional[List[str]] = None,
+    low_loras: Optional[List[str]] = None
 ):
-    """Update a segment's prompt and optionally its LoRA selections."""
+    """Update a segment's prompt and optionally its LoRA selections.
+
+    Args:
+        job_id: The job ID
+        segment_index: The segment index
+        prompt: The new prompt
+        high_loras: List of high noise LoRA filenames (max 2), or None to not update
+        low_loras: List of low noise LoRA filenames (max 2), or None to not update
+    """
     with get_connection() as conn:
         cursor = conn.cursor()
-        
+
         updates = ["prompt = ?"]
         params = [prompt]
-        
-        if high_lora is not None:
+
+        if high_loras is not None:
             updates.append("high_lora = ?")
-            params.append(high_lora)
-        
-        if low_lora is not None:
+            params.append(serialize_loras(high_loras))
+
+        if low_loras is not None:
             updates.append("low_lora = ?")
-            params.append(low_lora)
-        
+            params.append(serialize_loras(low_loras))
+
         params.extend([job_id, segment_index])
-        
+
         cursor.execute(
             f"UPDATE job_segments SET {', '.join(updates)} WHERE job_id = ? AND segment_index = ?",
             params

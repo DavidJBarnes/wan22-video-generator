@@ -22,7 +22,8 @@ from database import (
     get_next_pending_segment,
     update_segment_status,
     update_segment_start_image,
-    get_completed_segments_count
+    get_completed_segments_count,
+    parse_loras
 )
 from comfyui_client import ComfyUIClient
 from video_utils import (
@@ -277,11 +278,20 @@ class QueueManager:
                 return False
         
         print(f"[QueueManager] Segment {segment_index} using input_image: {input_image}")
-        
-        # Get LoRA selections for this segment (may be None if user didn't select any)
-        high_lora = segment.get("high_lora")
-        low_lora = segment.get("low_lora")
-        print(f"[QueueManager] Segment {segment_index} LoRA selections: high={high_lora}, low={low_lora}")
+
+        # Parse LoRA selections for this segment (supports 0-2 LoRA pairs)
+        high_loras = parse_loras(segment.get("high_lora"))
+        low_loras = parse_loras(segment.get("low_lora"))
+
+        # Build loras list for workflow builder
+        loras = []
+        for i in range(max(len(high_loras), len(low_loras))):
+            high_file = high_loras[i] if i < len(high_loras) else None
+            low_file = low_loras[i] if i < len(low_loras) else None
+            if high_file or low_file:
+                loras.append({"high_file": high_file, "low_file": low_file})
+
+        print(f"[QueueManager] Segment {segment_index} LoRA pairs: {loras}")
         
         # Check if ComfyUI queue is idle before submitting
         queue_status = client.get_queue_status()
@@ -327,8 +337,7 @@ class QueueManager:
             high_noise_model=get_setting("high_noise_model", "wan2.2_i2v_high_noise_14B_fp16.safetensors"),
             low_noise_model=get_setting("low_noise_model", "wan2.2_i2v_low_noise_14B_fp16.safetensors"),
             seed=params.get("seed"),
-            high_lora=high_lora,
-            low_lora=low_lora,
+            loras=loras if loras else None,
             fps=fps,
             output_prefix=output_prefix,
         )
@@ -346,8 +355,7 @@ class QueueManager:
                 "dimensions": f"{params.get('width', 640)}x{params.get('height', 640)}",
                 "frames": frames,
                 "fps": fps,
-                "high_lora": high_lora,
-                "low_lora": low_lora,
+                "loras": loras,
             }
             logger.error(f"[Job {job_id}] Segment {segment_index} FAILED to queue!")
             logger.error(f"[Job {job_id}] Error: {result}")

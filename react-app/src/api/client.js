@@ -197,14 +197,20 @@ class APIClient {
     return `${API_BASE_URL}/jobs/${jobId}/video`;
   }
 
-  async submitSegmentPrompt(jobId, segmentIndex, prompt, highLora = null, lowLora = null) {
+  async submitSegmentPrompt(jobId, segmentIndex, prompt, loras = []) {
     const formData = new FormData();
     formData.append('prompt', prompt);
-    if (highLora) {
-      formData.append('high_lora', highLora);
-    }
-    if (lowLora) {
-      formData.append('low_lora', lowLora);
+
+    // Send loras as JSON array: [{high_file, low_file}, ...]
+    if (loras && loras.length > 0) {
+      // Filter out empty entries and build the loras array
+      const loraArray = loras
+        .filter(l => l && (l.high_file || l.low_file))
+        .map(l => ({ high_file: l.high_file || null, low_file: l.low_file || null }));
+
+      if (loraArray.length > 0) {
+        formData.append('loras', JSON.stringify(loraArray));
+      }
     }
 
     return this.request(`/jobs/${jobId}/segments/${segmentIndex}/prompt`, {
