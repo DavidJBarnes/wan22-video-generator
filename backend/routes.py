@@ -47,7 +47,8 @@ from database import (
     move_job_to_bottom,
     hide_lora_file,
     unhide_lora_file,
-    get_hidden_loras as db_get_hidden_loras
+    get_hidden_loras as db_get_hidden_loras,
+    get_job_logs as db_get_job_logs
 )
 from comfyui_client import ComfyUIClient
 from queue_manager import queue_manager
@@ -200,9 +201,11 @@ router = APIRouter()
 # ============== Pydantic Models ==============
 
 class LoraSelection(BaseModel):
-    """A LoRA pair selection (high + low noise variants)."""
-    high_file: Optional[str] = None  # LoRA filename for high noise pass
-    low_file: Optional[str] = None   # LoRA filename for low noise pass
+    """A LoRA pair selection (high + low noise variants) with weights."""
+    high_file: Optional[str] = None    # LoRA filename for high noise pass
+    high_weight: Optional[float] = 1.0  # Weight for high noise LoRA (0.0-2.0)
+    low_file: Optional[str] = None     # LoRA filename for low noise pass
+    low_weight: Optional[float] = 1.0   # Weight for low noise LoRA (0.0-2.0)
 
 
 class JobCreate(BaseModel):
@@ -306,6 +309,16 @@ async def get_job_details(job_id: int):
     return enrich_job_with_segments(job)
 
 
+@router.get("/jobs/{job_id}/logs")
+async def get_job_logs(job_id: int, limit: int = 100):
+    """Get activity logs for a job."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    logs = db_get_job_logs(job_id, limit=limit)
+    return {"job_id": job_id, "logs": logs}
+
+
 @router.post("/jobs", response_model=JobResponse)
 async def create_new_job(job: JobCreate):
     """Create a new job and its segments."""
@@ -327,14 +340,22 @@ async def create_new_job(job: JobCreate):
         else:
             start_image_url = f"{comfyui_url}/view?filename={job.input_image}&subfolder=&type=input"
 
-    # Extract LoRA filenames from loras list (0-2 pairs)
+    # Extract LoRA selections from loras list (0-2 pairs) with weights
     high_loras = []
     low_loras = []
     if job.loras:
         for lora in job.loras[:2]:  # Max 2 pairs
             if lora.high_file or lora.low_file:
-                high_loras.append(lora.high_file)
-                low_loras.append(lora.low_file)
+                if lora.high_file:
+                    high_loras.append({
+                        "file": lora.high_file,
+                        "weight": lora.high_weight or 1.0
+                    })
+                if lora.low_file:
+                    low_loras.append({
+                        "file": lora.low_file,
+                        "weight": lora.low_weight or 1.0
+                    })
 
     # Create only the first segment (on-demand workflow)
     # Additional segments will be created when user provides prompts
@@ -653,6 +674,7 @@ async def update_segment_prompt_endpoint(
         raise HTTPException(status_code=404, detail="Job not found")
 
     # Parse LoRA selections from JSON string
+    # Format: [{"high_file": "...", "high_weight": 1.0, "low_file": "...", "low_weight": 1.0}, ...]
     high_loras = []
     low_loras = []
     if loras:
@@ -660,8 +682,17 @@ async def update_segment_prompt_endpoint(
             lora_list = json.loads(loras)
             for lora in lora_list[:2]:  # Max 2 pairs
                 if lora.get("high_file") or lora.get("low_file"):
-                    high_loras.append(lora.get("high_file"))
-                    low_loras.append(lora.get("low_file"))
+                    # Store as objects with file and weight
+                    if lora.get("high_file"):
+                        high_loras.append({
+                            "file": lora["high_file"],
+                            "weight": float(lora.get("high_weight", 1.0))
+                        })
+                    if lora.get("low_file"):
+                        low_loras.append({
+                            "file": lora["low_file"],
+                            "weight": float(lora.get("low_weight", 1.0))
+                        })
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid loras JSON format")
 
@@ -778,7 +809,14 @@ async def get_settings():
     settings.setdefault("default_negative_prompt", DEFAULT_NEGATIVE_PROMPT)
     settings.setdefault("models", MODELS)
     settings.setdefault("generation_params", GENERATION_PARAMS)
-    
+
+    # Job naming presets (stored as JSON arrays)
+    settings.setdefault("job_name_prefixes", "[]")
+    settings.setdefault("job_name_descriptions", "[]")
+
+    # Segment execution timeout (seconds) - how long to wait for ComfyUI to complete a segment
+    settings.setdefault("segment_execution_timeout", "1200")  # 20 minutes default
+
     return {"settings": settings}
 
 
@@ -916,6 +954,22 @@ async def fetch_and_cache_loras():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch LoRAs: {str(e)}")
+
+
+@router.post("/loras/cleanup")
+async def cleanup_lora_duplicates():
+    """Clean up duplicate LoRA entries based on actual .safetensors filename.
+
+    If the same filename appears in multiple rows, keeps the row with the most
+    metadata and removes the duplicate entries.
+    """
+    from database import cleanup_duplicate_loras
+    result = cleanup_duplicate_loras()
+    return {
+        "status": "success",
+        "message": f"Cleaned up {result['duplicates_removed']} duplicate entries, deleted {result['empty_rows_deleted']} empty rows",
+        **result
+    }
 
 
 @router.get("/loras/hidden")
@@ -1112,9 +1166,27 @@ async def proxy_comfyui_view(filename: str, subfolder: str = "", type: str = "in
 
 @router.post("/upload/image")
 async def upload_image(file: UploadFile = File(...)):
-    """Upload an image to ComfyUI."""
+    """Upload an image to ComfyUI.
+
+    Deduplicates based on content hash - if the same image was uploaded before,
+    returns the existing filename without re-uploading.
+    """
+    from database import compute_image_hash, get_image_by_hash, store_uploaded_image
+
     # Read file content
     content = await file.read()
+
+    # Check if this image was already uploaded (by content hash)
+    content_hash = compute_image_hash(content)
+    existing = get_image_by_hash(content_hash)
+
+    if existing:
+        # Image already exists, return existing filename
+        return {
+            "filename": existing['comfyui_filename'],
+            "original_name": file.filename,
+            "deduplicated": True
+        }
 
     # Upload to ComfyUI
     comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
@@ -1126,12 +1198,21 @@ async def upload_image(file: UploadFile = File(...)):
     if not filename:
         raise HTTPException(status_code=500, detail="Failed to upload image to ComfyUI")
 
-    return {"filename": filename, "original_name": file.filename}
+    # Store the hash for future deduplication
+    store_uploaded_image(content_hash, filename, file.filename)
+
+    return {"filename": filename, "original_name": file.filename, "deduplicated": False}
 
 
 @router.post("/upload/image/base64")
 async def upload_image_base64(image_data: str = Form(...), filename: str = Form(...)):
-    """Upload a base64 encoded image to ComfyUI."""
+    """Upload a base64 encoded image to ComfyUI.
+
+    Deduplicates based on content hash - if the same image was uploaded before,
+    returns the existing filename without re-uploading.
+    """
+    from database import compute_image_hash, get_image_by_hash, store_uploaded_image
+
     try:
         # Decode base64
         if "," in image_data:
@@ -1139,6 +1220,18 @@ async def upload_image_base64(image_data: str = Form(...), filename: str = Form(
         content = base64.b64decode(image_data)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid base64 data: {e}")
+
+    # Check if this image was already uploaded (by content hash)
+    content_hash = compute_image_hash(content)
+    existing = get_image_by_hash(content_hash)
+
+    if existing:
+        # Image already exists, return existing filename
+        return {
+            "filename": existing['comfyui_filename'],
+            "original_name": filename,
+            "deduplicated": True
+        }
 
     # Upload to ComfyUI
     comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
@@ -1150,7 +1243,10 @@ async def upload_image_base64(image_data: str = Form(...), filename: str = Form(
     if not result_filename:
         raise HTTPException(status_code=500, detail="Failed to upload image to ComfyUI")
 
-    return {"filename": result_filename, "original_name": filename}
+    # Store the hash for future deduplication
+    store_uploaded_image(content_hash, result_filename, filename)
+
+    return {"filename": result_filename, "original_name": filename, "deduplicated": False}
 
 
 # ============== Image Repository Endpoints ==============

@@ -23,7 +23,8 @@ from database import (
     update_segment_status,
     update_segment_start_image,
     get_completed_segments_count,
-    parse_loras
+    parse_loras,
+    add_job_log
 )
 from comfyui_client import ComfyUIClient
 from video_utils import (
@@ -128,6 +129,7 @@ class QueueManager:
 
         print(f"[QueueManager] Processing job {job_id}: {job['name']}")
         print(f"[QueueManager] Job details: workflow_type={job.get('workflow_type')}, input_image={job.get('input_image')}")
+        add_job_log(job_id, "INFO", "Job processing started", details=f"workflow_type={job.get('workflow_type')}")
 
         try:
             # Get ComfyUI client
@@ -140,6 +142,7 @@ class QueueManager:
             print(f"[QueueManager] ComfyUI connection check: connected={connected}, msg={msg}")
             if not connected:
                 print(f"[QueueManager] ComfyUI not available: {msg}")
+                add_job_log(job_id, "WARN", "ComfyUI not available, waiting", details=msg)
                 # Don't fail the job, just wait
                 self._current_job_id = None
                 return
@@ -147,6 +150,7 @@ class QueueManager:
             # Update status to running
             update_job_status(job_id, "running")
             self._notify_update(job_id, "running")
+            add_job_log(job_id, "INFO", "Connected to ComfyUI", details=comfyui_url)
 
             # Process segments one by one
             self._process_job_segments(job_id, job, client)
@@ -155,6 +159,7 @@ class QueueManager:
             print(f"Error processing job {job_id}: {e}")
             import traceback
             traceback.print_exc()
+            add_job_log(job_id, "ERROR", "Job processing failed with exception", details=str(e))
             update_job_status(job_id, "failed", error_message=str(e))
             self._notify_update(job_id, "failed")
         finally:
@@ -215,7 +220,12 @@ class QueueManager:
             if not success:
                 # Use 1-based segment number for user-facing error message
                 print(f"[QueueManager] Segment {segment_index} failed, stopping job")
-                update_job_status(job_id, "failed", error_message=f"Segment {segment_index + 1} failed")
+                # Get the segment's error message for a more helpful job error
+                updated_segment = get_job_segments(job_id)[segment_index] if segment_index < len(get_job_segments(job_id)) else None
+                segment_error = updated_segment.get("error_message") if updated_segment else None
+                job_error = f"Segment {segment_index + 1} failed: {segment_error}" if segment_error else f"Segment {segment_index + 1} failed"
+                add_job_log(job_id, "ERROR", f"Segment {segment_index} failed, stopping job", segment_index=segment_index, details=segment_error)
+                update_job_status(job_id, "failed", error_message=job_error)
                 self._notify_update(job_id, "failed")
                 return
 
@@ -280,16 +290,24 @@ class QueueManager:
         print(f"[QueueManager] Segment {segment_index} using input_image: {input_image}")
 
         # Parse LoRA selections for this segment (supports 0-2 LoRA pairs)
+        # Each parse_loras returns list of dicts: [{"file": "...", "weight": 1.0}, ...]
         high_loras = parse_loras(segment.get("high_lora"))
         low_loras = parse_loras(segment.get("low_lora"))
 
-        # Build loras list for workflow builder
+        # Build loras list for workflow builder with weights
         loras = []
         for i in range(max(len(high_loras), len(low_loras))):
-            high_file = high_loras[i] if i < len(high_loras) else None
-            low_file = low_loras[i] if i < len(low_loras) else None
-            if high_file or low_file:
-                loras.append({"high_file": high_file, "low_file": low_file})
+            high_lora = high_loras[i] if i < len(high_loras) else None
+            low_lora = low_loras[i] if i < len(low_loras) else None
+            if high_lora or low_lora:
+                lora_entry = {}
+                if high_lora:
+                    lora_entry["high_file"] = high_lora.get("file")
+                    lora_entry["high_weight"] = high_lora.get("weight", 1.0)
+                if low_lora:
+                    lora_entry["low_file"] = low_lora.get("file")
+                    lora_entry["low_weight"] = low_lora.get("weight", 1.0)
+                loras.append(lora_entry)
 
         print(f"[QueueManager] Segment {segment_index} LoRA pairs: {loras}")
         
@@ -344,6 +362,8 @@ class QueueManager:
 
         # Queue the prompt
         logger.info(f"[Job {job_id}] Queuing segment {segment_index} workflow to ComfyUI...")
+        add_job_log(job_id, "INFO", f"Queuing segment {segment_index} to ComfyUI", segment_index=segment_index,
+                   details=f"image={input_image}, {params.get('width', 640)}x{params.get('height', 640)}, {frames} frames")
         success, result = client.queue_prompt(workflow)
         logger.info(f"[Job {job_id}] queue_prompt result: success={success}, result={result[:200] if isinstance(result, str) else result}")
 
@@ -368,10 +388,12 @@ class QueueManager:
             elif "node" in result.lower():
                 error_msg = f"ComfyUI workflow error: {result}. There may be a missing node or invalid configuration."
 
+            add_job_log(job_id, "ERROR", f"Segment {segment_index} failed to queue", segment_index=segment_index, details=error_msg)
             update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
             return False
-        
+
         prompt_id = result
+        add_job_log(job_id, "INFO", f"Segment {segment_index} queued successfully", segment_index=segment_index, details=f"prompt_id={prompt_id}")
         update_segment_status(job_id, segment_index, "running", comfyui_prompt_id=prompt_id)
         
         # Wait for completion
@@ -380,7 +402,7 @@ class QueueManager:
     def _wait_for_segment_completion(self, job_id: int, segment_index: int, prompt_id: str, client: ComfyUIClient) -> bool:
         """Wait for a segment to complete and process its outputs."""
         comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
-        max_wait = 600  # 10 minutes max per segment
+        max_wait = int(get_setting("segment_execution_timeout", "1200"))  # configurable, default 20 min
         waited = 0
         
         while self._running and waited < max_wait:
@@ -438,21 +460,27 @@ class QueueManager:
                                 # Update the next segment's start image
                                 update_segment_start_image(job_id, segment_index + 1, end_frame_url)
 
+                                exec_time_str = f"{exec_time:.1f}s" if exec_time else "unknown"
+                                add_job_log(job_id, "INFO", f"Segment {segment_index} completed", segment_index=segment_index,
+                                           details=f"execution_time={exec_time_str}, video={video_path}")
                                 logger.info(f"[Job {job_id}] Segment {segment_index} fully processed")
                                 return True
                             else:
                                 error_msg = f"Failed to upload last frame to ComfyUI for segment {segment_index}"
                                 logger.error(f"[Job {job_id}] {error_msg}")
+                                add_job_log(job_id, "ERROR", f"Segment {segment_index} frame upload failed", segment_index=segment_index, details=error_msg)
                                 update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
                                 return False
                         else:
                             error_msg = f"Failed to extract last frame from video at {video_path}"
                             logger.error(f"[Job {job_id}] {error_msg}")
+                            add_job_log(job_id, "ERROR", f"Segment {segment_index} frame extraction failed", segment_index=segment_index, details=error_msg)
                             update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
                             return False
                     else:
                         error_msg = f"Failed to download video from ComfyUI: {video_url}"
                         logger.error(f"[Job {job_id}] {error_msg}")
+                        add_job_log(job_id, "ERROR", f"Segment {segment_index} video download failed", segment_index=segment_index, details=error_msg)
                         update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
                         return False
                 else:
@@ -462,12 +490,14 @@ class QueueManager:
                     return True
 
                 # If we got here, something failed in post-processing
+                add_job_log(job_id, "ERROR", f"Segment {segment_index} post-processing failed", segment_index=segment_index)
                 update_segment_status(job_id, segment_index, "failed", error_message="Post-processing failed")
                 return False
             
             if status.get("status") == "error":
                 error = status.get("error", "Unknown error")
                 logger.error(f"[Job {job_id}] Segment {segment_index} reported error from ComfyUI: {error}")
+                add_job_log(job_id, "ERROR", f"Segment {segment_index} failed - ComfyUI error", segment_index=segment_index, details=error)
                 update_segment_status(job_id, segment_index, "failed", error_message=f"ComfyUI error: {error}")
                 return False
 
@@ -478,6 +508,8 @@ class QueueManager:
         if waited >= max_wait:
             error_msg = f"Segment {segment_index} timed out after {max_wait}s waiting for ComfyUI to complete"
             logger.error(f"[Job {job_id}] {error_msg}")
+            add_job_log(job_id, "ERROR", f"Segment {segment_index} timed out", segment_index=segment_index,
+                       details=f"Waited {max_wait}s (limit: {max_wait}s). Consider increasing segment_execution_timeout in Settings.")
             update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
             return False
 
@@ -596,7 +628,7 @@ class QueueManager:
 
     def _wait_for_completion(self, job_id: int, prompt_id: str, client: ComfyUIClient):
         """Wait for a prompt to complete and update job status."""
-        max_wait = 600  # 10 minutes max
+        max_wait = int(get_setting("segment_execution_timeout", "1200"))  # configurable, default 20 min
         waited = 0
 
         while self._running and waited < max_wait:

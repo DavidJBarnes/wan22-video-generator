@@ -272,6 +272,7 @@ def build_wan_i2v_workflow(
     # Add user-selected LoRA nodes dynamically (0-2 pairs)
     # Chain: UNET -> LoRA1 -> LoRA2 -> lightx2v
     # If no LoRAs: UNET -> lightx2v (already wired in template)
+    # Each lora dict can have: high_file, high_weight, low_file, low_weight
     loras = loras or []
     loras = [l for l in loras if l.get("high_file") or l.get("low_file")]  # Filter empty
 
@@ -284,7 +285,9 @@ def build_wan_i2v_workflow(
 
         for i, lora in enumerate(loras[:2]):  # Max 2 pairs
             high_file = lora.get("high_file")
+            high_weight = float(lora.get("high_weight", 1.0))
             low_file = lora.get("low_file")
+            low_weight = float(lora.get("low_weight", 1.0))
 
             high_node_id = LORA_NODE_IDS["high"][i]
             low_node_id = LORA_NODE_IDS["low"][i]
@@ -295,13 +298,13 @@ def build_wan_i2v_workflow(
                     "class_type": "LoraLoaderModelOnly",
                     "inputs": {
                         "lora_name": high_file,
-                        "strength_model": 1.0,
+                        "strength_model": high_weight,
                         "model": [last_high_node, 0]
                     },
                     "_meta": {"title": f"User LoRA {i+1} High"}
                 }
                 last_high_node = high_node_id
-                print(f"[Workflow] Added LoRA {i+1} high: {high_file}")
+                print(f"[Workflow] Added LoRA {i+1} high: {high_file} (weight={high_weight})")
 
             # Add low noise LoRA node
             if low_file:
@@ -309,13 +312,13 @@ def build_wan_i2v_workflow(
                     "class_type": "LoraLoaderModelOnly",
                     "inputs": {
                         "lora_name": low_file,
-                        "strength_model": 1.0,
+                        "strength_model": low_weight,
                         "model": [last_low_node, 0]
                     },
                     "_meta": {"title": f"User LoRA {i+1} Low"}
                 }
                 last_low_node = low_node_id
-                print(f"[Workflow] Added LoRA {i+1} low: {low_file}")
+                print(f"[Workflow] Added LoRA {i+1} low: {low_file} (weight={low_weight})")
 
         # Rewire lightx2v nodes (101, 102) to take input from last user LoRA
         workflow["101"]["inputs"]["model"] = [last_high_node, 0]
