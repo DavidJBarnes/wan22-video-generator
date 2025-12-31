@@ -1,9 +1,23 @@
 import { useState, useEffect } from 'react';
-import { Button, TextField, Select, MenuItem, FormControl, InputLabel, FormHelperText, Autocomplete } from '@mui/material';
+import { Button, TextField, Select, MenuItem, FormControl, InputLabel, FormHelperText, Autocomplete, FormControlLabel, Checkbox } from '@mui/material';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import LoraAutocomplete from './LoraAutocomplete';
 import './CreateJobModal.css';
+
+// Available face swap images (in ComfyUI input folder)
+// Configure these values to match your local face image files
+const FACESWAP_FACES = [
+  { value: 'Andrea_all.safetensors.png', label: 'Andrea' },
+  { value: 'Chelsea_all.safetensors.png', label: 'Chelsea' },
+  { value: 'gena.safetensors.png', label: 'Gena' },
+  { value: 'Kelly__all.safetensors.png', label: 'Kelly (All)' },
+  { value: 'Kelly_young.safetensors.png', label: 'Kelly (Young)' },
+  { value: 'Kelly_20251124.safetensors.png', label: 'Kelly (2025)' },
+  { value: 'Kerry_all.safetensors.png', label: 'Kerry' },
+  { value: 'Me.safetensors.png', label: 'Me' },
+  { value: 'Udycz_all.safetensors.png', label: 'Udycz' },
+];
 
 export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl = null, cloneData = null }) {
   const [settings, setSettings] = useState({});
@@ -24,6 +38,8 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   const [uploading, setUploading] = useState(false);
   const [namePrefixes, setNamePrefixes] = useState([]);
   const [nameDescriptions, setNameDescriptions] = useState([]);
+  const [faceswapEnabled, setFaceswapEnabled] = useState(false);
+  const [faceswapImage, setFaceswapImage] = useState(FACESWAP_FACES[0]?.value || '');
   const [selectedPrefix, setSelectedPrefix] = useState(null);
   const [selectedDescription, setSelectedDescription] = useState(null);
 
@@ -264,7 +280,9 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
           width,
           height,
           fps,
-          segment_duration: segmentDuration
+          segment_duration: segmentDuration,
+          faceswap_enabled: faceswapEnabled,
+          faceswap_image: faceswapEnabled ? faceswapImage : null
         }
       };
 
@@ -525,6 +543,42 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                 disabled={!selectedLoras[1].lora}
               />
             </div>
+          </div>
+
+          {/* Face Swap */}
+          <div className="form-group" style={{
+            marginTop: '16px',
+            padding: '12px',
+            background: faceswapEnabled ? '#e8f5e9' : '#f5f5f5',
+            borderRadius: '8px',
+            border: faceswapEnabled ? '1px solid #81c784' : '1px solid #e0e0e0'
+          }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={faceswapEnabled}
+                  onChange={(e) => setFaceswapEnabled(e.target.checked)}
+                  color="success"
+                />
+              }
+              label={<span style={{ fontWeight: 500 }}>Enable Face Swap (ReActor)</span>}
+            />
+            {faceswapEnabled && (
+              <FormControl fullWidth variant="outlined" size="small" sx={{ mt: 1 }}>
+                <InputLabel>Face</InputLabel>
+                <Select
+                  value={faceswapImage}
+                  onChange={(e) => setFaceswapImage(e.target.value)}
+                  label="Face"
+                >
+                  {FACESWAP_FACES.map((face) => (
+                    <MenuItem key={face.value} value={face.value}>
+                      {face.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
           </div>
 
           <div className="modal-actions">
