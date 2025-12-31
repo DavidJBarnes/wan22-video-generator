@@ -6,7 +6,7 @@ once and stored here. At runtime, we just inject user values into the appropriat
 
 import copy
 import random
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 
 # Wan2.2 14B Image-to-Video workflow in ComfyUI API format
@@ -141,7 +141,7 @@ WAN_I2V_API_WORKFLOW = {
         "inputs": {
             "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
             "strength_model": 1.0,
-            "model": ["118", 0]  # Takes model from High LoRA node
+            "model": ["95", 0]  # Default: takes model from UNET high (rewired if LoRAs added)
         }
     },
     "102": {
@@ -149,7 +149,7 @@ WAN_I2V_API_WORKFLOW = {
         "inputs": {
             "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
             "strength_model": 1.0,
-            "model": ["119", 0]  # Takes model from Low LoRA node
+            "model": ["96", 0]  # Default: takes model from UNET low (rewired if LoRAs added)
         }
     },
     "103": {
@@ -175,36 +175,16 @@ WAN_I2V_API_WORKFLOW = {
             "video": ["94", 0]
         }
     },
-    # User-selectable LoRA nodes (optional per segment)
-    # Default to NSFW LoRAs if user doesn't select any
-    "118": {
-        "class_type": "LoraLoaderModelOnly",
-        "inputs": {
-            "lora_name": "wan2.2/NSFW-22-H-e8.safetensors",  # Default high noise LoRA
-            "strength_model": 1.0,
-            "model": ["95", 0]  # Takes model from UNET high noise loader
-        },
-        "_meta": {
-            "title": "High Lora"
-        }
-    },
-    "119": {
-        "class_type": "LoraLoaderModelOnly",
-        "inputs": {
-            "lora_name": "wan2.2/NSFW-22-L-e8.safetensors",  # Default low noise LoRA
-            "strength_model": 1.0,
-            "model": ["96", 0]  # Takes model from UNET low noise loader
-        },
-        "_meta": {
-            "title": "Low Lora"
-        }
-    },
+    # NOTE: User-selectable LoRA nodes (118, 119, 120, 121) are added dynamically
+    # by build_wan_i2v_workflow() based on user's LoRA selections (0-2 pairs)
 }
 
 
-# Default LoRA names (used when user doesn't select any)
-DEFAULT_HIGH_LORA = "wan2.2/NSFW-22-H-e8.safetensors"
-DEFAULT_LOW_LORA = "wan2.2/NSFW-22-L-e8.safetensors"
+# LoRA node IDs for dynamic creation (high pass: 118, 120; low pass: 119, 121)
+LORA_NODE_IDS = {
+    "high": ["118", "120"],  # First LoRA high, Second LoRA high
+    "low": ["119", "121"],   # First LoRA low, Second LoRA low
+}
 
 
 def _sanitize_filename(name: str) -> str:
@@ -227,8 +207,7 @@ def build_wan_i2v_workflow(
     high_noise_model: str = "wan2.2_i2v_high_noise_14B_fp16.safetensors",
     low_noise_model: str = "wan2.2_i2v_low_noise_14B_fp16.safetensors",
     seed: Optional[int] = None,
-    high_lora: Optional[str] = None,
-    low_lora: Optional[str] = None,
+    loras: Optional[List[Dict[str, str]]] = None,
     fps: int = 16,
     output_prefix: str = "",
 ) -> Dict[str, Any]:
@@ -244,8 +223,10 @@ def build_wan_i2v_workflow(
         high_noise_model: UNET model for high noise pass
         low_noise_model: UNET model for low noise pass
         seed: Random seed (auto-generated if not provided)
-        high_lora: Optional LoRA for high noise path (None = use default)
-        low_lora: Optional LoRA for low noise path (None = use default)
+        loras: Optional list of LoRA pairs (max 2). Each dict has:
+               - high_file: LoRA filename for high noise pass
+               - low_file: LoRA filename for low noise pass
+               If empty/None, no user LoRAs are applied (only lightx2v acceleration)
         fps: Frames per second for output video (default 16)
         output_prefix: Filename prefix for output video (sanitized job name)
 
@@ -254,49 +235,94 @@ def build_wan_i2v_workflow(
     """
     # Deep copy the template so we don't modify the original
     workflow = copy.deepcopy(WAN_I2V_API_WORKFLOW)
-    
+
     # Generate seed if not provided
     if seed is None:
         seed = random.randint(0, 2**32 - 1)
-    
+
     # Override start image filename (node 97 - LoadImage)
     workflow["97"]["inputs"]["image"] = start_image_filename
     print(f"[Workflow] Set LoadImage to: {start_image_filename}")
-    
+
     # Override positive prompt (node 93 - CLIPTextEncode)
     workflow["93"]["inputs"]["text"] = prompt
     print(f"[Workflow] Set positive prompt: {prompt[:50]}...")
-    
+
     # Override negative prompt (node 89 - CLIPTextEncode)
     if negative_prompt:
         workflow["89"]["inputs"]["text"] = negative_prompt
         print(f"[Workflow] Set negative prompt: {negative_prompt[:50]}...")
-    
+
     # Override video dimensions and frames (node 98 - WanImageToVideo)
     workflow["98"]["inputs"]["width"] = width
     workflow["98"]["inputs"]["height"] = height
     workflow["98"]["inputs"]["length"] = frames
     print(f"[Workflow] Set WanImageToVideo: {width}x{height}, {frames} frames")
-    
+
     # Override UNET model names (nodes 95 and 96)
     workflow["95"]["inputs"]["unet_name"] = high_noise_model
     workflow["96"]["inputs"]["unet_name"] = low_noise_model
     print(f"[Workflow] Set high noise model: {high_noise_model}")
     print(f"[Workflow] Set low noise model: {low_noise_model}")
-    
+
     # Set random seed (node 86 - KSamplerAdvanced for high noise pass)
     workflow["86"]["inputs"]["noise_seed"] = seed
     print(f"[Workflow] Set seed: {seed}")
-    
-    # Override LoRA selections (nodes 118 and 119)
-    # Use default LoRAs if user doesn't select any
-    high_lora_name = high_lora if high_lora else DEFAULT_HIGH_LORA
-    low_lora_name = low_lora if low_lora else DEFAULT_LOW_LORA
-    
-    workflow["118"]["inputs"]["lora_name"] = high_lora_name
-    workflow["119"]["inputs"]["lora_name"] = low_lora_name
-    print(f"[Workflow] Set high LoRA: {high_lora_name}")
-    print(f"[Workflow] Set low LoRA: {low_lora_name}")
+
+    # Add user-selected LoRA nodes dynamically (0-2 pairs)
+    # Chain: UNET -> LoRA1 -> LoRA2 -> lightx2v
+    # If no LoRAs: UNET -> lightx2v (already wired in template)
+    loras = loras or []
+    loras = [l for l in loras if l.get("high_file") or l.get("low_file")]  # Filter empty
+
+    if loras:
+        print(f"[Workflow] Adding {len(loras)} user LoRA pair(s)")
+
+        # Track last node IDs in the chain (start with UNET loaders)
+        last_high_node = "95"  # UNET high
+        last_low_node = "96"   # UNET low
+
+        for i, lora in enumerate(loras[:2]):  # Max 2 pairs
+            high_file = lora.get("high_file")
+            low_file = lora.get("low_file")
+
+            high_node_id = LORA_NODE_IDS["high"][i]
+            low_node_id = LORA_NODE_IDS["low"][i]
+
+            # Add high noise LoRA node
+            if high_file:
+                workflow[high_node_id] = {
+                    "class_type": "LoraLoaderModelOnly",
+                    "inputs": {
+                        "lora_name": high_file,
+                        "strength_model": 1.0,
+                        "model": [last_high_node, 0]
+                    },
+                    "_meta": {"title": f"User LoRA {i+1} High"}
+                }
+                last_high_node = high_node_id
+                print(f"[Workflow] Added LoRA {i+1} high: {high_file}")
+
+            # Add low noise LoRA node
+            if low_file:
+                workflow[low_node_id] = {
+                    "class_type": "LoraLoaderModelOnly",
+                    "inputs": {
+                        "lora_name": low_file,
+                        "strength_model": 1.0,
+                        "model": [last_low_node, 0]
+                    },
+                    "_meta": {"title": f"User LoRA {i+1} Low"}
+                }
+                last_low_node = low_node_id
+                print(f"[Workflow] Added LoRA {i+1} low: {low_file}")
+
+        # Rewire lightx2v nodes (101, 102) to take input from last user LoRA
+        workflow["101"]["inputs"]["model"] = [last_high_node, 0]
+        workflow["102"]["inputs"]["model"] = [last_low_node, 0]
+        print(f"[Workflow] Rewired lightx2v: high from {last_high_node}, low from {last_low_node}")
+    else:
+        print("[Workflow] No user LoRAs selected (using only lightx2v acceleration)")
 
     # Override FPS (node 94 - CreateVideo)
     workflow["94"]["inputs"]["fps"] = fps

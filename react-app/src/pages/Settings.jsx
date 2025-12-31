@@ -9,6 +9,8 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fetchingLoras, setFetchingLoras] = useState(false);
+  const [hiddenLoras, setHiddenLoras] = useState([]);
+  const [loadingHidden, setLoadingHidden] = useState(false);
 
   // Form fields
   const [comfyuiUrl, setComfyuiUrl] = useState('');
@@ -21,6 +23,7 @@ export default function Settings() {
 
   useEffect(() => {
     loadSettings();
+    loadHiddenLoras();
   }, []);
 
   async function loadSettings() {
@@ -42,6 +45,29 @@ export default function Settings() {
       console.error('Failed to load settings:', error);
       showToast('Failed to load settings', 'error');
       setLoading(false);
+    }
+  }
+
+  async function loadHiddenLoras() {
+    setLoadingHidden(true);
+    try {
+      const data = await API.getHiddenLoras();
+      setHiddenLoras(data || []);
+    } catch (error) {
+      console.error('Failed to load hidden LoRAs:', error);
+    } finally {
+      setLoadingHidden(false);
+    }
+  }
+
+  async function handleRestoreLora(filename) {
+    try {
+      await API.restoreHiddenLora(filename);
+      showToast('LoRA restored. Refresh LoRA library to see it.', 'success');
+      await loadHiddenLoras();
+    } catch (error) {
+      console.error('Failed to restore LoRA:', error);
+      showToast('Failed to restore LoRA', 'error');
     }
   }
 
@@ -161,6 +187,48 @@ export default function Settings() {
           >
             {fetchingLoras ? 'Fetching...' : 'Fetch LoRAs from ComfyUI'}
           </Button>
+        </div>
+
+        {/* Hidden LoRAs */}
+        <div className="card settings-section">
+          <h2>Hidden LoRAs</h2>
+          <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
+            LoRAs you've deleted are hidden from future refreshes. Restore them here if needed.
+          </p>
+          {loadingHidden ? (
+            <p>Loading...</p>
+          ) : hiddenLoras.length === 0 ? (
+            <p style={{ color: '#999', fontStyle: 'italic' }}>No hidden LoRAs</p>
+          ) : (
+            <div style={{ maxHeight: '300px', overflow: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #ddd' }}>Filename</th>
+                    <th style={{ textAlign: 'right', padding: '8px', borderBottom: '1px solid #ddd' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hiddenLoras.map((item) => (
+                    <tr key={item.id}>
+                      <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontSize: '13px', wordBreak: 'break-all' }}>
+                        {item.filename}
+                      </td>
+                      <td style={{ padding: '8px', borderBottom: '1px solid #eee', textAlign: 'right' }}>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => handleRestoreLora(item.filename)}
+                        >
+                          Restore
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* Default Parameters */}

@@ -9,10 +9,46 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
   const [creatingJob, setCreatingJob] = useState(false);
   const [rating, setRating] = useState(image.rating || null);
 
+  // Lock scroll on .main-content when modal is open
+  useEffect(() => {
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+      const originalOverflow = mainContent.style.overflow;
+      mainContent.style.overflow = 'hidden';
+      return () => {
+        mainContent.style.overflow = originalOverflow;
+      };
+    }
+  }, []);
+
   // Update rating when image changes
   useEffect(() => {
     setRating(image.rating || null);
   }, [image]);
+
+  // Keyboard navigation and shortcuts
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (deleting || creatingJob) return;
+
+      if (e.key === 'ArrowLeft' && currentIndex > 0) {
+        onNavigate(currentIndex - 1);
+      } else if (e.key === 'ArrowRight' && currentIndex < images.length - 1) {
+        onNavigate(currentIndex + 1);
+      } else if (e.key === 'Escape') {
+        onClose();
+      } else if (e.key === 'Delete') {
+        handleDelete();
+      } else if (e.key >= '1' && e.key <= '5') {
+        handleRatingChange(null, parseInt(e.key));
+      } else if (e.key === '0') {
+        handleRatingChange(null, null); // Clear rating
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [currentIndex, images.length, deleting, creatingJob, onNavigate, onClose]);
 
   async function handleDelete() {
     if (!confirm(`Are you sure you want to delete "${image.name}"? This will permanently remove the file from the filesystem.`)) {

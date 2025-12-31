@@ -136,6 +136,10 @@ docker compose logs -f backend
 - Backend: http://localhost:8000
 - ComfyUI: Configured in Settings (default: http://localhost:8188)
 
+## Git Guidelines
+
+- **Never commit binary files** such as videos (.mp4, .webm), images (.jpg, .png), or other media assets
+
 ## Development Notes
 
 ### Running Locally (without Docker)

@@ -168,6 +168,59 @@ export default function JobDetail() {
 
   const lastCompletedSegment = segments.filter(s => s.status === 'completed').pop();
 
+  // Helper to parse LoRA data from segment (could be JSON arrays or single strings)
+  function parseLoraArray(value) {
+    if (!value) return [];
+    if (typeof value === 'string' && value.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed.filter(l => l) : [];
+      } catch (e) {
+        return [value];
+      }
+    }
+    return [value];
+  }
+
+  // Build defaultLoras array for SubmitPromptModal
+  function buildDefaultLoras(segment) {
+    if (!segment) return [];
+    const highLoras = parseLoraArray(segment.high_lora);
+    const lowLoras = parseLoraArray(segment.low_lora);
+
+    const result = [];
+    const maxLen = Math.max(highLoras.length, lowLoras.length);
+    for (let i = 0; i < maxLen; i++) {
+      const h = highLoras[i] || null;
+      const l = lowLoras[i] || null;
+      if (h || l) {
+        result.push({ high_file: h, low_file: l });
+      }
+    }
+    return result;
+  }
+
+  // Format LoRAs for display
+  function formatLorasDisplay(highLora, lowLora) {
+    const highLoras = parseLoraArray(highLora);
+    const lowLoras = parseLoraArray(lowLora);
+
+    if (highLoras.length === 0 && lowLoras.length === 0) {
+      return { display: 'N/A', count: 0 };
+    }
+
+    const maxLen = Math.max(highLoras.length, lowLoras.length);
+    const pairs = [];
+    for (let i = 0; i < maxLen; i++) {
+      const h = highLoras[i] ? highLoras[i].split('/').pop() : null;
+      const l = lowLoras[i] ? lowLoras[i].split('/').pop() : null;
+      if (h || l) {
+        pairs.push({ high: h, low: l, index: i + 1 });
+      }
+    }
+    return { pairs, count: pairs.length };
+  }
+
   return (
     <div>
       <div className="detail-header">
@@ -187,7 +240,7 @@ export default function JobDetail() {
             <video
               key={`video-${id}-${job.completed_at}`}
               controls
-              style={{ width: '100%', maxWidth: '800px', borderRadius: '4px' }}
+              style={{ width: '100%', maxWidth: width >= height ? '500px' : '300px', borderRadius: '4px' }}
               src={API.getJobVideo(id)}
             >
               Your browser does not support video playback.
@@ -243,6 +296,18 @@ export default function JobDetail() {
             <div className="detail-meta-item">
               <label>Completed</label>
               <div className="value">{formatDate(job.completed_at)}</div>
+            </div>
+          )}
+          {job.input_image && (
+            <div className="detail-meta-item">
+              <label>Starting Image</label>
+              <div className="value" style={{
+                fontFamily: 'monospace',
+                fontSize: '12px',
+                wordBreak: 'break-all'
+              }}>
+                {job.input_image.split('/').slice(-3).join('/')}
+              </div>
             </div>
           )}
         </div>
@@ -359,8 +424,19 @@ export default function JobDetail() {
                 {/* Prompt Section */}
                 <div className="segment-prompt">
                   <div><strong>Prompt:</strong> {seg.prompt || 'TBD'}</div>
-                  <div><strong>High lora:</strong> {seg.high_lora || 'N/A'}</div>
-                  <div><strong>Low lora:</strong> {seg.low_lora || 'N/A'}</div>
+                  {(() => {
+                    const loraInfo = formatLorasDisplay(seg.high_lora, seg.low_lora);
+                    if (loraInfo.count === 0) {
+                      return <div><strong>LoRAs:</strong> N/A</div>;
+                    }
+                    return loraInfo.pairs.map((pair, idx) => (
+                      <div key={idx} style={{ marginTop: idx > 0 ? '4px' : 0 }}>
+                        <strong>LoRA {pair.index}:</strong>{' '}
+                        <span style={{ color: '#2e7d32' }}>H:</span> {pair.high || 'N/A'}{' '}
+                        <span style={{ color: '#1565c0' }}>L:</span> {pair.low || 'N/A'}
+                      </div>
+                    ));
+                  })()}
                 </div>
 
                 {/* End Image */}
@@ -434,8 +510,7 @@ export default function JobDetail() {
           jobId={id}
           segmentIndex={nextSegmentIndex}
           defaultPrompt={lastCompletedSegment?.prompt || ''}
-          defaultHighLora={lastCompletedSegment?.high_lora || ''}
-          defaultLowLora={lastCompletedSegment?.low_lora || ''}
+          defaultLoras={buildDefaultLoras(lastCompletedSegment)}
           onClose={() => setShowPromptModal(false)}
           onSuccess={() => {
             setShowPromptModal(false);

@@ -15,7 +15,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   const [segmentDuration, setSegmentDuration] = useState(5);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
-  const [selectedLora, setSelectedLora] = useState(null); // Grouped LoRA object
+  const [selectedLoras, setSelectedLoras] = useState([null, null]); // Two LoRA slots
   const [loras, setLoras] = useState([]);
   const [uploading, setUploading] = useState(false);
 
@@ -43,15 +43,39 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
     }
   }, [preUploadedImageUrl, cloneData]);
 
-  // When loras are loaded and we have cloneData, find the matching LoRA
+  // When loras are loaded and we have cloneData, find matching LoRAs
   useEffect(() => {
     if (cloneData && loras.length > 0) {
-      const highLoraFile = cloneData.high_lora || cloneData.parameters?.high_lora;
-      if (highLoraFile) {
-        const matchingLora = loras.find(l => l.high_file === highLoraFile || l.low_file === highLoraFile);
-        if (matchingLora) {
-          setSelectedLora(matchingLora);
+      // Parse high_lora - could be a JSON array or single string
+      let highLoraFiles = [];
+      const highLoraData = cloneData.high_lora || cloneData.parameters?.high_lora;
+      if (highLoraData) {
+        if (typeof highLoraData === 'string' && highLoraData.startsWith('[')) {
+          try {
+            highLoraFiles = JSON.parse(highLoraData);
+          } catch (e) {
+            highLoraFiles = [highLoraData];
+          }
+        } else if (Array.isArray(highLoraData)) {
+          highLoraFiles = highLoraData;
+        } else {
+          highLoraFiles = [highLoraData];
         }
+      }
+
+      // Find matching LoRAs for each slot
+      const newSelectedLoras = [null, null];
+      highLoraFiles.slice(0, 2).forEach((highFile, idx) => {
+        if (highFile) {
+          const matchingLora = loras.find(l => l.high_file === highFile || l.low_file === highFile);
+          if (matchingLora) {
+            newSelectedLoras[idx] = matchingLora;
+          }
+        }
+      });
+
+      if (newSelectedLoras[0] || newSelectedLoras[1]) {
+        setSelectedLoras(newSelectedLoras);
       }
     }
   }, [cloneData, loras]);
@@ -86,24 +110,25 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
     }
   }
 
-  // Auto-populate prompt when LoRA is selected (only if prompt is empty)
+  // Auto-populate prompt when first LoRA is selected (only if prompt is empty)
   useEffect(() => {
-    if (prompt.trim() || !selectedLora) {
+    const firstLora = selectedLoras[0];
+    if (prompt.trim() || !firstLora) {
       return;
     }
 
     const parts = [];
-    if (selectedLora.prompt_text) {
-      parts.push(selectedLora.prompt_text);
+    if (firstLora.prompt_text) {
+      parts.push(firstLora.prompt_text);
     }
-    if (selectedLora.trigger_keywords) {
-      parts.push(selectedLora.trigger_keywords);
+    if (firstLora.trigger_keywords) {
+      parts.push(firstLora.trigger_keywords);
     }
 
     if (parts.length > 0) {
       setPrompt(parts.join(', '));
     }
-  }, [selectedLora]);
+  }, [selectedLoras]);
 
   function handleImageChange(e) {
     const file = e.target.files[0];
@@ -156,14 +181,21 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
         imageFilename = uploadResult.filename;
       }
 
+      // Build loras array from selected LoRAs (filter out empty slots)
+      const lorasArray = selectedLoras
+        .filter(lora => lora && (lora.high_file || lora.low_file))
+        .map(lora => ({
+          high_file: lora.high_file || null,
+          low_file: lora.low_file || null
+        }));
+
       const jobData = {
         name: name.trim(),
         prompt: prompt.trim(),
         workflow_type: 'i2v',
         negative_prompt: settings.default_negative_prompt || '',
         input_image: imageFilename,
-        high_lora: selectedLora?.high_file || null,
-        low_lora: selectedLora?.low_file || null,
+        loras: lorasArray.length > 0 ? lorasArray : null,
         parameters: {
           width,
           height,
@@ -201,8 +233,8 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
             />
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+            <div style={{ flex: 1 }}>
               <TextField
                 label="Width"
                 type="number"
@@ -213,7 +245,28 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                 size="small"
               />
             </div>
-            <div className="form-group">
+            <button
+              type="button"
+              onClick={() => {
+                const temp = width;
+                setWidth(height);
+                setHeight(temp);
+              }}
+              style={{
+                background: 'none',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                padding: '2px 5px',
+                fontSize: '12px',
+                color: '#666',
+                lineHeight: 1
+              }}
+              title="Swap width and height"
+            >
+              ↔
+            </button>
+            <div style={{ flex: 1 }}>
               <TextField
                 label="Height"
                 type="number"
@@ -238,6 +291,8 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                   <MenuItem value={3}>3 seconds</MenuItem>
                   <MenuItem value={4}>4 seconds</MenuItem>
                   <MenuItem value={5}>5 seconds</MenuItem>
+                  <MenuItem value={8}>8 seconds</MenuItem>
+                  <MenuItem value={10}>10 seconds</MenuItem>
                 </Select>
               </FormControl>
             </div>
@@ -293,26 +348,47 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
             )}
           </div>
 
-            <div className="form-group">
-              <LoraAutocomplete
-                label="LoRA (optional)"
-                value={selectedLora}
-                onChange={setSelectedLora}
-                loras={loras}
-              />
-              {selectedLora && (
-                <div style={{ marginTop: '8px', fontSize: '12px', color: '#666', padding: '8px', background: '#f5f5f5', borderRadius: '4px' }}>
-                  <div style={{ marginBottom: '4px' }}>
-                    <span style={{ color: '#2e7d32', fontWeight: 500 }}>HIGH:</span>{' '}
-                    {selectedLora.high_file ? selectedLora.high_file.split('/').pop() : <span style={{ color: '#999' }}>Not available</span>}
-                  </div>
-                  <div>
-                    <span style={{ color: '#1565c0', fontWeight: 500 }}>LOW:</span>{' '}
-                    {selectedLora.low_file ? selectedLora.low_file.split('/').pop() : <span style={{ color: '#999' }}>Not available</span>}
-                  </div>
+          <div className="form-group">
+            <LoraAutocomplete
+              label="LoRA 1 (optional)"
+              value={selectedLoras[0]}
+              onChange={(lora) => setSelectedLoras([lora, selectedLoras[1]])}
+              loras={loras}
+            />
+            {selectedLoras[0] && (
+              <div style={{ marginTop: '8px', fontSize: '12px', color: '#666', padding: '8px', background: '#f5f5f5', borderRadius: '4px' }}>
+                <div style={{ marginBottom: '4px' }}>
+                  <span style={{ color: '#2e7d32', fontWeight: 500 }}>HIGH:</span>{' '}
+                  {selectedLoras[0].high_file ? selectedLoras[0].high_file.split('/').pop() : <span style={{ color: '#999' }}>Not available</span>}
                 </div>
-              )}
-            </div>
+                <div>
+                  <span style={{ color: '#1565c0', fontWeight: 500 }}>LOW:</span>{' '}
+                  {selectedLoras[0].low_file ? selectedLoras[0].low_file.split('/').pop() : <span style={{ color: '#999' }}>Not available</span>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="form-group">
+            <LoraAutocomplete
+              label="LoRA 2 (optional)"
+              value={selectedLoras[1]}
+              onChange={(lora) => setSelectedLoras([selectedLoras[0], lora])}
+              loras={loras}
+            />
+            {selectedLoras[1] && (
+              <div style={{ marginTop: '8px', fontSize: '12px', color: '#666', padding: '8px', background: '#f5f5f5', borderRadius: '4px' }}>
+                <div style={{ marginBottom: '4px' }}>
+                  <span style={{ color: '#2e7d32', fontWeight: 500 }}>HIGH:</span>{' '}
+                  {selectedLoras[1].high_file ? selectedLoras[1].high_file.split('/').pop() : <span style={{ color: '#999' }}>Not available</span>}
+                </div>
+                <div>
+                  <span style={{ color: '#1565c0', fontWeight: 500 }}>LOW:</span>{' '}
+                  {selectedLoras[1].low_file ? selectedLoras[1].low_file.split('/').pop() : <span style={{ color: '#999' }}>Not available</span>}
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="modal-actions">
             <Button type="button" variant="outlined" onClick={onClose} disabled={uploading}>
