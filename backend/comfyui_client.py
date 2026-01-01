@@ -244,6 +244,8 @@ class ComfyUIClient:
         output_prefix: str = "",
         faceswap_enabled: bool = False,
         faceswap_image: str = "",
+        faceswap_faces_order: str = "left-right",
+        faceswap_faces_index: str = "0",
     ) -> Dict[str, Any]:
         """Build a Wan2.2 i2v workflow using the pre-converted API template.
 
@@ -256,6 +258,8 @@ class ComfyUIClient:
                    - low_file: LoRA filename for low noise pass
             faceswap_enabled: Whether to enable face swapping via ReActor
             faceswap_image: Filename of the face image to swap in
+            faceswap_faces_order: Order to process faces (left-right, right-left, etc.)
+            faceswap_faces_index: Which face indices to process (e.g., "0", "0,1")
         """
         return _build_wan_i2v_workflow(
             prompt=prompt,
@@ -272,6 +276,8 @@ class ComfyUIClient:
             output_prefix=output_prefix,
             faceswap_enabled=faceswap_enabled,
             faceswap_image=faceswap_image,
+            faceswap_faces_order=faceswap_faces_order,
+            faceswap_faces_index=faceswap_faces_index,
         )
 
     def build_workflow(

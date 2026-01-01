@@ -348,6 +348,8 @@ class QueueManager:
         # Get faceswap settings from job parameters
         faceswap_enabled = params.get("faceswap_enabled", False)
         faceswap_image = params.get("faceswap_image", "")
+        faceswap_faces_order = params.get("faceswap_faces_order", "left-right")
+        faceswap_faces_index = params.get("faceswap_faces_index", "0")
 
         workflow = client.build_wan_i2v_workflow(
             prompt=segment.get("prompt") or job.get("prompt", ""),
@@ -364,6 +366,8 @@ class QueueManager:
             output_prefix=output_prefix,
             faceswap_enabled=faceswap_enabled,
             faceswap_image=faceswap_image,
+            faceswap_faces_order=faceswap_faces_order,
+            faceswap_faces_index=faceswap_faces_index,
         )
 
         # Queue the prompt
