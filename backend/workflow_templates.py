@@ -212,6 +212,8 @@ def build_wan_i2v_workflow(
     output_prefix: str = "",
     faceswap_enabled: bool = False,
     faceswap_image: str = "",
+    faceswap_faces_order: str = "left-right",
+    faceswap_faces_index: str = "0",
 ) -> Dict[str, Any]:
     """Build a Wan2.2 i2v workflow by injecting values into the pre-converted template.
 
@@ -354,6 +356,21 @@ def build_wan_i2v_workflow(
             "_meta": {"title": "Face Swap Source"}
         }
 
+        # Add ReActorOptions node (node 189) for face detection settings
+        workflow["189"] = {
+            "class_type": "ReActorOptions",
+            "inputs": {
+                "input_faces_order": faceswap_faces_order,
+                "input_faces_index": faceswap_faces_index,
+                "detect_gender_input": "no",
+                "source_faces_order": "left-right",
+                "source_faces_index": "0",
+                "detect_gender_source": "no",
+                "console_log_level": 1
+            },
+            "_meta": {"title": "ReActor Options"}
+        }
+
         # Add ReActorFaceSwapOpt node (node 183)
         # Takes decoded frames from node 87 (VAEDecode) and swaps faces
         workflow["183"] = {
@@ -366,7 +383,8 @@ def build_wan_i2v_workflow(
                 "face_restore_visibility": 1,
                 "codeformer_weight": 1,
                 "input_image": ["87", 0],  # Decoded video frames from VAEDecode
-                "source_image": ["188", 0]  # Face to swap in
+                "source_image": ["188", 0],  # Face to swap in
+                "options": ["189", 0]  # ReActorOptions
             },
             "_meta": {"title": "ReActor Face Swap"}
         }
