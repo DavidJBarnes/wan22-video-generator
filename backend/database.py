@@ -445,15 +445,19 @@ def move_job_to_bottom(job_id: int) -> bool:
         return True
 
 
-def reset_orphaned_running_jobs():
+def reset_orphaned_running_jobs(comfyui_client=None):
     """Reset jobs/segments stuck in 'running' state (e.g., after backend restart).
 
     When the backend restarts while jobs are processing, they remain in 'running' state
     but are no longer being monitored. This function:
-    1. Checks if 'running' segments actually completed (video file exists)
-    2. Marks completed ones as 'completed'
-    3. Resets still-running ones to 'pending' for retry
-    4. Updates job statuses accordingly
+    1. Checks if 'running' segments have completed in ComfyUI (if client provided)
+    2. Checks if the video file exists locally (fallback)
+    3. Marks completed ones as 'completed'
+    4. Resets still-running ones to 'pending' for retry
+    5. Updates job statuses accordingly
+
+    Args:
+        comfyui_client: Optional ComfyUIClient instance to check for completed prompts
     """
     import os
 
@@ -462,7 +466,8 @@ def reset_orphaned_running_jobs():
 
         # Check running segments to see if they actually completed
         cursor.execute("""
-            SELECT s.id, s.job_id, s.segment_index, s.video_path, j.id as job_id_check
+            SELECT s.id, s.job_id, s.segment_index, s.video_path, s.comfyui_prompt_id,
+                   j.id as job_id_check
             FROM job_segments s
             JOIN jobs j ON s.job_id = j.id
             WHERE s.status = 'running'
@@ -471,11 +476,12 @@ def reset_orphaned_running_jobs():
 
         segments_completed = 0
         segments_reset = 0
+        segments_recovered = 0
 
         for seg_row in running_segments:
-            seg_id, job_id, seg_index, video_path, _ = seg_row
+            seg_id, job_id, seg_index, video_path, prompt_id, _ = seg_row
 
-            # Check if the segment's video file exists (indicating it completed)
+            # First, check if the segment's video file exists locally
             if video_path and os.path.exists(video_path):
                 print(f"[Database] Segment {seg_index} of job {job_id} completed but not marked - updating status")
                 cursor.execute(
@@ -483,13 +489,28 @@ def reset_orphaned_running_jobs():
                     (seg_id,)
                 )
                 segments_completed += 1
-            else:
-                # Video doesn't exist, reset to pending for retry
-                cursor.execute(
-                    "UPDATE job_segments SET status = 'pending' WHERE id = ?",
-                    (seg_id,)
-                )
-                segments_reset += 1
+                continue
+
+            # If we have a ComfyUI client and a prompt_id, check if the prompt completed in ComfyUI
+            if comfyui_client and prompt_id:
+                status = comfyui_client.get_prompt_status(prompt_id)
+                if status.get("status") == "completed":
+                    print(f"[Database] Segment {seg_index} of job {job_id} completed in ComfyUI - needs video recovery")
+                    # Mark for recovery - we'll download the video after this loop
+                    cursor.execute(
+                        "UPDATE job_segments SET status = 'needs_recovery' WHERE id = ?",
+                        (seg_id,)
+                    )
+                    segments_recovered += 1
+                    continue
+
+            # Video doesn't exist and ComfyUI doesn't show completion - reset to pending for retry
+            print(f"[Database] Segment {seg_index} of job {job_id} not completed - resetting to pending")
+            cursor.execute(
+                "UPDATE job_segments SET status = 'pending' WHERE id = ?",
+                (seg_id,)
+            )
+            segments_reset += 1
 
         # Reset running jobs back to pending (they'll be reprocessed or set to awaiting_prompt)
         cursor.execute("UPDATE jobs SET status = 'pending' WHERE status = 'running'")
@@ -497,12 +518,36 @@ def reset_orphaned_running_jobs():
 
         conn.commit()
 
-        if jobs_reset > 0 or segments_reset > 0 or segments_completed > 0:
+        if jobs_reset > 0 or segments_reset > 0 or segments_completed > 0 or segments_recovered > 0:
             print(f"[Database] Startup cleanup: {jobs_reset} job(s) reset to pending, "
                   f"{segments_completed} segment(s) marked completed, "
-                  f"{segments_reset} segment(s) reset to pending")
+                  f"{segments_reset} segment(s) reset to pending, "
+                  f"{segments_recovered} segment(s) need recovery from ComfyUI")
 
-        return jobs_reset, segments_reset, segments_completed
+        return jobs_reset, segments_reset, segments_completed, segments_recovered
+
+
+def get_segments_needing_recovery():
+    """Get segments that need video recovery from ComfyUI."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT s.id, s.job_id, s.segment_index, s.comfyui_prompt_id, j.name
+            FROM job_segments s
+            JOIN jobs j ON s.job_id = j.id
+            WHERE s.status = 'needs_recovery'
+        """)
+        rows = cursor.fetchall()
+        return [
+            {
+                "id": row[0],
+                "job_id": row[1],
+                "segment_index": row[2],
+                "comfyui_prompt_id": row[3],
+                "job_name": row[4]
+            }
+            for row in rows
+        ]
 
 
 def update_job_status(
