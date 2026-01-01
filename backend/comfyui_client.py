@@ -258,7 +258,7 @@ class ComfyUIClient:
                    - low_file: LoRA filename for low noise pass
             faceswap_enabled: Whether to enable face swapping via ReActor
             faceswap_image: Filename of the face image to swap in
-            faceswap_faces_order: Order to process faces (right-left, left-right, etc.)
+            faceswap_faces_order: Order to process faces (left-right, right-left, etc.)
             faceswap_faces_index: Which face indices to process (e.g., "0", "0,1")
         """
         return _build_wan_i2v_workflow(
