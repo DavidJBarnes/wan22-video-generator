@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
-import { FormControl, InputLabel, Select, MenuItem } from '@mui/material';
+import { useState, useEffect, useMemo } from 'react';
+import { FormControl, InputLabel, Select, MenuItem, Pagination, Box } from '@mui/material';
+
+const FOLDERS_PER_PAGE = 24;
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import CreateJobModal from '../components/CreateJobModal';
@@ -23,9 +25,11 @@ export default function ImageRepo() {
   const [preUploadedImage, setPreUploadedImage] = useState(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [folderPage, setFolderPage] = useState(1);
 
   useEffect(() => {
     loadDirectory(currentPath);
+    setFolderPage(1); // Reset page when navigating
   }, [currentPath]);
 
   useEffect(() => {
@@ -89,6 +93,22 @@ export default function ImageRepo() {
     } else {
       const targetRating = parseInt(ratingFilter);
       setImages(allImages.filter(img => img.rating === targetRating));
+    }
+  }
+
+  // Pagination for folders on main page (root level)
+  const isRootLevel = currentPath === '';
+  const folderPageCount = Math.ceil(folders.length / FOLDERS_PER_PAGE);
+  const paginatedFolders = useMemo(() => {
+    if (!isRootLevel) return folders; // No pagination in subfolders
+    return folders.slice((folderPage - 1) * FOLDERS_PER_PAGE, folderPage * FOLDERS_PER_PAGE);
+  }, [folders, folderPage, isRootLevel]);
+
+  function handleFolderPageChange(event, value) {
+    setFolderPage(value);
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+      mainContent.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }
 
@@ -334,13 +354,36 @@ export default function ImageRepo() {
             <div className="alert info">This directory is empty.</div>
           ) : viewMode === 'grid' ? (
             <div className="image-repo-grid">
-              {folders.map(folder => (
+              {paginatedFolders.map(folder => (
                 <div
                   key={folder.path}
                   className="repo-item folder"
                   onClick={() => navigateToPath(folder.path)}
                 >
-                  <div className="repo-item-icon">📁</div>
+                  <div className="repo-item-preview folder-preview">
+                    {folder.preview_images?.length > 0 ? (
+                      <div className={`folder-collage collage-${Math.min(folder.preview_images.length, 3)}`}>
+                        {folder.preview_images.slice(0, 3).map((imgPath, i) => (
+                          <img
+                            key={i}
+                            src={API.getRepoImage(imgPath)}
+                            alt=""
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              const collage = e.target.parentElement;
+                              const visibleImages = collage.querySelectorAll('img:not([style*="display: none"])');
+                              if (visibleImages.length === 0) {
+                                collage.classList.add('all-failed');
+                              }
+                            }}
+                          />
+                        ))}
+                        <div className="folder-fallback">📁</div>
+                      </div>
+                    ) : (
+                      <div className="folder-empty">📁</div>
+                    )}
+                  </div>
                   <div className="repo-item-name">{folder.name}</div>
                 </div>
               ))}
@@ -373,7 +416,7 @@ export default function ImageRepo() {
             </div>
           ) : (
             <div className="image-repo-list">
-              {folders.map(folder => (
+              {paginatedFolders.map(folder => (
                 <div
                   key={folder.path}
                   className="repo-list-item folder"
@@ -406,6 +449,19 @@ export default function ImageRepo() {
                 </div>
               ))}
             </div>
+          )}
+
+          {isRootLevel && folderPageCount > 1 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, mb: 2 }}>
+              <Pagination
+                count={folderPageCount}
+                page={folderPage}
+                onChange={handleFolderPageChange}
+                color="primary"
+                showFirstButton
+                showLastButton
+              />
+            </Box>
           )}
         </>
       )}
