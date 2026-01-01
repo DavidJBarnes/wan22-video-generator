@@ -1295,9 +1295,26 @@ async def browse_image_repo(path: str = ""):
             if item.is_dir():
                 # Get relative path from repo root
                 rel_path = item.relative_to(repo_root_path)
+
+                # Get up to 3 preview images from the folder
+                preview_images = []
+                try:
+                    for img_file in sorted(item.iterdir()):
+                        # Skip hidden files and non-image files
+                        if img_file.name.startswith('.'):
+                            continue
+                        if img_file.is_file() and img_file.suffix.lower() in ['.jpg', '.jpeg', '.png']:
+                            img_rel = img_file.relative_to(repo_root_path)
+                            preview_images.append(str(img_rel).replace("\\", "/"))
+                            if len(preview_images) >= 3:
+                                break
+                except (PermissionError, OSError):
+                    pass  # Skip folders we can't read
+
                 folders.append({
                     "name": item.name,
-                    "path": str(rel_path).replace("\\", "/")  # Normalize path separators
+                    "path": str(rel_path).replace("\\", "/"),  # Normalize path separators
+                    "preview_images": preview_images
                 })
             elif item.is_file():
                 # Only include jpg and png files
