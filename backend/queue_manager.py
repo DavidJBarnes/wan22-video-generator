@@ -313,6 +313,32 @@ class QueueManager:
         
         # Check if ComfyUI queue is idle before submitting
         queue_status = client.get_queue_status()
+
+        # Handle connection loss - wait for reconnection instead of failing
+        if not queue_status.get("connected", True):
+            logger.warning(f"[Job {job_id}] ComfyUI not connected: {queue_status.get('error')}. Waiting for reconnection...")
+            add_job_log(job_id, "WARN", "ComfyUI connection lost, waiting for reconnection",
+                       segment_index=segment_index, details=queue_status.get('error'))
+
+            reconnect_wait = 0
+            max_reconnect_wait = int(get_setting("comfyui_reconnect_timeout", "600"))  # 10 min default
+            while not queue_status.get("connected", False) and reconnect_wait < max_reconnect_wait and self._running:
+                time.sleep(10)
+                reconnect_wait += 10
+                queue_status = client.get_queue_status()
+                if reconnect_wait % 60 == 0:
+                    logger.info(f"[Job {job_id}] Still waiting for ComfyUI reconnection... ({reconnect_wait}s elapsed)")
+
+            if not queue_status.get("connected", False):
+                error_msg = f"ComfyUI connection not restored after {max_reconnect_wait // 60} minutes"
+                logger.error(f"[Job {job_id}] Segment {segment_index}: {error_msg}")
+                add_job_log(job_id, "ERROR", "ComfyUI reconnection timeout", segment_index=segment_index, details=error_msg)
+                update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
+                return False
+
+            logger.info(f"[Job {job_id}] ComfyUI reconnected after {reconnect_wait}s")
+            add_job_log(job_id, "INFO", "ComfyUI reconnected", segment_index=segment_index)
+
         queue_running = queue_status.get("queue_running", [])
         queue_pending = queue_status.get("queue_pending", [])
 
@@ -322,10 +348,36 @@ class QueueManager:
             # Wait for queue to clear (configurable timeout, default 30 minutes)
             wait_time = 0
             max_wait = int(get_setting("queue_wait_timeout", "1800"))  # seconds
-            while (len(queue_running) > 0 or len(queue_pending) > 0) and wait_time < max_wait:
+            while (len(queue_running) > 0 or len(queue_pending) > 0) and wait_time < max_wait and self._running:
                 time.sleep(10)  # Check every 10 seconds
                 wait_time += 10
                 queue_status = client.get_queue_status()
+
+                # Check for connection loss during wait
+                if not queue_status.get("connected", True):
+                    logger.warning(f"[Job {job_id}] Lost connection to ComfyUI during queue wait: {queue_status.get('error')}")
+                    add_job_log(job_id, "WARN", "Lost ComfyUI connection during queue wait", segment_index=segment_index)
+                    # Wait for reconnection
+                    reconnect_wait = 0
+                    max_reconnect_wait = int(get_setting("comfyui_reconnect_timeout", "600"))
+                    while not queue_status.get("connected", False) and reconnect_wait < max_reconnect_wait and self._running:
+                        time.sleep(10)
+                        reconnect_wait += 10
+                        wait_time += 10  # Count towards total wait time
+                        queue_status = client.get_queue_status()
+                        if reconnect_wait % 60 == 0:
+                            logger.info(f"[Job {job_id}] Waiting for ComfyUI reconnection... ({reconnect_wait}s)")
+
+                    if not queue_status.get("connected", False):
+                        error_msg = f"ComfyUI connection not restored after {max_reconnect_wait // 60} minutes"
+                        logger.error(f"[Job {job_id}] Segment {segment_index}: {error_msg}")
+                        add_job_log(job_id, "ERROR", "ComfyUI reconnection timeout during queue wait", segment_index=segment_index)
+                        update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
+                        return False
+
+                    logger.info(f"[Job {job_id}] ComfyUI reconnected, continuing queue wait")
+                    add_job_log(job_id, "INFO", "ComfyUI reconnected during queue wait", segment_index=segment_index)
+
                 queue_running = queue_status.get("queue_running", [])
                 queue_pending = queue_status.get("queue_pending", [])
                 if wait_time % 60 == 0:  # Log every minute
@@ -414,10 +466,42 @@ class QueueManager:
         comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
         max_wait = int(get_setting("segment_execution_timeout", "1200"))  # configurable, default 20 min
         waited = 0
-        
+        consecutive_errors = 0
+        max_consecutive_errors = 30  # Allow ~30 seconds of connection issues before logging warnings
+
         while self._running and waited < max_wait:
             status = client.get_prompt_status(prompt_id)
-            
+
+            # Handle connection errors during execution
+            if status.get("status") == "error" and "connect" in status.get("error", "").lower():
+                consecutive_errors += 1
+                if consecutive_errors == max_consecutive_errors:
+                    logger.warning(f"[Job {job_id}] Lost connection to ComfyUI during segment {segment_index} execution")
+                    add_job_log(job_id, "WARN", f"Lost ComfyUI connection during segment {segment_index} execution",
+                               segment_index=segment_index, details=status.get("error"))
+
+                # Wait for reconnection
+                if consecutive_errors >= max_consecutive_errors:
+                    max_reconnect_wait = int(get_setting("comfyui_reconnect_timeout", "600"))
+                    if consecutive_errors * self._status_poll_interval >= max_reconnect_wait:
+                        error_msg = f"ComfyUI connection not restored after {max_reconnect_wait // 60} minutes during segment execution"
+                        logger.error(f"[Job {job_id}] Segment {segment_index}: {error_msg}")
+                        add_job_log(job_id, "ERROR", "ComfyUI reconnection timeout during execution",
+                                   segment_index=segment_index, details=error_msg)
+                        update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
+                        return False
+
+                time.sleep(self._status_poll_interval)
+                waited += self._status_poll_interval
+                continue
+
+            # Reset consecutive errors on successful connection
+            if consecutive_errors > 0 and status.get("status") != "error":
+                logger.info(f"[Job {job_id}] ComfyUI connection restored during segment {segment_index} execution")
+                if consecutive_errors >= max_consecutive_errors:
+                    add_job_log(job_id, "INFO", "ComfyUI reconnected during segment execution", segment_index=segment_index)
+                consecutive_errors = 0
+
             if status.get("status") == "completed":
                 # Get output media URLs
                 media_urls = client.get_output_images(prompt_id)
@@ -576,6 +660,32 @@ class QueueManager:
 
         # Check if ComfyUI queue is idle before submitting
         queue_status = client.get_queue_status()
+
+        # Handle connection loss - wait for reconnection instead of failing
+        if not queue_status.get("connected", True):
+            logger.warning(f"[Job {job_id}] ComfyUI not connected: {queue_status.get('error')}. Waiting for reconnection...")
+            add_job_log(job_id, "WARN", "ComfyUI connection lost, waiting for reconnection", details=queue_status.get('error'))
+
+            reconnect_wait = 0
+            max_reconnect_wait = int(get_setting("comfyui_reconnect_timeout", "600"))  # 10 min default
+            while not queue_status.get("connected", False) and reconnect_wait < max_reconnect_wait and self._running:
+                time.sleep(10)
+                reconnect_wait += 10
+                queue_status = client.get_queue_status()
+                if reconnect_wait % 60 == 0:
+                    logger.info(f"[Job {job_id}] Still waiting for ComfyUI reconnection... ({reconnect_wait}s elapsed)")
+
+            if not queue_status.get("connected", False):
+                error_msg = f"ComfyUI connection not restored after {max_reconnect_wait // 60} minutes"
+                logger.error(f"[Job {job_id}] {error_msg}")
+                add_job_log(job_id, "ERROR", "ComfyUI reconnection timeout", details=error_msg)
+                update_job_status(job_id, "failed", error_message=error_msg)
+                self._notify_update(job_id, "failed")
+                return
+
+            logger.info(f"[Job {job_id}] ComfyUI reconnected after {reconnect_wait}s")
+            add_job_log(job_id, "INFO", "ComfyUI reconnected")
+
         queue_running = queue_status.get("queue_running", [])
         queue_pending = queue_status.get("queue_pending", [])
 
@@ -585,10 +695,37 @@ class QueueManager:
             # Wait for queue to clear (configurable timeout, default 30 minutes)
             wait_time = 0
             max_wait = int(get_setting("queue_wait_timeout", "1800"))  # seconds
-            while (len(queue_running) > 0 or len(queue_pending) > 0) and wait_time < max_wait:
+            while (len(queue_running) > 0 or len(queue_pending) > 0) and wait_time < max_wait and self._running:
                 time.sleep(10)
                 wait_time += 10
                 queue_status = client.get_queue_status()
+
+                # Check for connection loss during wait
+                if not queue_status.get("connected", True):
+                    logger.warning(f"[Job {job_id}] Lost connection to ComfyUI during queue wait: {queue_status.get('error')}")
+                    add_job_log(job_id, "WARN", "Lost ComfyUI connection during queue wait")
+                    # Wait for reconnection
+                    reconnect_wait = 0
+                    max_reconnect_wait = int(get_setting("comfyui_reconnect_timeout", "600"))
+                    while not queue_status.get("connected", False) and reconnect_wait < max_reconnect_wait and self._running:
+                        time.sleep(10)
+                        reconnect_wait += 10
+                        wait_time += 10  # Count towards total wait time
+                        queue_status = client.get_queue_status()
+                        if reconnect_wait % 60 == 0:
+                            logger.info(f"[Job {job_id}] Waiting for ComfyUI reconnection... ({reconnect_wait}s)")
+
+                    if not queue_status.get("connected", False):
+                        error_msg = f"ComfyUI connection not restored after {max_reconnect_wait // 60} minutes"
+                        logger.error(f"[Job {job_id}] {error_msg}")
+                        add_job_log(job_id, "ERROR", "ComfyUI reconnection timeout during queue wait")
+                        update_job_status(job_id, "failed", error_message=error_msg)
+                        self._notify_update(job_id, "failed")
+                        return
+
+                    logger.info(f"[Job {job_id}] ComfyUI reconnected, continuing queue wait")
+                    add_job_log(job_id, "INFO", "ComfyUI reconnected during queue wait")
+
                 queue_running = queue_status.get("queue_running", [])
                 queue_pending = queue_status.get("queue_pending", [])
                 if wait_time % 60 == 0:
@@ -640,9 +777,40 @@ class QueueManager:
         """Wait for a prompt to complete and update job status."""
         max_wait = int(get_setting("segment_execution_timeout", "1200"))  # configurable, default 20 min
         waited = 0
+        consecutive_errors = 0
+        max_consecutive_errors = 30  # Allow ~30 seconds of connection issues before logging warnings
 
         while self._running and waited < max_wait:
             status = client.get_prompt_status(prompt_id)
+
+            # Handle connection errors during execution
+            if status.get("status") == "error" and "connect" in status.get("error", "").lower():
+                consecutive_errors += 1
+                if consecutive_errors == max_consecutive_errors:
+                    logger.warning(f"[Job {job_id}] Lost connection to ComfyUI during execution")
+                    add_job_log(job_id, "WARN", "Lost ComfyUI connection during execution", details=status.get("error"))
+
+                # Wait for reconnection
+                if consecutive_errors >= max_consecutive_errors:
+                    max_reconnect_wait = int(get_setting("comfyui_reconnect_timeout", "600"))
+                    if consecutive_errors * self._status_poll_interval >= max_reconnect_wait:
+                        error_msg = f"ComfyUI connection not restored after {max_reconnect_wait // 60} minutes during execution"
+                        logger.error(f"[Job {job_id}] {error_msg}")
+                        add_job_log(job_id, "ERROR", "ComfyUI reconnection timeout during execution", details=error_msg)
+                        update_job_status(job_id, "failed", error_message=error_msg)
+                        self._notify_update(job_id, "failed")
+                        return
+
+                time.sleep(self._status_poll_interval)
+                waited += self._status_poll_interval
+                continue
+
+            # Reset consecutive errors on successful connection
+            if consecutive_errors > 0 and status.get("status") != "error":
+                logger.info(f"[Job {job_id}] ComfyUI connection restored during execution")
+                if consecutive_errors >= max_consecutive_errors:
+                    add_job_log(job_id, "INFO", "ComfyUI reconnected during execution")
+                consecutive_errors = 0
 
             if status.get("status") == "completed":
                 # Get output images

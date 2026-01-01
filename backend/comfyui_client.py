@@ -398,7 +398,13 @@ class ComfyUIClient:
             return False, str(e)
 
     def get_prompt_status(self, prompt_id: str) -> Dict[str, Any]:
-        """Get the status of a queued prompt."""
+        """Get the status of a queued prompt.
+
+        Returns a dict with:
+        - status: "pending", "completed", "error", or "unknown"
+        - data: output data if completed
+        - error: error message if error/unknown (includes "connect" for connection errors)
+        """
         try:
             response = self.client.get(f"{self.base_url}/history/{prompt_id}")
             if response.status_code == 200:
@@ -410,18 +416,46 @@ class ComfyUIClient:
                     }
                 return {"status": "pending"}
             return {"status": "unknown", "error": f"Status code: {response.status_code}"}
+        except httpx.ConnectError:
+            return {"status": "error", "error": "Connection refused - is ComfyUI running?"}
         except Exception as e:
             return {"status": "error", "error": str(e)}
 
     def get_queue_status(self) -> Dict[str, Any]:
-        """Get current queue status."""
+        """Get current queue status.
+
+        Returns a dict with:
+        - queue_running: list of running jobs
+        - queue_pending: list of pending jobs
+        - connected: bool indicating if ComfyUI is reachable
+        - error: optional error message if not connected
+        """
         try:
             response = self.client.get(f"{self.base_url}/queue")
             if response.status_code == 200:
-                return response.json()
-            return {"queue_running": [], "queue_pending": []}
-        except Exception:
-            return {"queue_running": [], "queue_pending": []}
+                result = response.json()
+                result["connected"] = True
+                return result
+            return {
+                "queue_running": [],
+                "queue_pending": [],
+                "connected": False,
+                "error": f"Unexpected status code: {response.status_code}"
+            }
+        except httpx.ConnectError:
+            return {
+                "queue_running": [],
+                "queue_pending": [],
+                "connected": False,
+                "error": "Connection refused - is ComfyUI running?"
+            }
+        except Exception as e:
+            return {
+                "queue_running": [],
+                "queue_pending": [],
+                "connected": False,
+                "error": str(e)
+            }
 
     def get_execution_time(self, prompt_id: str) -> Optional[float]:
         """Get the total execution time in seconds for a completed prompt."""
