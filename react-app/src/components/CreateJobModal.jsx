@@ -40,6 +40,8 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   const [nameDescriptions, setNameDescriptions] = useState([]);
   const [faceswapEnabled, setFaceswapEnabled] = useState(false);
   const [faceswapImage, setFaceswapImage] = useState(FACESWAP_FACES[0]?.value || '');
+  const [faceswapFacesOrder, setFaceswapFacesOrder] = useState('left-right');
+  const [faceswapFacesIndex, setFaceswapFacesIndex] = useState('0');
   const [selectedPrefix, setSelectedPrefix] = useState(null);
   const [selectedDescription, setSelectedDescription] = useState(null);
 
@@ -282,7 +284,9 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
           fps,
           segment_duration: segmentDuration,
           faceswap_enabled: faceswapEnabled,
-          faceswap_image: faceswapEnabled ? faceswapImage : null
+          faceswap_image: faceswapEnabled ? faceswapImage : null,
+          faceswap_faces_order: faceswapEnabled ? faceswapFacesOrder : null,
+          faceswap_faces_index: faceswapEnabled ? faceswapFacesIndex : null
         }
       };
 
@@ -549,35 +553,62 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
           <div className="form-group" style={{
             marginTop: '16px',
             padding: '12px',
-            background: faceswapEnabled ? '#e8f5e9' : '#f5f5f5',
+            background: '#f5f5f5',
             borderRadius: '8px',
-            border: faceswapEnabled ? '1px solid #81c784' : '1px solid #e0e0e0'
+            border: '1px solid #e0e0e0'
           }}>
             <FormControlLabel
               control={
                 <Checkbox
                   checked={faceswapEnabled}
                   onChange={(e) => setFaceswapEnabled(e.target.checked)}
-                  color="success"
                 />
               }
               label={<span style={{ fontWeight: 500 }}>Enable Face Swap (ReActor)</span>}
             />
             {faceswapEnabled && (
-              <FormControl fullWidth variant="outlined" size="small" sx={{ mt: 1 }}>
-                <InputLabel>Face</InputLabel>
-                <Select
-                  value={faceswapImage}
-                  onChange={(e) => setFaceswapImage(e.target.value)}
-                  label="Face"
-                >
-                  {FACESWAP_FACES.map((face) => (
-                    <MenuItem key={face.value} value={face.value}>
-                      {face.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <>
+                <FormControl fullWidth variant="outlined" size="small" sx={{ mt: 1 }}>
+                  <InputLabel>Face</InputLabel>
+                  <Select
+                    value={faceswapImage}
+                    onChange={(e) => setFaceswapImage(e.target.value)}
+                    label="Face"
+                  >
+                    {FACESWAP_FACES.map((face) => (
+                      <MenuItem key={face.value} value={face.value}>
+                        {face.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                  <FormControl variant="outlined" size="small" sx={{ flex: 1 }}>
+                    <InputLabel>Faces Order</InputLabel>
+                    <Select
+                      value={faceswapFacesOrder}
+                      onChange={(e) => setFaceswapFacesOrder(e.target.value)}
+                      label="Faces Order"
+                    >
+                      <MenuItem value="left-right">Left to Right</MenuItem>
+                      <MenuItem value="right-left">Right to Left</MenuItem>
+                      <MenuItem value="top-bottom">Top to Bottom</MenuItem>
+                      <MenuItem value="bottom-top">Bottom to Top</MenuItem>
+                      <MenuItem value="small-large">Small to Large</MenuItem>
+                      <MenuItem value="large-small">Large to Small</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <TextField
+                    label="Faces Index"
+                    value={faceswapFacesIndex}
+                    onChange={(e) => setFaceswapFacesIndex(e.target.value)}
+                    variant="outlined"
+                    size="small"
+                    sx={{ width: '120px' }}
+                    helperText="e.g. 0 or 0,1"
+                  />
+                </div>
+              </>
             )}
           </div>
 
