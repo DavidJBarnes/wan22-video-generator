@@ -155,7 +155,8 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
       } catch { setNamePrefixes([]); }
       try {
         const descriptions = JSON.parse(s.job_name_descriptions || '[]');
-        setNameDescriptions(Array.isArray(descriptions) ? descriptions : []);
+        const sortedDescriptions = Array.isArray(descriptions) ? [...descriptions].sort((a, b) => a.localeCompare(b)) : [];
+        setNameDescriptions(sortedDescriptions);
       } catch { setNameDescriptions([]); }
     } catch (error) {
       console.error('Failed to load settings:', error);
