@@ -16,6 +16,7 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
   const [promptText, setPromptText] = useState(lora.prompt_text || '');
   const [triggerKeywords, setTriggerKeywords] = useState(lora.trigger_keywords || '');
   const [rating, setRating] = useState(lora.rating || null);
+  const [notes, setNotes] = useState(lora.notes || '');
   const [hasPreview, setHasPreview] = useState(!!lora.preview_image_url);
   const [previewCacheBust, setPreviewCacheBust] = useState(Date.now());
   const [saving, setSaving] = useState(false);
@@ -54,7 +55,8 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
         url: url || null,
         prompt_text: promptText || null,
         trigger_keywords: triggerKeywords || null,
-        rating: rating
+        rating: rating,
+        notes: notes || null
         // preview_image_url is managed by the refresh-preview endpoint
       });
 
@@ -220,11 +222,29 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
               value={promptText}
               onChange={(e) => setPromptText(e.target.value)}
               multiline
-              rows={2}
+              minRows={1}
+              maxRows={4}
               placeholder="Describe what this LoRA does and how to use it..."
               fullWidth
               variant="outlined"
+              size="small"
               helperText="Optional notes about the LoRA's effect and usage"
+            />
+          </div>
+
+          <div className="form-group">
+            <TextField
+              label="Notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              multiline
+              minRows={1}
+              maxRows={4}
+              placeholder="Personal notes about this LoRA's performance, good settings, tips..."
+              fullWidth
+              variant="outlined"
+              size="small"
+              helperText="Keep track of what works well with this LoRA"
             />
           </div>
 

@@ -253,6 +253,7 @@ class LoraUpdate(BaseModel):
     prompt_text: Optional[str] = None
     trigger_keywords: Optional[str] = None
     rating: Optional[int] = None
+    notes: Optional[str] = None
     preview_image_url: Optional[str] = None
     fetch_preview: Optional[bool] = False  # If true, auto-fetch preview from URL
 
@@ -1020,6 +1021,7 @@ async def update_lora(lora_id: int, lora_data: LoraUpdate):
         prompt_text=lora_data.prompt_text,
         trigger_keywords=lora_data.trigger_keywords,
         rating=lora_data.rating,
+        notes=lora_data.notes,
         preview_image_url=preview_url
     )
 
@@ -1066,17 +1068,8 @@ async def refresh_lora_preview(lora_id: int):
     if not cached_filename:
         raise HTTPException(status_code=400, detail="Could not fetch preview from URL")
 
-    # Store the cached filename in the database (preserve existing field values)
-    db_update_lora(
-        lora_id,
-        friendly_name=lora.get('friendly_name'),
-        url=lora.get('url'),
-        prompt_text=lora.get('prompt_text'),
-        trigger_keywords=lora.get('trigger_keywords'),
-        rating=lora.get('rating'),
-        preview_image_url=cached_filename,
-        _update_preview=True  # Explicitly update the preview field
-    )
+    # Store the cached filename in the database (only updates preview_image_url)
+    db_update_lora(lora_id, preview_image_url=cached_filename)
 
     return {"status": "success", "preview_image_url": cached_filename}
 

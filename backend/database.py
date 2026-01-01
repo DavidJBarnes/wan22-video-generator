@@ -209,6 +209,12 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Migration: Add notes column if it doesn't exist
+        try:
+            cursor.execute("ALTER TABLE lora_library ADD COLUMN notes TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Image ratings table - stores ratings for images in the repository
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS image_ratings (
@@ -1056,7 +1062,7 @@ def get_all_loras() -> List[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, base_name, high_file, low_file, friendly_name, url,
-                   prompt_text, trigger_keywords, rating, preview_image_url, created_at, updated_at
+                   prompt_text, trigger_keywords, rating, notes, preview_image_url, created_at, updated_at
             FROM lora_library
             ORDER BY COALESCE(friendly_name, base_name) ASC
         """)
@@ -1070,7 +1076,7 @@ def get_lora(lora_id: int) -> Optional[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, base_name, high_file, low_file, friendly_name, url,
-                   prompt_text, trigger_keywords, rating, preview_image_url, created_at, updated_at
+                   prompt_text, trigger_keywords, rating, notes, preview_image_url, created_at, updated_at
             FROM lora_library
             WHERE id = ?
         """, (lora_id,))
@@ -1084,7 +1090,7 @@ def get_lora_by_base_name(base_name: str) -> Optional[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, base_name, high_file, low_file, friendly_name, url,
-                   prompt_text, trigger_keywords, rating, preview_image_url, created_at, updated_at
+                   prompt_text, trigger_keywords, rating, notes, preview_image_url, created_at, updated_at
             FROM lora_library
             WHERE base_name = ?
         """, (base_name,))
@@ -1098,7 +1104,7 @@ def get_lora_by_file(filename: str) -> Optional[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, base_name, high_file, low_file, friendly_name, url,
-                   prompt_text, trigger_keywords, rating, preview_image_url, created_at, updated_at
+                   prompt_text, trigger_keywords, rating, notes, preview_image_url, created_at, updated_at
             FROM lora_library
             WHERE high_file = ? OR low_file = ?
         """, (filename, filename))
@@ -1106,38 +1112,50 @@ def get_lora_by_file(filename: str) -> Optional[Dict[str, Any]]:
         return dict(row) if row else None
 
 
-def update_lora(lora_id: int, friendly_name: Optional[str] = None,
-                url: Optional[str] = None, prompt_text: Optional[str] = None,
-                trigger_keywords: Optional[str] = None, rating: Optional[int] = None,
-                preview_image_url: Optional[str] = None, _update_preview: bool = False):
+_UNSET = object()  # Sentinel to distinguish "not provided" from "explicitly None"
+
+
+def update_lora(lora_id: int, friendly_name=_UNSET,
+                url=_UNSET, prompt_text=_UNSET,
+                trigger_keywords=_UNSET, rating=_UNSET,
+                notes=_UNSET,
+                preview_image_url=_UNSET):
     """Update LoRA metadata.
 
-    Only updates fields that are explicitly provided. For preview_image_url,
-    set _update_preview=True to actually update it (prevents accidental overwrites).
+    Only updates fields that are explicitly provided. Use the sentinel _UNSET
+    as default so we can distinguish between "not provided" and "set to None".
     """
     with get_connection() as conn:
         cursor = conn.cursor()
 
-        # Build dynamic update query - only update fields that should change
+        # Build dynamic update query - only update fields that were explicitly provided
         updates = []
         values = []
 
-        # Always update these fields (they're part of the form)
-        updates.append("friendly_name = ?")
-        values.append(friendly_name)
-        updates.append("url = ?")
-        values.append(url)
-        updates.append("prompt_text = ?")
-        values.append(prompt_text)
-        updates.append("trigger_keywords = ?")
-        values.append(trigger_keywords)
-        updates.append("rating = ?")
-        values.append(rating)
-
-        # Only update preview_image_url if explicitly requested
-        if _update_preview:
+        if friendly_name is not _UNSET:
+            updates.append("friendly_name = ?")
+            values.append(friendly_name)
+        if url is not _UNSET:
+            updates.append("url = ?")
+            values.append(url)
+        if prompt_text is not _UNSET:
+            updates.append("prompt_text = ?")
+            values.append(prompt_text)
+        if trigger_keywords is not _UNSET:
+            updates.append("trigger_keywords = ?")
+            values.append(trigger_keywords)
+        if rating is not _UNSET:
+            updates.append("rating = ?")
+            values.append(rating)
+        if notes is not _UNSET:
+            updates.append("notes = ?")
+            values.append(notes)
+        if preview_image_url is not _UNSET:
             updates.append("preview_image_url = ?")
             values.append(preview_image_url)
+
+        if not updates:
+            return  # Nothing to update
 
         updates.append("updated_at = ?")
         values.append(utc_now_iso())
