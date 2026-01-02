@@ -240,6 +240,16 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Migration: Add default weight columns if they don't exist
+        try:
+            cursor.execute("ALTER TABLE lora_library ADD COLUMN default_high_weight REAL DEFAULT 1.0")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        try:
+            cursor.execute("ALTER TABLE lora_library ADD COLUMN default_low_weight REAL DEFAULT 1.0")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Image ratings table - stores ratings for images in the repository
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS image_ratings (
@@ -1179,7 +1189,8 @@ def get_all_loras() -> List[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, base_name, high_file, low_file, friendly_name, url,
-                   prompt_text, trigger_keywords, rating, notes, preview_image_url, created_at, updated_at
+                   prompt_text, trigger_keywords, rating, notes, preview_image_url,
+                   default_high_weight, default_low_weight, created_at, updated_at
             FROM lora_library
             ORDER BY COALESCE(friendly_name, base_name) ASC
         """)
@@ -1193,7 +1204,8 @@ def get_lora(lora_id: int) -> Optional[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, base_name, high_file, low_file, friendly_name, url,
-                   prompt_text, trigger_keywords, rating, notes, preview_image_url, created_at, updated_at
+                   prompt_text, trigger_keywords, rating, notes, preview_image_url,
+                   default_high_weight, default_low_weight, created_at, updated_at
             FROM lora_library
             WHERE id = ?
         """, (lora_id,))
@@ -1207,7 +1219,8 @@ def get_lora_by_base_name(base_name: str) -> Optional[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, base_name, high_file, low_file, friendly_name, url,
-                   prompt_text, trigger_keywords, rating, notes, preview_image_url, created_at, updated_at
+                   prompt_text, trigger_keywords, rating, notes, preview_image_url,
+                   default_high_weight, default_low_weight, created_at, updated_at
             FROM lora_library
             WHERE base_name = ?
         """, (base_name,))
@@ -1221,7 +1234,8 @@ def get_lora_by_file(filename: str) -> Optional[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, base_name, high_file, low_file, friendly_name, url,
-                   prompt_text, trigger_keywords, rating, notes, preview_image_url, created_at, updated_at
+                   prompt_text, trigger_keywords, rating, notes, preview_image_url,
+                   default_high_weight, default_low_weight, created_at, updated_at
             FROM lora_library
             WHERE high_file = ? OR low_file = ?
         """, (filename, filename))
@@ -1236,7 +1250,9 @@ def update_lora(lora_id: int, friendly_name=_UNSET,
                 url=_UNSET, prompt_text=_UNSET,
                 trigger_keywords=_UNSET, rating=_UNSET,
                 notes=_UNSET,
-                preview_image_url=_UNSET):
+                preview_image_url=_UNSET,
+                default_high_weight=_UNSET,
+                default_low_weight=_UNSET):
     """Update LoRA metadata.
 
     Only updates fields that are explicitly provided. Use the sentinel _UNSET
@@ -1270,6 +1286,12 @@ def update_lora(lora_id: int, friendly_name=_UNSET,
         if preview_image_url is not _UNSET:
             updates.append("preview_image_url = ?")
             values.append(preview_image_url)
+        if default_high_weight is not _UNSET:
+            updates.append("default_high_weight = ?")
+            values.append(default_high_weight)
+        if default_low_weight is not _UNSET:
+            updates.append("default_low_weight = ?")
+            values.append(default_low_weight)
 
         if not updates:
             return  # Nothing to update
