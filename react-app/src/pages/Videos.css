@@ -12,6 +12,8 @@
   top: 0;
   z-index: 10;
   padding-bottom: 16px;
+  display: flex;
+  align-items: center;
 }
 
 .videos-search {
@@ -103,4 +105,75 @@
 
 .video-modal-actions .MuiIconButton-root:hover {
   background: rgba(0, 0, 0, 0.6);
+}
+
+/* Shuffle Mode */
+.shuffle-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #000;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shuffle-video {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+}
+
+.shuffle-info {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: white;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+.shuffle-overlay:hover .shuffle-info {
+  opacity: 1;
+}
+
+.shuffle-title {
+  font-size: 18px;
+  font-weight: 500;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.shuffle-counter {
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 4px 12px;
+  border-radius: 4px;
+}
+
+.shuffle-hint {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: white;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 8px 16px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+.shuffle-overlay:hover .shuffle-hint {
+  opacity: 1;
 }
