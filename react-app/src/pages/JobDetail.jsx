@@ -344,6 +344,12 @@ export default function JobDetail() {
             <div className="value">{fps} fps</div>
           </div>
           <div className="detail-meta-item">
+            <label>Seed</label>
+            <div className="value" style={{ fontFamily: 'monospace', fontSize: '12px' }}>
+              {job.seed ?? 'N/A'}
+            </div>
+          </div>
+          <div className="detail-meta-item">
             <label>Face Swap</label>
             <div className="value">
               {params.faceswap_enabled
