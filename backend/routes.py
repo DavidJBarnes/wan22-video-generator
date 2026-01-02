@@ -659,31 +659,6 @@ async def get_job_segments_endpoint(job_id: int):
 
     # Get real segments from database
     segments = db_get_job_segments(job_id)
-    
-    # If no segments exist yet (legacy jobs), create stub data
-    if not segments:
-        params = job.get("parameters") or {}
-        total_segments = int(params.get("total_segments", 1))
-        
-        # Build start image URL
-        start_image_url = None
-        if job.get("input_image"):
-            comfyui_url = get_setting("comfyui_url", COMFYUI_SERVER_URL)
-            input_image = job["input_image"]
-            if input_image.startswith("http"):
-                start_image_url = input_image
-            else:
-                start_image_url = f"{comfyui_url}/view?filename={input_image}&subfolder=&type=input"
-        
-        segments = []
-        for i in range(total_segments):
-            segments.append({
-                "segment_index": i,
-                "status": job["status"] if i == 0 else "pending",
-                "prompt": job.get("prompt", ""),
-                "start_image_url": start_image_url if i == 0 else None,
-                "end_frame_url": None,
-            })
 
     return segments
 
@@ -737,9 +712,15 @@ async def update_segment_prompt_endpoint(
         # Segment doesn't exist - create it on-demand
         if segment_index == 0:
             # Segment 0 uses the job's original input image
-            start_image_url = job.get("input_image")
-            if not start_image_url:
+            input_image = job.get("input_image")
+            if not input_image:
                 raise HTTPException(status_code=400, detail="Job has no input image")
+            # Build proper ComfyUI URL for the input image
+            if input_image.startswith("http"):
+                start_image_url = input_image
+            else:
+                comfyui_url = get_setting("comfyui_url", COMFYUI_SERVER_URL)
+                start_image_url = f"{comfyui_url}/view?filename={input_image}&subfolder=&type=input"
         else:
             # Get the previous segment's end frame as the start image for this segment
             previous_segment = get_segment(job_id, segment_index - 1)
