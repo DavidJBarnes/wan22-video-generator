@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button, TextField } from '@mui/material';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
@@ -21,6 +21,7 @@ export default function SubmitPromptModal({
   ]);
   const [loras, setLoras] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  const defaultsAppliedRef = useRef(false);
 
   useEffect(() => {
     loadLoras();
@@ -43,9 +44,16 @@ export default function SubmitPromptModal({
     }
   }
 
-  // When loras are loaded, find matching LoRAs from default values
+  // When loras are loaded, find matching LoRAs from default values (only once)
   useEffect(() => {
-    if (loras.length > 0 && defaultLoras && defaultLoras.length > 0) {
+    // Only apply defaults once to avoid resetting user changes
+    if (defaultsAppliedRef.current) return;
+    // Mark as applied immediately to prevent re-runs during async renders
+    if (loras.length === 0) return; // Wait for loras to load
+
+    defaultsAppliedRef.current = true;
+
+    if (defaultLoras && defaultLoras.length > 0) {
       const newSelectedLoras = [
         { lora: null, highWeight: 1, lowWeight: 1 },
         { lora: null, highWeight: 1, lowWeight: 1 }
@@ -160,9 +168,9 @@ export default function SubmitPromptModal({
                   label=""
                   value={selectedLoras[0].lora}
                   onChange={(lora) => {
-                    setSelectedLoras([
-                      { ...selectedLoras[0], lora },
-                      selectedLoras[1]
+                    setSelectedLoras(prev => [
+                      { ...prev[0], lora },
+                      prev[1]
                     ]);
                     populatePromptFromLora(lora);
                   }}
@@ -174,9 +182,9 @@ export default function SubmitPromptModal({
                 label="High"
                 size="small"
                 value={selectedLoras[0].highWeight}
-                onChange={(e) => setSelectedLoras([
-                  { ...selectedLoras[0], highWeight: parseFloat(e.target.value) || 0 },
-                  selectedLoras[1]
+                onChange={(e) => setSelectedLoras(prev => [
+                  { ...prev[0], highWeight: parseFloat(e.target.value) || 0 },
+                  prev[1]
                 ])}
                 inputProps={{ min: 0, max: 2, step: 0.1 }}
                 sx={{ width: '80px' }}
@@ -187,9 +195,9 @@ export default function SubmitPromptModal({
                 label="Low"
                 size="small"
                 value={selectedLoras[0].lowWeight}
-                onChange={(e) => setSelectedLoras([
-                  { ...selectedLoras[0], lowWeight: parseFloat(e.target.value) || 0 },
-                  selectedLoras[1]
+                onChange={(e) => setSelectedLoras(prev => [
+                  { ...prev[0], lowWeight: parseFloat(e.target.value) || 0 },
+                  prev[1]
                 ])}
                 inputProps={{ min: 0, max: 2, step: 0.1 }}
                 sx={{ width: '80px' }}
@@ -206,9 +214,9 @@ export default function SubmitPromptModal({
                 <LoraAutocomplete
                   label=""
                   value={selectedLoras[1].lora}
-                  onChange={(lora) => setSelectedLoras([
-                    selectedLoras[0],
-                    { ...selectedLoras[1], lora }
+                  onChange={(lora) => setSelectedLoras(prev => [
+                    prev[0],
+                    { ...prev[1], lora }
                   ])}
                   loras={loras}
                 />
@@ -218,9 +226,9 @@ export default function SubmitPromptModal({
                 label="High"
                 size="small"
                 value={selectedLoras[1].highWeight}
-                onChange={(e) => setSelectedLoras([
-                  selectedLoras[0],
-                  { ...selectedLoras[1], highWeight: parseFloat(e.target.value) || 0 }
+                onChange={(e) => setSelectedLoras(prev => [
+                  prev[0],
+                  { ...prev[1], highWeight: parseFloat(e.target.value) || 0 }
                 ])}
                 inputProps={{ min: 0, max: 2, step: 0.1 }}
                 sx={{ width: '80px' }}
@@ -231,9 +239,9 @@ export default function SubmitPromptModal({
                 label="Low"
                 size="small"
                 value={selectedLoras[1].lowWeight}
-                onChange={(e) => setSelectedLoras([
-                  selectedLoras[0],
-                  { ...selectedLoras[1], lowWeight: parseFloat(e.target.value) || 0 }
+                onChange={(e) => setSelectedLoras(prev => [
+                  prev[0],
+                  { ...prev[1], lowWeight: parseFloat(e.target.value) || 0 }
                 ])}
                 inputProps={{ min: 0, max: 2, step: 0.1 }}
                 sx={{ width: '80px' }}
