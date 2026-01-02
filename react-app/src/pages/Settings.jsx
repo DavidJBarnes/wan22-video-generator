@@ -26,6 +26,7 @@ export default function Settings() {
   const [nameDescriptions, setNameDescriptions] = useState([]);
   const [newPrefix, setNewPrefix] = useState('');
   const [newDescription, setNewDescription] = useState('');
+  const [promptIdentity, setPromptIdentity] = useState('');
 
   useEffect(() => {
     loadSettings();
@@ -56,6 +57,8 @@ export default function Settings() {
         const descriptions = JSON.parse(s.job_name_descriptions || '[]');
         setNameDescriptions(Array.isArray(descriptions) ? descriptions : []);
       } catch { setNameDescriptions([]); }
+
+      setPromptIdentity(s.prompt_identity || '');
 
       setLoading(false);
     } catch (error) {
@@ -127,7 +130,8 @@ export default function Settings() {
         queue_wait_timeout: String(queueWaitTimeout * 60), // Convert minutes to seconds
         segment_execution_timeout: String(segmentExecutionTimeout * 60), // Convert minutes to seconds
         job_name_prefixes: JSON.stringify(namePrefixes),
-        job_name_descriptions: JSON.stringify(nameDescriptions)
+        job_name_descriptions: JSON.stringify(nameDescriptions),
+        prompt_identity: promptIdentity
       };
 
       await API.updateSettings(settingsPayload);
@@ -424,6 +428,23 @@ export default function Settings() {
             />
             <small style={{ color: '#666', fontSize: '12px' }}>
               This negative prompt will be used for all new jobs
+            </small>
+          </div>
+        </div>
+
+        {/* Prompting */}
+        <div className="card settings-section">
+          <h2>Prompting</h2>
+          <div className="form-group">
+            <label>Prompt Identity</label>
+            <textarea
+              value={promptIdentity}
+              onChange={(e) => setPromptIdentity(e.target.value)}
+              rows="4"
+              placeholder="e.g., A woman with long brown hair, wearing a red dress"
+            />
+            <small style={{ color: '#666', fontSize: '12px' }}>
+              This text is automatically prepended to all prompts (job creation and segment prompts)
             </small>
           </div>
         </div>
