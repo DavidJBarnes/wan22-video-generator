@@ -2,9 +2,24 @@
 
 import sqlite3
 import json
+import random
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
+
+
+# KSampler seed range: 0 to 2^64-1 (unsigned 64-bit integer)
+# Using 2^63-1 to stay within Python's safe integer range and JSON compatibility
+MAX_SEED = 2**63 - 1
+
+
+def generate_seed() -> int:
+    """Generate a random seed for KSampler.
+
+    Returns a random integer in the range [0, 2^63-1].
+    This is used for reproducible video generation - same seed = same output.
+    """
+    return random.randint(0, MAX_SEED)
 
 
 def utc_now_iso():
@@ -177,6 +192,16 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Add seed column for reproducible video generation
+        try:
+            cursor.execute("ALTER TABLE jobs ADD COLUMN seed INTEGER")
+            # Backfill existing jobs with random seeds
+            cursor.execute("SELECT id FROM jobs WHERE seed IS NULL")
+            for row in cursor.fetchall():
+                cursor.execute("UPDATE jobs SET seed = ? WHERE id = ?", (generate_seed(), row[0]))
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Settings table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -295,17 +320,26 @@ def create_job(
     negative_prompt: str = "",
     workflow_type: str = "txt2img",
     parameters: Optional[Dict] = None,
-    input_image: Optional[str] = None
+    input_image: Optional[str] = None,
+    seed: Optional[int] = None
 ) -> int:
-    """Create a new job and return its ID."""
+    """Create a new job and return its ID.
+
+    Args:
+        seed: Optional seed for reproducible generation. If not provided, a random seed is generated.
+              The same seed is used for all segments in a job.
+    """
+    if seed is None:
+        seed = generate_seed()
+
     with get_connection() as conn:
         cursor = conn.cursor()
         # Get max priority to add new job at end of queue
         cursor.execute("SELECT COALESCE(MAX(priority), 0) + 1 FROM jobs")
         next_priority = cursor.fetchone()[0]
         cursor.execute("""
-            INSERT INTO jobs (name, prompt, negative_prompt, workflow_type, parameters, input_image, created_at, priority)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO jobs (name, prompt, negative_prompt, workflow_type, parameters, input_image, created_at, priority, seed)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             name,
             prompt,
@@ -314,7 +348,8 @@ def create_job(
             json.dumps(parameters) if parameters else None,
             input_image,
             utc_now_iso(),
-            next_priority
+            next_priority,
+            seed
         ))
         return cursor.lastrowid
 
@@ -452,9 +487,10 @@ def reset_orphaned_running_jobs(comfyui_client=None):
     but are no longer being monitored. This function:
     1. Checks if 'running' segments have completed in ComfyUI (if client provided)
     2. Checks if the video file exists locally (fallback)
-    3. Marks completed ones as 'completed'
-    4. Resets still-running ones to 'pending' for retry
-    5. Updates job statuses accordingly
+    3. Checks if the prompt is still running/pending in ComfyUI queue
+    4. Marks completed ones as 'completed' or 'needs_recovery'
+    5. Keeps actively running ones in 'running' state for continued monitoring
+    6. Resets truly orphaned ones to 'pending' for retry
 
     Args:
         comfyui_client: Optional ComfyUIClient instance to check for completed prompts
@@ -477,6 +513,22 @@ def reset_orphaned_running_jobs(comfyui_client=None):
         segments_completed = 0
         segments_reset = 0
         segments_recovered = 0
+        segments_still_running = 0
+
+        # Get active prompt IDs from ComfyUI queue (running + pending)
+        active_prompt_ids = set()
+        if comfyui_client:
+            queue_status = comfyui_client.get_queue_status()
+            # Extract prompt IDs from running queue
+            for item in queue_status.get("queue_running", []):
+                if isinstance(item, list) and len(item) > 1:
+                    active_prompt_ids.add(item[1])  # prompt_id is second element
+            # Extract prompt IDs from pending queue
+            for item in queue_status.get("queue_pending", []):
+                if isinstance(item, list) and len(item) > 1:
+                    active_prompt_ids.add(item[1])
+            if active_prompt_ids:
+                print(f"[Database] Found {len(active_prompt_ids)} active prompts in ComfyUI queue")
 
         for seg_row in running_segments:
             seg_id, job_id, seg_index, video_path, prompt_id, _ = seg_row
@@ -491,12 +543,12 @@ def reset_orphaned_running_jobs(comfyui_client=None):
                 segments_completed += 1
                 continue
 
-            # If we have a ComfyUI client and a prompt_id, check if the prompt completed in ComfyUI
+            # If we have a ComfyUI client and a prompt_id, check various states
             if comfyui_client and prompt_id:
+                # Check if prompt completed in ComfyUI history
                 status = comfyui_client.get_prompt_status(prompt_id)
                 if status.get("status") == "completed":
                     print(f"[Database] Segment {seg_index} of job {job_id} completed in ComfyUI - needs video recovery")
-                    # Mark for recovery - we'll download the video after this loop
                     cursor.execute(
                         "UPDATE job_segments SET status = 'needs_recovery' WHERE id = ?",
                         (seg_id,)
@@ -504,7 +556,13 @@ def reset_orphaned_running_jobs(comfyui_client=None):
                     segments_recovered += 1
                     continue
 
-            # Video doesn't exist and ComfyUI doesn't show completion - reset to pending for retry
+                # Check if prompt is still actively running/pending in ComfyUI queue
+                if prompt_id in active_prompt_ids:
+                    print(f"[Database] Segment {seg_index} of job {job_id} still running in ComfyUI - keeping status")
+                    segments_still_running += 1
+                    continue
+
+            # Video doesn't exist, not in history, not in queue - reset to pending for retry
             print(f"[Database] Segment {seg_index} of job {job_id} not completed - resetting to pending")
             cursor.execute(
                 "UPDATE job_segments SET status = 'pending' WHERE id = ?",
@@ -512,17 +570,31 @@ def reset_orphaned_running_jobs(comfyui_client=None):
             )
             segments_reset += 1
 
-        # Reset running jobs back to pending (they'll be reprocessed or set to awaiting_prompt)
-        cursor.execute("UPDATE jobs SET status = 'pending' WHERE status = 'running'")
-        jobs_reset = cursor.rowcount
+        # Only reset jobs that don't have actively running segments
+        # Get job IDs that still have running segments
+        cursor.execute("SELECT DISTINCT job_id FROM job_segments WHERE status = 'running'")
+        jobs_with_running_segments = {row[0] for row in cursor.fetchall()}
+
+        # Reset running jobs that don't have active segments
+        cursor.execute("SELECT id FROM jobs WHERE status = 'running'")
+        running_jobs = [row[0] for row in cursor.fetchall()]
+
+        jobs_reset = 0
+        for job_id in running_jobs:
+            if job_id not in jobs_with_running_segments:
+                cursor.execute("UPDATE jobs SET status = 'pending' WHERE id = ?", (job_id,))
+                jobs_reset += 1
+            else:
+                print(f"[Database] Job {job_id} still has running segments in ComfyUI - keeping status")
 
         conn.commit()
 
-        if jobs_reset > 0 or segments_reset > 0 or segments_completed > 0 or segments_recovered > 0:
+        if jobs_reset > 0 or segments_reset > 0 or segments_completed > 0 or segments_recovered > 0 or segments_still_running > 0:
             print(f"[Database] Startup cleanup: {jobs_reset} job(s) reset to pending, "
                   f"{segments_completed} segment(s) marked completed, "
                   f"{segments_reset} segment(s) reset to pending, "
-                  f"{segments_recovered} segment(s) need recovery from ComfyUI")
+                  f"{segments_recovered} segment(s) need recovery from ComfyUI, "
+                  f"{segments_still_running} segment(s) still running in ComfyUI")
 
         return jobs_reset, segments_reset, segments_completed, segments_recovered
 

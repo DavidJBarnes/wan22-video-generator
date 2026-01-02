@@ -72,6 +72,93 @@ class QueueManager:
         self._thread.start()
         print("Queue manager started")
 
+        # Resume monitoring any segments that were running before restart
+        self._resume_running_segments()
+
+    def _resume_running_segments(self):
+        """Resume monitoring segments that are still running in ComfyUI after backend restart."""
+        from database import get_connection
+
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT s.job_id, s.segment_index, s.comfyui_prompt_id, j.name
+                FROM job_segments s
+                JOIN jobs j ON s.job_id = j.id
+                WHERE s.status = 'running' AND s.comfyui_prompt_id IS NOT NULL
+            """)
+            running_segments = cursor.fetchall()
+
+        if not running_segments:
+            return
+
+        print(f"[QueueManager] Resuming monitoring of {len(running_segments)} running segment(s)")
+
+        for seg_row in running_segments:
+            job_id, segment_index, prompt_id, job_name = seg_row
+            print(f"[QueueManager] Resuming segment {segment_index} of job {job_id} ({job_name}), prompt_id={prompt_id}")
+
+            # Start a background thread to monitor this segment
+            resume_thread = threading.Thread(
+                target=self._monitor_resumed_segment,
+                args=(job_id, segment_index, prompt_id),
+                daemon=True
+            )
+            resume_thread.start()
+
+    def _monitor_resumed_segment(self, job_id: int, segment_index: int, prompt_id: str):
+        """Monitor a segment that was already running in ComfyUI (called in background thread)."""
+        try:
+            client = self._get_client()
+            logger.info(f"[Job {job_id}] Resumed monitoring segment {segment_index}, waiting for completion...")
+            add_job_log(job_id, "INFO", f"Backend restarted - resumed monitoring segment {segment_index}",
+                       segment_index=segment_index, details=f"prompt_id={prompt_id}")
+
+            # Use existing completion wait logic
+            success = self._wait_for_segment_completion(job_id, segment_index, prompt_id, client)
+
+            if success:
+                logger.info(f"[Job {job_id}] Resumed segment {segment_index} completed successfully")
+                # Check if job needs to continue or await next prompt
+                self._check_job_continuation(job_id)
+            else:
+                logger.error(f"[Job {job_id}] Resumed segment {segment_index} failed")
+                update_job_status(job_id, "failed", error_message=f"Segment {segment_index} failed after backend restart")
+                self._notify_update(job_id, "failed")
+
+        except Exception as e:
+            logger.error(f"[Job {job_id}] Error monitoring resumed segment {segment_index}: {e}")
+            update_segment_status(job_id, segment_index, "failed", error_message=str(e))
+            update_job_status(job_id, "failed", error_message=f"Error resuming segment {segment_index}: {str(e)}")
+            self._notify_update(job_id, "failed")
+
+    def _check_job_continuation(self, job_id: int):
+        """Check if a job should continue processing or await user input after a segment completes."""
+        job = get_job(job_id)
+        if not job:
+            return
+
+        segments = get_job_segments(job_id)
+        completed_count = sum(1 for s in segments if s.get("status") == "completed")
+        pending_count = sum(1 for s in segments if s.get("status") == "pending")
+
+        if pending_count > 0:
+            # There are more pending segments - check if next has a prompt
+            next_pending = get_next_pending_segment(job_id)
+            if next_pending and next_pending.get("prompt"):
+                # Next segment has a prompt, continue processing (queue manager will pick it up)
+                update_job_status(job_id, "pending")
+                self._notify_update(job_id, "pending")
+            else:
+                # Need user to provide next prompt
+                update_job_status(job_id, "awaiting_prompt")
+                self._notify_update(job_id, "awaiting_prompt")
+        else:
+            # All segments completed or no more pending - await next prompt from user
+            update_job_status(job_id, "awaiting_prompt")
+            self._notify_update(job_id, "awaiting_prompt")
+            logger.info(f"[Job {job_id}] All segments complete, awaiting next prompt")
+
     def stop(self):
         """Stop the queue manager."""
         self._running = False
@@ -403,6 +490,11 @@ class QueueManager:
         faceswap_faces_order = params.get("faceswap_faces_order", "left-right")
         faceswap_faces_index = params.get("faceswap_faces_index", "0")
 
+        # Use the job's seed for all segments (fixed seed per job)
+        job_seed = job.get("seed")
+        if job_seed is not None:
+            logger.info(f"[Job {job_id}] Using fixed seed {job_seed} for segment {segment_index}")
+
         workflow = client.build_wan_i2v_workflow(
             prompt=segment.get("prompt") or job.get("prompt", ""),
             negative_prompt=job.get("negative_prompt", get_setting("default_negative_prompt", "")),
@@ -412,7 +504,7 @@ class QueueManager:
             start_image_filename=input_image,
             high_noise_model=get_setting("high_noise_model", "wan2.2_i2v_high_noise_14B_fp16.safetensors"),
             low_noise_model=get_setting("low_noise_model", "wan2.2_i2v_low_noise_14B_fp16.safetensors"),
-            seed=params.get("seed"),
+            seed=job_seed,
             loras=loras if loras else None,
             fps=fps,
             output_prefix=output_prefix,
@@ -740,6 +832,9 @@ class QueueManager:
 
             logger.info(f"[Job {job_id}] ComfyUI queue cleared after {wait_time}s, proceeding")
 
+        # Use the job's fixed seed
+        job_seed = job.get("seed")
+
         workflow = client.build_workflow(
             workflow_type=job.get("workflow_type", "txt2img"),
             prompt=job.get("prompt", ""),
@@ -751,7 +846,7 @@ class QueueManager:
             scheduler=params.get("scheduler", get_setting("default_scheduler", "normal")),
             width=int(params.get("width", get_setting("default_width", "640"))),
             height=int(params.get("height", get_setting("default_height", "640"))),
-            seed=params.get("seed"),
+            seed=job_seed,
             denoise=float(params.get("denoise", 0.75)),
             input_image=job.get("input_image"),
             frames=frames,

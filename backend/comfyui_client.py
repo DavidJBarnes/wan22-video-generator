@@ -323,9 +323,10 @@ class ComfyUIClient:
 
         workflow = copy.deepcopy(WORKFLOW_TEMPLATES[workflow_type])
 
-        # Set seed
+        # Set seed (fallback - normally provided by job)
         if seed is None:
-            seed = random.randint(0, 2**32 - 1)
+            from database import generate_seed
+            seed = generate_seed()
 
         # Update common parameters
         if "3" in workflow:  # KSampler node
