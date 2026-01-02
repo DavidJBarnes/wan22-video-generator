@@ -345,7 +345,7 @@ export default function JobDetail() {
           </div>
           <div className="detail-meta-item">
             <label>Seed</label>
-            <div className="value" style={{ fontFamily: 'monospace', fontSize: '12px' }}>
+            <div className="value">
               {job.seed ?? 'N/A'}
             </div>
           </div>
@@ -370,11 +370,7 @@ export default function JobDetail() {
           {job.input_image && (
             <div className="detail-meta-item">
               <label>Starting Image</label>
-              <div className="value" style={{
-                fontFamily: 'monospace',
-                fontSize: '12px',
-                wordBreak: 'break-all'
-              }}>
+              <div className="value">
                 {job.input_image.split('/').slice(-3).join('/')}
               </div>
             </div>
