@@ -586,18 +586,22 @@ export default function JobDetail() {
               <Button
                 variant="contained"
                 onClick={() => setShowPromptModal(true)}
-                style={{ flex: 1 }}
+                style={{ flex: lastCompletedSegment ? 1 : 'none' }}
               >
-                Continue with Next Segment
+                {lastCompletedSegment ? 'Continue with Next Segment' : 'Submit First Segment'}
               </Button>
-              <div style={{ color: '#666', fontWeight: 500 }}>OR</div>
-              <Button
-                variant="contained"
-                onClick={handleFinalizeJob}
-                sx={{ flex: 1, bgcolor: '#4caf50', '&:hover': { bgcolor: '#388e3c' } }}
-              >
-                Finalize & Merge
-              </Button>
+              {lastCompletedSegment && (
+                <>
+                  <div style={{ color: '#666', fontWeight: 500 }}>OR</div>
+                  <Button
+                    variant="contained"
+                    onClick={handleFinalizeJob}
+                    sx={{ flex: 1, bgcolor: '#4caf50', '&:hover': { bgcolor: '#388e3c' } }}
+                  >
+                    Finalize & Merge
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         )}
