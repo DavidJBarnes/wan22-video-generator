@@ -19,7 +19,7 @@ const FACESWAP_FACES = [
   { value: 'Udycz_all.safetensors.png', label: 'Udycz' },
 ];
 
-export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl = null, cloneData = null }) {
+export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl = null, preUploadedDimensions = null, cloneData = null }) {
   const [settings, setSettings] = useState({});
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
@@ -46,28 +46,40 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   const [selectedDescription, setSelectedDescription] = useState(null);
 
   useEffect(() => {
-    loadSettings();
-    loadLoras();
+    async function initialize() {
+      // Load settings first, then override with specific dimensions if provided
+      await loadSettings();
+      loadLoras();
 
-    if (preUploadedImageUrl) {
-      setImagePreview(API.getComfyUIImage(preUploadedImageUrl));
-    }
+      if (preUploadedImageUrl) {
+        setImagePreview(API.getComfyUIImage(preUploadedImageUrl));
+        // Set dimensions based on image aspect ratio if provided
+        // This must run AFTER loadSettings to override the defaults
+        console.log('[CreateJobModal] preUploadedDimensions:', preUploadedDimensions);
+        if (preUploadedDimensions) {
+          console.log('[CreateJobModal] Setting width:', preUploadedDimensions.width, 'height:', preUploadedDimensions.height);
+          setWidth(preUploadedDimensions.width);
+          setHeight(preUploadedDimensions.height);
+        }
+      }
 
-    // Pre-populate form if cloning
-    if (cloneData) {
-      setName(cloneData.name ? `${cloneData.name} (Copy)` : '');
-      setPrompt(cloneData.prompt || '');
-      setWidth(cloneData.width || cloneData.parameters?.width || 640);
-      setHeight(cloneData.height || cloneData.parameters?.height || 640);
-      setFps(cloneData.fps || cloneData.parameters?.fps || 16);
-      setSegmentDuration(cloneData.segment_duration || cloneData.parameters?.segment_duration || 5);
+      // Pre-populate form if cloning
+      if (cloneData) {
+        setName(cloneData.name ? `${cloneData.name} (Copy)` : '');
+        setPrompt(cloneData.prompt || '');
+        setWidth(cloneData.width || cloneData.parameters?.width || 640);
+        setHeight(cloneData.height || cloneData.parameters?.height || 640);
+        setFps(cloneData.fps || cloneData.parameters?.fps || 16);
+        setSegmentDuration(cloneData.segment_duration || cloneData.parameters?.segment_duration || 5);
 
-      // Set the input image if available - use thumbnail endpoint for proper URL
-      if (cloneData.input_image && cloneData.id) {
-        setImagePreview(API.getJobThumbnail(cloneData.id));
+        // Set the input image if available - use thumbnail endpoint for proper URL
+        if (cloneData.input_image && cloneData.id) {
+          setImagePreview(API.getJobThumbnail(cloneData.id));
+        }
       }
     }
-  }, [preUploadedImageUrl, cloneData]);
+    initialize();
+  }, [preUploadedImageUrl, preUploadedDimensions, cloneData]);
 
   // When loras are loaded and we have cloneData, find matching LoRAs
   useEffect(() => {
@@ -151,7 +163,8 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
       // Parse job naming presets
       try {
         const prefixes = JSON.parse(s.job_name_prefixes || '[]');
-        setNamePrefixes(Array.isArray(prefixes) ? prefixes : []);
+        const sortedPrefixes = Array.isArray(prefixes) ? [...prefixes].sort((a, b) => a.localeCompare(b)) : [];
+        setNamePrefixes(sortedPrefixes);
       } catch { setNamePrefixes([]); }
       try {
         const descriptions = JSON.parse(s.job_name_descriptions || '[]');

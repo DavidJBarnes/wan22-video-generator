@@ -23,6 +23,7 @@ export default function ImageRepo() {
   const [ratingFilter, setRatingFilter] = useState('all');
   const [showJobModal, setShowJobModal] = useState(false);
   const [preUploadedImage, setPreUploadedImage] = useState(null);
+  const [preUploadedDimensions, setPreUploadedDimensions] = useState(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [folderPage, setFolderPage] = useState(1);
@@ -193,12 +194,13 @@ export default function ImageRepo() {
     });
   }
 
-  function handleCreateJobFromPreview(imageUrl) {
+  function handleCreateJobFromPreview(imageUrl, dimensions) {
     // Close preview modal and open job modal
     setShowPreviewModal(false);
     setSelectedImage(null);
     setSelectedImageIndex(-1);
     setPreUploadedImage(imageUrl);
+    setPreUploadedDimensions(dimensions || null);
     setShowJobModal(true);
   }
 
@@ -481,13 +483,16 @@ export default function ImageRepo() {
       {showJobModal && (
         <CreateJobModal
           preUploadedImageUrl={preUploadedImage}
+          preUploadedDimensions={preUploadedDimensions}
           onClose={() => {
             setShowJobModal(false);
             setPreUploadedImage(null);
+            setPreUploadedDimensions(null);
           }}
           onSuccess={(newJobId) => {
             setShowJobModal(false);
             setPreUploadedImage(null);
+            setPreUploadedDimensions(null);
           }}
         />
       )}

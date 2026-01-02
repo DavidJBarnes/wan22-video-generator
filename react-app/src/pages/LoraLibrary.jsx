@@ -99,50 +99,34 @@ export default function LoraLibrary() {
               {loras.map((lora) => (
                 <tr key={lora.id} onClick={() => handleEdit(lora)} style={{ cursor: 'pointer' }}>
                   <td style={{ padding: '4px' }}>
-                    {lora.preview_image_url ? (
-                      lora.preview_image_url.match(/\.(mp4|webm|mov)$/i) ? (
-                        <video
-                          src={API.getLoraPreviewUrl(lora.id)}
-                          style={{
-                            width: '60px',
-                            height: '60px',
-                            objectFit: 'cover',
-                            borderRadius: '4px'
-                          }}
-                          muted
-                          loop
-                          autoPlay
-                          playsInline
-                          onError={(e) => e.target.style.display = 'none'}
-                        />
-                      ) : (
-                        <img
-                          src={API.getLoraPreviewUrl(lora.id)}
-                          alt="Preview"
-                          style={{
-                            width: '60px',
-                            height: '60px',
-                            objectFit: 'cover',
-                            borderRadius: '4px'
-                          }}
-                          onError={(e) => e.target.style.display = 'none'}
-                        />
-                      )
-                    ) : (
-                      <div style={{
+                    <img
+                      src={API.getLoraPreviewUrl(lora.id)}
+                      alt="Preview"
+                      style={{
                         width: '60px',
                         height: '60px',
-                        backgroundColor: '#f0f0f0',
+                        objectFit: 'cover',
                         borderRadius: '4px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#999',
-                        fontSize: '10px'
-                      }}>
-                        No preview
-                      </div>
-                    )}
+                        backgroundColor: '#f0f0f0'
+                      }}
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextSibling.style.display = 'flex';
+                      }}
+                    />
+                    <div style={{
+                      width: '60px',
+                      height: '60px',
+                      backgroundColor: '#f0f0f0',
+                      borderRadius: '4px',
+                      display: 'none',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#999',
+                      fontSize: '10px'
+                    }}>
+                      No preview
+                    </div>
                   </td>
                   <td>
                     <div>
