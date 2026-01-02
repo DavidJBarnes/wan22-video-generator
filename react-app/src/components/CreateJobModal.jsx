@@ -484,7 +484,11 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                   label=""
                   value={selectedLoras[0].lora}
                   onChange={(lora) => setSelectedLoras([
-                    { ...selectedLoras[0], lora },
+                    {
+                      lora,
+                      highWeight: lora?.default_high_weight ?? 1,
+                      lowWeight: lora?.default_low_weight ?? 1
+                    },
                     selectedLoras[1]
                   ])}
                   loras={loras}
@@ -529,7 +533,11 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                   value={selectedLoras[1].lora}
                   onChange={(lora) => setSelectedLoras([
                     selectedLoras[0],
-                    { ...selectedLoras[1], lora }
+                    {
+                      lora,
+                      highWeight: lora?.default_high_weight ?? 1,
+                      lowWeight: lora?.default_low_weight ?? 1
+                    }
                   ])}
                   loras={loras}
                 />
