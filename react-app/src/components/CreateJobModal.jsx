@@ -213,6 +213,27 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
     }
   }, [selectedLoras]);
 
+  // Helper to get prompt text from a LoRA
+  function getLoraPromptText(lora) {
+    if (!lora) return '';
+    const parts = [];
+    if (lora.prompt_text) parts.push(lora.prompt_text);
+    if (lora.trigger_keywords) parts.push(lora.trigger_keywords);
+    return parts.join(', ');
+  }
+
+  // Append LoRA prompt text to existing prompt
+  function appendLoraPrompt(lora) {
+    const loraPrompt = getLoraPromptText(lora);
+    if (!loraPrompt) return;
+
+    if (prompt.trim()) {
+      setPrompt(prompt.trimEnd() + '\n' + loraPrompt);
+    } else {
+      setPrompt(loraPrompt);
+    }
+  }
+
   // Auto-build job name from prefix + description
   useEffect(() => {
     if (cloneData) return; // Don't override cloned job names
@@ -493,6 +514,22 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                   ])}
                   loras={loras}
                 />
+                <button
+                  type="button"
+                  onClick={() => appendLoraPrompt(selectedLoras[0].lora)}
+                  disabled={!selectedLoras[0].lora || !getLoraPromptText(selectedLoras[0].lora)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: selectedLoras[0].lora && getLoraPromptText(selectedLoras[0].lora) ? '#1976d2' : '#ccc',
+                    cursor: selectedLoras[0].lora && getLoraPromptText(selectedLoras[0].lora) ? 'pointer' : 'default',
+                    fontSize: '12px',
+                    padding: '4px 0',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  + Add prompt
+                </button>
               </div>
               <TextField
                 type="number"
@@ -541,6 +578,22 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                   ])}
                   loras={loras}
                 />
+                <button
+                  type="button"
+                  onClick={() => appendLoraPrompt(selectedLoras[1].lora)}
+                  disabled={!selectedLoras[1].lora || !getLoraPromptText(selectedLoras[1].lora)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: selectedLoras[1].lora && getLoraPromptText(selectedLoras[1].lora) ? '#1976d2' : '#ccc',
+                    cursor: selectedLoras[1].lora && getLoraPromptText(selectedLoras[1].lora) ? 'pointer' : 'default',
+                    fontSize: '12px',
+                    padding: '4px 0',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  + Add prompt
+                </button>
               </div>
               <TextField
                 type="number"
