@@ -63,6 +63,23 @@ from config import (
 )
 
 
+# ============== Prompt Helpers ==============
+
+def build_full_prompt(user_prompt: str) -> str:
+    """Build the full prompt by prepending prompt_identity from settings.
+
+    Args:
+        user_prompt: The user's prompt text
+
+    Returns:
+        Combined prompt: "[prompt_identity] [user_prompt]" or just user_prompt if no identity set
+    """
+    prompt_identity = get_setting("prompt_identity", "")
+    if prompt_identity and prompt_identity.strip():
+        return f"{prompt_identity.strip()} {user_prompt}"
+    return user_prompt
+
+
 # ============== CivitAI Preview Fetching ==============
 
 # Directory for cached LoRA preview images
@@ -323,9 +340,12 @@ async def get_job_logs(job_id: int, limit: int = 100):
 @router.post("/jobs", response_model=JobResponse)
 async def create_new_job(job: JobCreate):
     """Create a new job and its segments."""
+    # Build full prompt with prompt_identity prepended
+    full_prompt = build_full_prompt(job.prompt)
+
     job_id = create_job(
         name=job.name,
-        prompt=job.prompt,
+        prompt=full_prompt,
         negative_prompt=job.negative_prompt or "",
         workflow_type=job.workflow_type or "txt2img",
         parameters=job.parameters,
@@ -362,7 +382,7 @@ async def create_new_job(job: JobCreate):
     # Additional segments will be created when user provides prompts
     create_first_segment(
         job_id,
-        job.prompt,
+        full_prompt,
         start_image_url,
         high_loras=high_loras if high_loras else None,
         low_loras=low_loras if low_loras else None
@@ -384,11 +404,14 @@ async def update_job_endpoint(job_id: int, job_data: JobUpdate):
     if job["status"] not in ("pending", "awaiting_prompt"):
         raise HTTPException(status_code=400, detail="Only pending or awaiting_prompt jobs can be edited")
 
+    # Build full prompt with prompt_identity if prompt is being updated
+    full_prompt = build_full_prompt(job_data.prompt) if job_data.prompt is not None else None
+
     # Update the job
     success = update_job_parameters(
         job_id,
         name=job_data.name,
-        prompt=job_data.prompt,
+        prompt=full_prompt,
         negative_prompt=job_data.negative_prompt,
         parameters=job_data.parameters
     )
@@ -397,8 +420,8 @@ async def update_job_endpoint(job_id: int, job_data: JobUpdate):
         raise HTTPException(status_code=400, detail="Failed to update job")
 
     # Also update the first segment's prompt if job prompt changed
-    if job_data.prompt is not None:
-        update_segment_prompt(job_id, 0, job_data.prompt)
+    if full_prompt is not None:
+        update_segment_prompt(job_id, 0, full_prompt)
 
     return enrich_job_with_segments(get_job(job_id))
 
@@ -674,6 +697,9 @@ async def update_segment_prompt_endpoint(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    # Build full prompt with prompt_identity prepended
+    full_prompt = build_full_prompt(prompt)
+
     # Parse LoRA selections from JSON string
     # Format: [{"high_file": "...", "high_weight": 1.0, "low_file": "...", "low_weight": 1.0}, ...]
     high_loras = []
@@ -723,7 +749,7 @@ async def update_segment_prompt_endpoint(
         create_next_segment(
             job_id,
             segment_index,
-            prompt,
+            full_prompt,
             start_image_url,
             high_loras=high_loras if high_loras else None,
             low_loras=low_loras if low_loras else None
@@ -731,7 +757,7 @@ async def update_segment_prompt_endpoint(
     else:
         # Segment exists - update its prompt and LoRA selections
         update_segment_prompt(
-            job_id, segment_index, prompt,
+            job_id, segment_index, full_prompt,
             high_loras=high_loras if high_loras else None,
             low_loras=low_loras if low_loras else None
         )
