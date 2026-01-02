@@ -242,9 +242,10 @@ def build_wan_i2v_workflow(
     # Deep copy the template so we don't modify the original
     workflow = copy.deepcopy(WAN_I2V_API_WORKFLOW)
 
-    # Generate seed if not provided
+    # Generate seed if not provided (fallback - normally provided by job)
     if seed is None:
-        seed = random.randint(0, 2**32 - 1)
+        from database import generate_seed
+        seed = generate_seed()
 
     # Override start image filename (node 97 - LoadImage)
     workflow["97"]["inputs"]["image"] = start_image_filename
