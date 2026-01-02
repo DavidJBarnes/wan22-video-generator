@@ -279,6 +279,8 @@ class LoraUpdate(BaseModel):
     notes: Optional[str] = None
     preview_image_url: Optional[str] = None
     fetch_preview: Optional[bool] = False  # If true, auto-fetch preview from URL
+    default_high_weight: Optional[float] = None
+    default_low_weight: Optional[float] = None
 
 
 def enrich_job_with_segments(job: Dict[str, Any]) -> Dict[str, Any]:
@@ -1054,7 +1056,9 @@ async def update_lora(lora_id: int, lora_data: LoraUpdate):
         trigger_keywords=lora_data.trigger_keywords,
         rating=lora_data.rating,
         notes=lora_data.notes,
-        preview_image_url=preview_url
+        preview_image_url=preview_url,
+        default_high_weight=lora_data.default_high_weight,
+        default_low_weight=lora_data.default_low_weight
     )
 
     # Return updated LoRA

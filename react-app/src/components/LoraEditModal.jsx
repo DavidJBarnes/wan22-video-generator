@@ -17,6 +17,8 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
   const [triggerKeywords, setTriggerKeywords] = useState(lora.trigger_keywords || '');
   const [rating, setRating] = useState(lora.rating || null);
   const [notes, setNotes] = useState(lora.notes || '');
+  const [defaultHighWeight, setDefaultHighWeight] = useState(lora.default_high_weight ?? 1.0);
+  const [defaultLowWeight, setDefaultLowWeight] = useState(lora.default_low_weight ?? 1.0);
   const [hasPreview, setHasPreview] = useState(!!lora.preview_image_url);
   const [previewCacheBust, setPreviewCacheBust] = useState(Date.now());
   const [saving, setSaving] = useState(false);
@@ -56,7 +58,9 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
         prompt_text: promptText || null,
         trigger_keywords: triggerKeywords || null,
         rating: rating,
-        notes: notes || null
+        notes: notes || null,
+        default_high_weight: defaultHighWeight,
+        default_low_weight: defaultLowWeight
         // preview_image_url is managed by the refresh-preview endpoint
       });
 
@@ -90,6 +94,29 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
               <code>{lora.low_file ? lora.low_file.split('/').pop() : '—'}</code>
             </div>
           </div>
+          <div style={{ display: 'flex', gap: '12px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #ddd' }}>
+            <TextField
+              type="number"
+              label="Default High Weight"
+              size="small"
+              value={defaultHighWeight}
+              onChange={(e) => setDefaultHighWeight(parseFloat(e.target.value) || 0)}
+              inputProps={{ min: 0, max: 2, step: 0.1 }}
+              sx={{ width: '140px' }}
+            />
+            <TextField
+              type="number"
+              label="Default Low Weight"
+              size="small"
+              value={defaultLowWeight}
+              onChange={(e) => setDefaultLowWeight(parseFloat(e.target.value) || 0)}
+              inputProps={{ min: 0, max: 2, step: 0.1 }}
+              sx={{ width: '140px' }}
+            />
+          </div>
+          <Typography variant="caption" display="block" sx={{ mt: 1, color: '#666' }}>
+            Default weights to populate when this LoRA is selected in Create Job
+          </Typography>
         </div>
 
         <form onSubmit={handleSubmit}>
