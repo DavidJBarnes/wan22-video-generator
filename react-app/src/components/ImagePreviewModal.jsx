@@ -52,10 +52,6 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
   }, [currentIndex, images.length, deleting, creatingJob, onNavigate, onClose]);
 
   async function handleDelete() {
-    if (!confirm(`Are you sure you want to delete "${image.name}"? This will permanently remove the file from the filesystem.`)) {
-      return;
-    }
-
     setDeleting(true);
 
     try {

@@ -10,6 +10,7 @@ services:
       - /home/david/projects/RawMaterials:/home/david/projects/RawMaterials:z
       - ~/backups/video_output:/app/output:z
       - /home/david/projects/wan22-video-generator/backend/output:/home/david/projects/wan22-video-generator/backend/output:z
+      - ~/backups/lora_previews:/app/lora_previews:z
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped

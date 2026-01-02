@@ -163,7 +163,8 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
       // Parse job naming presets
       try {
         const prefixes = JSON.parse(s.job_name_prefixes || '[]');
-        setNamePrefixes(Array.isArray(prefixes) ? prefixes : []);
+        const sortedPrefixes = Array.isArray(prefixes) ? [...prefixes].sort((a, b) => a.localeCompare(b)) : [];
+        setNamePrefixes(sortedPrefixes);
       } catch { setNamePrefixes([]); }
       try {
         const descriptions = JSON.parse(s.job_name_descriptions || '[]');

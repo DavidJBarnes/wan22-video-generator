@@ -66,7 +66,7 @@ from config import (
 # ============== CivitAI Preview Fetching ==============
 
 # Directory for cached LoRA preview images
-LORA_PREVIEWS_DIR = Path(__file__).parent / "output" / "lora_previews"
+LORA_PREVIEWS_DIR = Path(__file__).parent / "lora_previews"
 LORA_PREVIEWS_DIR.mkdir(parents=True, exist_ok=True)
 
 
