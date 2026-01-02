@@ -31,9 +31,15 @@ export default function Queue() {
   const [jobs, setJobs] = useState([]);
   const [allJobs, setAllJobs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState(
-    ['pending', 'running', 'awaiting_prompt', 'completed', 'failed', 'cancelled']
-  );
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const saved = localStorage.getItem('queueStatusFilter');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch { /* fall through */ }
+    }
+    return ['pending', 'running', 'awaiting_prompt', 'completed', 'failed', 'cancelled'];
+  });
   const [showModal, setShowModal] = useState(false);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -128,6 +134,7 @@ export default function Queue() {
     const value = event.target.value;
     // MUI Select returns an array for multiple selection
     setStatusFilter(value);
+    localStorage.setItem('queueStatusFilter', JSON.stringify(value));
   }
 
   async function handleDeleteJob(jobId, event) {

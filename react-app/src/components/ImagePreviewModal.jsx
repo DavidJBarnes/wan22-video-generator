@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button, Rating, Box, Typography } from '@mui/material';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
@@ -8,6 +8,7 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
   const [deleting, setDeleting] = useState(false);
   const [creatingJob, setCreatingJob] = useState(false);
   const [rating, setRating] = useState(image.rating || null);
+  const imageRef = useRef(null);
 
   // Lock scroll on .main-content when modal is open
   useEffect(() => {
@@ -51,10 +52,6 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
   }, [currentIndex, images.length, deleting, creatingJob, onNavigate, onClose]);
 
   async function handleDelete() {
-    if (!confirm(`Are you sure you want to delete "${image.name}"? This will permanently remove the file from the filesystem.`)) {
-      return;
-    }
-
     setDeleting(true);
 
     try {
@@ -75,7 +72,26 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
       showToast('Uploading image...', 'info');
       const data = await API.selectImageFromRepo(image.path);
       showToast('Image uploaded successfully!', 'success');
-      onCreateJob(data.image_url);
+
+      // Get dimensions from the already-displayed image element
+      let dimensions = { width: 768, height: 512 }; // Default to landscape
+      if (imageRef.current) {
+        const naturalW = imageRef.current.naturalWidth;
+        const naturalH = imageRef.current.naturalHeight;
+        console.log('[ImagePreviewModal] Image natural dimensions:', naturalW, 'x', naturalH);
+        if (naturalW && naturalH) {
+          const isLandscape = naturalW > naturalH;
+          dimensions = isLandscape
+            ? { width: 768, height: 512 }
+            : { width: 512, height: 768 };
+          console.log('[ImagePreviewModal] Setting dimensions:', dimensions, 'isLandscape:', isLandscape);
+        } else {
+          console.log('[ImagePreviewModal] naturalWidth/Height not available, using defaults');
+        }
+      } else {
+        console.log('[ImagePreviewModal] imageRef.current is null');
+      }
+      onCreateJob(data.image_url, dimensions);
     } catch (error) {
       console.error('Failed to select image:', error);
       showToast(error.message || 'Failed to upload image', 'error');
@@ -122,6 +138,7 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
         {/* Image Preview */}
         <div style={{ marginBottom: '16px', textAlign: 'center' }}>
           <img
+            ref={imageRef}
             src={API.getRepoImage(image.path)}
             alt={image.name}
             style={{

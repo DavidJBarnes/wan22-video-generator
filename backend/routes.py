@@ -66,7 +66,7 @@ from config import (
 # ============== CivitAI Preview Fetching ==============
 
 # Directory for cached LoRA preview images
-LORA_PREVIEWS_DIR = Path(__file__).parent / "output" / "lora_previews"
+LORA_PREVIEWS_DIR = Path(__file__).parent / "lora_previews"
 LORA_PREVIEWS_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -1387,7 +1387,11 @@ async def select_image_from_repo(image_path: str = Form(...)):
     """Upload an image from the repository to ComfyUI.
 
     Takes an image from the local repository and uploads it to ComfyUI's input folder.
+    Deduplicates based on content hash - if the same image was uploaded before,
+    returns the existing filename without re-uploading.
     """
+    from database import compute_image_hash, get_image_by_hash, store_uploaded_image
+
     repo_root = get_setting("image_repo_path", "")
 
     if not repo_root:
@@ -1420,6 +1424,20 @@ async def select_image_from_repo(image_path: str = Form(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read image: {str(e)}")
 
+    # Check if this image was already uploaded (by content hash)
+    content_hash = compute_image_hash(image_content)
+    existing = get_image_by_hash(content_hash)
+
+    if existing:
+        # Image already exists, return existing filename without re-uploading
+        return {
+            "filename": existing['comfyui_filename'],
+            "image_url": existing['comfyui_filename'],
+            "original_name": full_path.name,
+            "original_path": image_path,
+            "deduplicated": True
+        }
+
     # Upload to ComfyUI
     comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
     client = ComfyUIClient(comfyui_url)
@@ -1431,12 +1449,16 @@ async def select_image_from_repo(image_path: str = Form(...)):
         if not result_filename:
             raise HTTPException(status_code=500, detail="Failed to upload image to ComfyUI")
 
+        # Store the hash for future deduplication
+        store_uploaded_image(content_hash, result_filename, full_path.name)
+
         # Return both filename and image_url for compatibility
         return {
             "filename": result_filename,
             "image_url": result_filename,  # For frontend compatibility
             "original_name": full_path.name,
-            "original_path": image_path
+            "original_path": image_path,
+            "deduplicated": False
         }
     except Exception as e:
         client.close()
