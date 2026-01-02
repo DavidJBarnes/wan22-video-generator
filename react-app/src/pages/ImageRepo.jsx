@@ -278,42 +278,6 @@ export default function ImageRepo() {
 
       {/* Breadcrumb with Navigation */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-        {siblingFolders.length > 0 && (
-          <div style={{ display: 'flex', gap: '4px' }}>
-            <button
-              onClick={navigateToPrevious}
-              disabled={currentFolderIndex <= 0}
-              style={{
-                padding: '4px 12px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                background: currentFolderIndex <= 0 ? '#f5f5f5' : 'white',
-                cursor: currentFolderIndex <= 0 ? 'not-allowed' : 'pointer',
-                fontSize: '16px',
-                color: currentFolderIndex <= 0 ? '#ccc' : '#333'
-              }}
-              title="Previous folder"
-            >
-              ‹‹
-            </button>
-            <button
-              onClick={navigateToNext}
-              disabled={currentFolderIndex >= siblingFolders.length - 1}
-              style={{
-                padding: '4px 12px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                background: currentFolderIndex >= siblingFolders.length - 1 ? '#f5f5f5' : 'white',
-                cursor: currentFolderIndex >= siblingFolders.length - 1 ? 'not-allowed' : 'pointer',
-                fontSize: '16px',
-                color: currentFolderIndex >= siblingFolders.length - 1 ? '#ccc' : '#333'
-              }}
-              title="Next folder"
-            >
-              ››
-            </button>
-          </div>
-        )}
         <div className="breadcrumb" style={{ flex: 1 }}>
           {breadcrumbs.length === 0 ? (
             <span style={{ color: '#999' }}>
@@ -335,6 +299,62 @@ export default function ImageRepo() {
                 </span>
               );
             })
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+          {currentPath && (
+            <button
+              onClick={() => loadDirectory(currentPath)}
+              disabled={loading}
+              style={{
+                padding: '4px 10px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                background: 'white',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                fontSize: '16px',
+                color: loading ? '#ccc' : '#333'
+              }}
+              title="Reload directory"
+            >
+              ↻
+            </button>
+          )}
+          {siblingFolders.length > 0 && (
+            <>
+              <button
+                onClick={navigateToPrevious}
+                disabled={currentFolderIndex <= 0}
+                style={{
+                  padding: '4px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  background: currentFolderIndex <= 0 ? '#f5f5f5' : 'white',
+                  cursor: currentFolderIndex <= 0 ? 'not-allowed' : 'pointer',
+                  fontSize: '16px',
+                  color: currentFolderIndex <= 0 ? '#ccc' : '#333'
+                }}
+                title="Previous folder"
+              >
+                ‹‹
+              </button>
+              <button
+                onClick={navigateToNext}
+                disabled={currentFolderIndex >= siblingFolders.length - 1}
+                style={{
+                  padding: '4px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  background: currentFolderIndex >= siblingFolders.length - 1 ? '#f5f5f5' : 'white',
+                  cursor: currentFolderIndex >= siblingFolders.length - 1 ? 'not-allowed' : 'pointer',
+                  fontSize: '16px',
+                  color: currentFolderIndex >= siblingFolders.length - 1 ? '#ccc' : '#333'
+                }}
+                title="Next folder"
+              >
+                ››
+              </button>
+            </>
           )}
         </div>
       </div>
