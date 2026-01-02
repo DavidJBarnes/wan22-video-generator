@@ -1149,6 +1149,7 @@ def _get_lora_base_and_type(filename: str) -> tuple:
         r'_high_',
         r'-high-',
         r'_high\.',
+        r'_High\.',  # Mixed case variant
     ]
 
     # Patterns for LOW variants
@@ -1165,6 +1166,7 @@ def _get_lora_base_and_type(filename: str) -> tuple:
         r'_low_',
         r'-low-',
         r'_low\.',
+        r'_Low\.',  # Mixed case variant
         r'[_-][Ll]ow[_-]',
     ]
 
