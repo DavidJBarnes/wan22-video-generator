@@ -44,6 +44,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   const [faceswapFacesIndex, setFaceswapFacesIndex] = useState('0');
   const [selectedPrefix, setSelectedPrefix] = useState(null);
   const [selectedDescription, setSelectedDescription] = useState(null);
+  const [autoFinalize, setAutoFinalize] = useState(false);
 
   useEffect(() => {
     async function initialize() {
@@ -300,7 +301,8 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
           faceswap_enabled: faceswapEnabled,
           faceswap_image: faceswapEnabled ? faceswapImage : null,
           faceswap_faces_order: faceswapEnabled ? faceswapFacesOrder : null,
-          faceswap_faces_index: faceswapEnabled ? faceswapFacesIndex : null
+          faceswap_faces_index: faceswapEnabled ? faceswapFacesIndex : null,
+          auto_finalize: autoFinalize
         }
       };
 
@@ -632,6 +634,22 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                 </div>
               </>
             )}
+          </div>
+
+          {/* Auto Finalize */}
+          <div className="form-group">
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={autoFinalize}
+                  onChange={(e) => setAutoFinalize(e.target.checked)}
+                />
+              }
+              label="Auto-finalize after first segment"
+            />
+            <FormHelperText sx={{ ml: 4, mt: -1 }}>
+              Automatically merge and finalize video when segment completes
+            </FormHelperText>
           </div>
 
           <div className="modal-actions">

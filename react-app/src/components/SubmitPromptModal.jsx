@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Button, TextField } from '@mui/material';
+import { Button, TextField, FormControlLabel, Checkbox, FormHelperText } from '@mui/material';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import LoraAutocomplete from './LoraAutocomplete';
@@ -21,6 +21,7 @@ export default function SubmitPromptModal({
   ]);
   const [loras, setLoras] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  const [autoFinalize, setAutoFinalize] = useState(false);
   const defaultsAppliedRef = useRef(false);
 
   useEffect(() => {
@@ -119,7 +120,8 @@ export default function SubmitPromptModal({
         jobId,
         segmentIndex,
         prompt.trim(),
-        lorasArray
+        lorasArray,
+        autoFinalize
       );
 
       showToast('Prompt submitted successfully', 'success');
@@ -248,6 +250,22 @@ export default function SubmitPromptModal({
                 disabled={!selectedLoras[1].lora}
               />
             </div>
+          </div>
+
+          {/* Auto Finalize */}
+          <div className="form-group">
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={autoFinalize}
+                  onChange={(e) => setAutoFinalize(e.target.checked)}
+                />
+              }
+              label="Auto-finalize after this segment"
+            />
+            <FormHelperText sx={{ ml: 4, mt: -1 }}>
+              Automatically merge and finalize video when segment completes
+            </FormHelperText>
           </div>
 
           <div className="modal-actions">

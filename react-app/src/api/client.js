@@ -201,7 +201,7 @@ class APIClient {
     return `${API_BASE_URL}/jobs/${jobId}/video`;
   }
 
-  async submitSegmentPrompt(jobId, segmentIndex, prompt, loras = []) {
+  async submitSegmentPrompt(jobId, segmentIndex, prompt, loras = [], autoFinalize = false) {
     const formData = new FormData();
     formData.append('prompt', prompt);
 
@@ -221,6 +221,9 @@ class APIClient {
         formData.append('loras', JSON.stringify(loraArray));
       }
     }
+
+    // Auto-finalize flag
+    formData.append('auto_finalize', autoFinalize.toString());
 
     return this.request(`/jobs/${jobId}/segments/${segmentIndex}/prompt`, {
       method: 'POST',

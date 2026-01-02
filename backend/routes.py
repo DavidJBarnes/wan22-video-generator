@@ -668,13 +668,15 @@ async def update_segment_prompt_endpoint(
     job_id: int,
     segment_index: int,
     prompt: str = Form(...),
-    loras: Optional[str] = Form(None)  # JSON array: '[{"high_file": "...", "low_file": "..."}]'
+    loras: Optional[str] = Form(None),  # JSON array: '[{"high_file": "...", "low_file": "..."}]'
+    auto_finalize: Optional[bool] = Form(False)  # Auto-finalize after this segment completes
 ):
     """Create or update a segment with a prompt and resume job processing (on-demand workflow).
 
     Args:
         loras: Optional JSON string containing array of LoRA pairs (max 2).
                Format: '[{"high_file": "path/to/high.safetensors", "low_file": "path/to/low.safetensors"}]'
+        auto_finalize: If true, automatically finalize the job after this segment completes.
     """
     job = get_job(job_id)
     if not job:
@@ -750,6 +752,17 @@ async def update_segment_prompt_endpoint(
             high_loras=high_loras if high_loras else None,
             low_loras=low_loras if low_loras else None
         )
+
+    # Update auto_finalize in job parameters
+    if auto_finalize is not None:
+        current_params = job.get("parameters") or {}
+        if isinstance(current_params, str):
+            try:
+                current_params = json.loads(current_params)
+            except:
+                current_params = {}
+        current_params["auto_finalize"] = auto_finalize
+        update_job_parameters(job_id, parameters=current_params)
 
     # If job was waiting for prompt, set it back to pending so queue manager picks it up
     if job.get("status") == "awaiting_prompt":
