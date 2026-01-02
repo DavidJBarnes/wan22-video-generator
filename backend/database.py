@@ -599,12 +599,37 @@ def reset_orphaned_running_jobs(comfyui_client=None):
 
         conn.commit()
 
-        if jobs_reset > 0 or segments_reset > 0 or segments_completed > 0 or segments_recovered > 0 or segments_still_running > 0:
+        # Also fix segments that are "running" but their job is "failed"
+        # This can happen when job fails but segment status wasn't updated
+        # BUT: don't change segments still actively running in ComfyUI (they might complete)
+        if active_prompt_ids:
+            # Only sync segments not actively in ComfyUI queue
+            cursor.execute("""
+                UPDATE job_segments
+                SET status = 'failed', error_message = 'Job failed during processing'
+                WHERE status = 'running'
+                AND job_id IN (SELECT id FROM jobs WHERE status = 'failed')
+                AND (comfyui_prompt_id IS NULL OR comfyui_prompt_id NOT IN ({}))
+            """.format(','.join('?' * len(active_prompt_ids))), list(active_prompt_ids))
+        else:
+            # No active prompts - safe to sync all
+            cursor.execute("""
+                UPDATE job_segments
+                SET status = 'failed', error_message = 'Job failed during processing'
+                WHERE status = 'running'
+                AND job_id IN (SELECT id FROM jobs WHERE status = 'failed')
+            """)
+        segments_failed_sync = cursor.rowcount
+
+        conn.commit()
+
+        if jobs_reset > 0 or segments_reset > 0 or segments_completed > 0 or segments_recovered > 0 or segments_still_running > 0 or segments_failed_sync > 0:
             print(f"[Database] Startup cleanup: {jobs_reset} job(s) reset to pending, "
                   f"{segments_completed} segment(s) marked completed, "
                   f"{segments_reset} segment(s) reset to pending, "
                   f"{segments_recovered} segment(s) need recovery from ComfyUI, "
-                  f"{segments_still_running} segment(s) still running in ComfyUI")
+                  f"{segments_still_running} segment(s) still running in ComfyUI, "
+                  f"{segments_failed_sync} segment(s) synced to failed status")
 
         return jobs_reset, segments_reset, segments_completed, segments_recovered
 
