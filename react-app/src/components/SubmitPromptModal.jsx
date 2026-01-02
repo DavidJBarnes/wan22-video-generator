@@ -73,25 +73,18 @@ export default function SubmitPromptModal({
     }
   }, [loras, defaultLoras]);
 
-  // Auto-populate prompt when first LoRA is selected (only if prompt is empty)
-  useEffect(() => {
-    const firstLora = selectedLoras[0].lora;
-    if (prompt.trim() || !firstLora) {
-      return;
-    }
+  // Helper to populate prompt from LoRA if prompt is empty
+  function populatePromptFromLora(lora) {
+    if (prompt.trim() || !lora) return;
 
     const parts = [];
-    if (firstLora.prompt_text) {
-      parts.push(firstLora.prompt_text);
-    }
-    if (firstLora.trigger_keywords) {
-      parts.push(firstLora.trigger_keywords);
-    }
+    if (lora.prompt_text) parts.push(lora.prompt_text);
+    if (lora.trigger_keywords) parts.push(lora.trigger_keywords);
 
     if (parts.length > 0) {
       setPrompt(parts.join(', '));
     }
-  }, [selectedLoras]);
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -166,10 +159,13 @@ export default function SubmitPromptModal({
                 <LoraAutocomplete
                   label=""
                   value={selectedLoras[0].lora}
-                  onChange={(lora) => setSelectedLoras([
-                    { ...selectedLoras[0], lora },
-                    selectedLoras[1]
-                  ])}
+                  onChange={(lora) => {
+                    setSelectedLoras([
+                      { ...selectedLoras[0], lora },
+                      selectedLoras[1]
+                    ]);
+                    populatePromptFromLora(lora);
+                  }}
                   loras={loras}
                 />
               </div>
