@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@mui/material';
 import API from '../api/client';
@@ -24,8 +24,11 @@ export default function JobDetail() {
   const [logs, setLogs] = useState([]);
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [loraLibrary, setLoraLibrary] = useState([]);
+  const autoFinalizeTriggeredRef = useRef(false);
 
   useEffect(() => {
+    // Reset auto-finalize tracking when job changes
+    autoFinalizeTriggeredRef.current = false;
     loadJobDetail();
 
     // Auto-refresh based on job status
@@ -38,6 +41,27 @@ export default function JobDetail() {
         } else if (['completed', 'failed', 'cancelled'].includes(jobData.status)) {
           clearInterval(interval);
           loadJobDetail();
+        }
+
+        // Auto-finalize: when job transitions to awaiting_prompt and has auto_finalize enabled
+        if (
+          jobData.status === 'awaiting_prompt' &&
+          lastJobStatus === 'running' &&
+          !autoFinalizeTriggeredRef.current
+        ) {
+          const params = jobData.parameters || {};
+          if (params.auto_finalize && jobData.completed_segments > 0) {
+            autoFinalizeTriggeredRef.current = true;
+            showToast('Auto-finalizing video...', 'info');
+            try {
+              await API.finalizeJob(id);
+              showToast('Video finalized successfully', 'success');
+            } catch (err) {
+              console.error('Auto-finalize failed:', err);
+              showToast('Auto-finalize failed', 'error');
+              autoFinalizeTriggeredRef.current = false; // Allow retry
+            }
+          }
         }
 
         setLastJobStatus(jobData.status);
