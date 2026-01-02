@@ -258,6 +258,7 @@ class JobResponse(BaseModel):
     started_at: Optional[str]
     completed_at: Optional[str]
     priority: Optional[int] = None
+    seed: Optional[int] = None
     # Computed segment fields
     total_segments: Optional[int] = 0
     completed_segments: Optional[int] = 0
