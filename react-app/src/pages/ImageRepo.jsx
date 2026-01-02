@@ -167,6 +167,21 @@ export default function ImageRepo() {
   const [selectedImageIndex, setSelectedImageIndex] = useState(-1);
   const [savedScrollTop, setSavedScrollTop] = useState(0);
 
+  function reloadDirectory() {
+    // Save scroll position before reload
+    const mainContent = document.querySelector('.main-content');
+    const scrollToRestore = mainContent ? mainContent.scrollTop : 0;
+
+    loadDirectory(currentPath).then(() => {
+      requestAnimationFrame(() => {
+        const mc = document.querySelector('.main-content');
+        if (mc) {
+          mc.scrollTop = scrollToRestore;
+        }
+      });
+    });
+  }
+
   function openImagePreview(image, index) {
     // Save scroll position of .main-content (not window - window doesn't scroll in this layout)
     const mainContent = document.querySelector('.main-content');
@@ -233,51 +248,53 @@ export default function ImageRepo() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h1 style={{ margin: 0 }}>Image Repository</h1>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <FormControl size="small" sx={{ minWidth: 140 }}>
-            <InputLabel>Rating</InputLabel>
-            <Select
-              value={ratingFilter}
-              onChange={(e) => setRatingFilter(e.target.value)}
-              label="Rating"
+      {/* Sticky header section - negative margin pulls into parent padding, padding-top compensates */}
+      <div style={{ position: 'sticky', top: '-32px', margin: '-32px -32px 16px -32px', padding: '32px 32px 16px 32px', backgroundColor: '#f5f5f5', zIndex: 100 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <h1 style={{ margin: 0 }}>Image Repository</h1>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <InputLabel>Rating</InputLabel>
+              <Select
+                value={ratingFilter}
+                onChange={(e) => setRatingFilter(e.target.value)}
+                label="Rating"
+              >
+                <MenuItem value="all">All Images</MenuItem>
+                <MenuItem value="unrated">Unrated</MenuItem>
+                <MenuItem value="5">5 Stars</MenuItem>
+                <MenuItem value="4">4 Stars</MenuItem>
+                <MenuItem value="3">3 Stars</MenuItem>
+                <MenuItem value="2">2 Stars</MenuItem>
+                <MenuItem value="1">1 Star</MenuItem>
+              </Select>
+            </FormControl>
+            <label style={{ fontSize: '14px', color: '#666' }}>Sort:</label>
+            <select
+              value={sortOrder}
+              onChange={(e) => handleSortChange(e.target.value)}
+              style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: '4px', background: 'white', cursor: 'pointer' }}
             >
-              <MenuItem value="all">All Images</MenuItem>
-              <MenuItem value="unrated">Unrated</MenuItem>
-              <MenuItem value="5">5 Stars</MenuItem>
-              <MenuItem value="4">4 Stars</MenuItem>
-              <MenuItem value="3">3 Stars</MenuItem>
-              <MenuItem value="2">2 Stars</MenuItem>
-              <MenuItem value="1">1 Star</MenuItem>
-            </Select>
-          </FormControl>
-          <label style={{ fontSize: '14px', color: '#666' }}>Sort:</label>
-          <select
-            value={sortOrder}
-            onChange={(e) => handleSortChange(e.target.value)}
-            style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: '4px', background: 'white', cursor: 'pointer' }}
-          >
-            <option value="name-asc">Name (A-Z)</option>
-            <option value="name-desc">Name (Z-A)</option>
-          </select>
-          <button
-            className={`btn btn-secondary ${viewMode === 'grid' ? 'active' : ''}`}
-            onClick={() => setViewMode('grid')}
-          >
-            <span style={{ fontSize: '18px' }}>▦</span> Grid
-          </button>
-          <button
-            className={`btn btn-secondary ${viewMode === 'list' ? 'active' : ''}`}
-            onClick={() => setViewMode('list')}
-          >
-            <span style={{ fontSize: '18px' }}>☰</span> List
-          </button>
+              <option value="name-asc">Name (A-Z)</option>
+              <option value="name-desc">Name (Z-A)</option>
+            </select>
+            <button
+              className={`btn btn-secondary ${viewMode === 'grid' ? 'active' : ''}`}
+              onClick={() => setViewMode('grid')}
+            >
+              <span style={{ fontSize: '18px' }}>▦</span> Grid
+            </button>
+            <button
+              className={`btn btn-secondary ${viewMode === 'list' ? 'active' : ''}`}
+              onClick={() => setViewMode('list')}
+            >
+              <span style={{ fontSize: '18px' }}>☰</span> List
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* Breadcrumb with Navigation */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+        {/* Breadcrumb with Navigation */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <div className="breadcrumb" style={{ flex: 1 }}>
           {breadcrumbs.length === 0 ? (
             <span style={{ color: '#999' }}>
@@ -304,7 +321,7 @@ export default function ImageRepo() {
         <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
           {currentPath && (
             <button
-              onClick={() => loadDirectory(currentPath)}
+              onClick={reloadDirectory}
               disabled={loading}
               style={{
                 padding: '4px 10px',
@@ -356,6 +373,7 @@ export default function ImageRepo() {
               </button>
             </>
           )}
+        </div>
         </div>
       </div>
 
