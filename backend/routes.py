@@ -72,11 +72,16 @@ def build_full_prompt(user_prompt: str) -> str:
         user_prompt: The user's prompt text
 
     Returns:
-        Combined prompt: "[prompt_identity] [user_prompt]" or just user_prompt if no identity set
+        Combined prompt: "[prompt_identity] [user_prompt]" or just user_prompt if no identity set.
+        Skips prepending if user_prompt already starts with the identity (avoids duplication).
     """
     prompt_identity = get_setting("prompt_identity", "")
     if prompt_identity and prompt_identity.strip():
-        return f"{prompt_identity.strip()} {user_prompt}"
+        identity = prompt_identity.strip()
+        # Skip prepending if prompt already starts with identity (avoids duplication)
+        if user_prompt.startswith(identity):
+            return user_prompt
+        return f"{identity} {user_prompt}"
     return user_prompt
 
 
@@ -697,7 +702,7 @@ async def update_segment_prompt_endpoint(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Build full prompt with prompt_identity prepended
+    # Build full prompt - will skip prepending identity if already present
     full_prompt = build_full_prompt(prompt)
 
     # Parse LoRA selections from JSON string
