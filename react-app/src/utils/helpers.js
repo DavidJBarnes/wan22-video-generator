@@ -24,6 +24,19 @@ export function getChipClass(status) {
   return statusMap[status] || '';
 }
 
+export function getFaceswapName(job) {
+  const params = job.parameters || {};
+  if (!params.faceswap_enabled || !params.faceswap_image) {
+    return null;
+  }
+  // Extract name from filename like "Andrea_all.safetensors.png" or "gena.safetensors.png"
+  let name = params.faceswap_image
+    .replace('.safetensors.png', '')
+    .replace('_all', '');
+  // Capitalize first letter
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
 export function showToast(message, type = 'info') {
   // Create toast container if it doesn't exist
   let container = document.getElementById('toast-container');

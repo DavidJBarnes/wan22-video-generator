@@ -17,7 +17,7 @@ import {
   Paper
 } from '@mui/material';
 import API from '../api/client';
-import { formatDate } from '../utils/helpers';
+import { formatDate, getFaceswapName } from '../utils/helpers';
 import StatusChip from '../components/StatusChip';
 import './Dashboard.css';
 
@@ -232,6 +232,7 @@ export default function Dashboard() {
             <TableRow>
               <TableCell style={{fontWeight:'bold'}}></TableCell>
               <TableCell style={{fontWeight:'bold'}}>Job Name</TableCell>
+              <TableCell style={{fontWeight:'bold'}}>Faceswap</TableCell>
               <TableCell style={{fontWeight:'bold'}}>Status</TableCell>
               <TableCell style={{fontWeight:'bold'}}>Segments</TableCell>
               <TableCell style={{fontWeight:'bold'}}>Created</TableCell>
@@ -240,7 +241,7 @@ export default function Dashboard() {
           <TableBody>
             {filteredJobs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ color: '#999' }}>
+                <TableCell colSpan={6} align="center" sx={{ color: '#999' }}>
                   No jobs match the filter
                 </TableCell>
               </TableRow>
@@ -263,6 +264,9 @@ export default function Dashboard() {
                       />
                     </TableCell>
                     <TableCell>{job.name}</TableCell>
+                    <TableCell sx={{ color: getFaceswapName(job) ? 'inherit' : '#999' }}>
+                      {getFaceswapName(job) || 'N/A'}
+                    </TableCell>
                     <TableCell>
                       <StatusChip status={job.status} />
                     </TableCell>
