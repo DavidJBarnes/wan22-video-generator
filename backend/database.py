@@ -396,6 +396,25 @@ def get_pending_jobs() -> List[Dict[str, Any]]:
         return [_row_to_job_dict(row) for row in cursor.fetchall()]
 
 
+def get_jobs_by_input_image(image_filename: str) -> List[Dict[str, Any]]:
+    """Get all jobs that used a specific image as input.
+
+    Matches jobs where input_image contains the filename (handles path variations).
+    Returns jobs ordered by creation date descending.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        # Match by filename at the end of path or exact match
+        cursor.execute(
+            """SELECT id, name, status, created_at, completed_at
+               FROM jobs
+               WHERE input_image LIKE ? OR input_image = ?
+               ORDER BY created_at DESC""",
+            (f'%{image_filename}', image_filename)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
 def move_job_up(job_id: int) -> bool:
     """Move a job up in the queue (decrease priority number to run sooner).
 

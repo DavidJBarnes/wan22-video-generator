@@ -48,6 +48,7 @@ from database import (
     hide_lora_file,
     unhide_lora_file,
     get_hidden_loras as db_get_hidden_loras,
+    get_jobs_by_input_image,
     get_job_logs as db_get_job_logs
 )
 from comfyui_client import ComfyUIClient
@@ -1554,3 +1555,16 @@ async def set_image_rating_endpoint(image_path: str = Form(...), rating: Optiona
 
     set_image_rating(image_path, rating)
     return {"image_path": image_path, "rating": rating, "success": True}
+
+
+@router.get("/image-repo/jobs")
+async def get_jobs_for_image(filename: str):
+    """Get all jobs that used this image as input.
+
+    Returns a list of jobs with id, name, status, and dates.
+    """
+    if not filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+
+    jobs = get_jobs_by_input_image(filename)
+    return {"jobs": jobs}
