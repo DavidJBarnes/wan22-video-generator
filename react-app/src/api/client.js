@@ -266,6 +266,10 @@ class APIClient {
     return this.request(`/image-repo/browse?path=${encodeURIComponent(path)}`);
   }
 
+  async getAllImages(path = '') {
+    return this.request(`/image-repo/all-images?path=${encodeURIComponent(path)}`);
+  }
+
   getRepoImage(path) {
     return `${API_BASE_URL}/image-repo/image?path=${encodeURIComponent(path)}`;
   }

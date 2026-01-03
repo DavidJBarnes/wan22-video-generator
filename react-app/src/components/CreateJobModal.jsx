@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Button, TextField, Select, MenuItem, FormControl, InputLabel, FormHelperText, Autocomplete, FormControlLabel, Checkbox } from '@mui/material';
+import { Button, TextField, Select, MenuItem, FormControl, InputLabel, FormHelperText, Autocomplete, FormControlLabel, Checkbox, CircularProgress } from '@mui/material';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import LoraAutocomplete from './LoraAutocomplete';
@@ -474,6 +474,22 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
               fullWidth
               variant="outlined"
             />
+            <button
+              type="button"
+              onClick={() => setPrompt('')}
+              disabled={!prompt.trim()}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: prompt.trim() ? '#1976d2' : '#ccc',
+                cursor: prompt.trim() ? 'pointer' : 'default',
+                fontSize: '12px',
+                padding: '4px 0',
+                textDecoration: 'underline'
+              }}
+            >
+              Clear prompt
+            </button>
           </div>
 
           <div className="form-group">
@@ -710,7 +726,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
               Cancel
             </Button>
             <Button type="submit" variant="contained" disabled={uploading}>
-              {uploading ? 'Creating...' : 'Create Job'}
+              {uploading ? <CircularProgress size={20} color="inherit" /> : 'Create Job'}
             </Button>
           </div>
         </form>

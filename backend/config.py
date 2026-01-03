@@ -74,3 +74,6 @@ SEGMENT_DURATIONS = {
 # Polling Configuration
 POLL_INTERVAL_SECONDS = 2
 MAX_POLL_ATTEMPTS = 600  # 20 minutes max wait time
+
+# Image Slideshow Configuration
+DEFAULT_SLIDESHOW_DELAY = 5  # seconds between images in random viewer

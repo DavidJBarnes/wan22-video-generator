@@ -1,7 +1,17 @@
-import { useState, useEffect, useMemo } from 'react';
-import { FormControl, InputLabel, Select, MenuItem, Pagination, Box } from '@mui/material';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { FormControl, InputLabel, Select, MenuItem, Pagination, Box, CircularProgress, Button } from '@mui/material';
 
 const FOLDERS_PER_PAGE = 24;
+
+// Fisher-Yates shuffle
+function shuffleArray(array) {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import CreateJobModal from '../components/CreateJobModal';
@@ -167,6 +177,20 @@ export default function ImageRepo() {
   const [selectedImageIndex, setSelectedImageIndex] = useState(-1);
   const [savedScrollTop, setSavedScrollTop] = useState(0);
 
+  // Slideshow state
+  const [slideshowMode, setSlideshowMode] = useState(false);
+  const [slideshowImages, setSlideshowImages] = useState([]);
+  const [slideshowIndex, setSlideshowIndex] = useState(0);
+  const [slideshowHistory, setSlideshowHistory] = useState([]);
+  const [slideshowPaused, setSlideshowPaused] = useState(false);
+  const [slideshowDelay, setSlideshowDelay] = useState(5);
+  const [slideshowProgress, setSlideshowProgress] = useState(0);
+  const [loadingSlideshow, setLoadingSlideshow] = useState(false);
+  const [slideshowShowControls, setSlideshowShowControls] = useState(true);
+  const slideshowTimerRef = useRef(null);
+  const progressIntervalRef = useRef(null);
+  const controlsTimeoutRef = useRef(null);
+
   function reloadDirectory() {
     // Save scroll position before reload
     const mainContent = document.querySelector('.main-content');
@@ -246,6 +270,202 @@ export default function ImageRepo() {
     }
   }
 
+  // Load slideshow delay setting
+  useEffect(() => {
+    async function loadSlideshowDelay() {
+      try {
+        const data = await API.getSettings();
+        const settings = data.settings || data;
+        setSlideshowDelay(parseInt(settings.slideshow_delay) || 5);
+      } catch (err) {
+        console.error('Failed to load slideshow delay:', err);
+      }
+    }
+    loadSlideshowDelay();
+  }, []);
+
+  // Slideshow functions
+  async function startSlideshow(recursive = false) {
+    setLoadingSlideshow(true);
+    try {
+      let imagesToShuffle;
+      if (recursive) {
+        // Get all images recursively from current path (or root if at root)
+        const data = await API.getAllImages(currentPath);
+        imagesToShuffle = data.images || [];
+      } else {
+        // Use current directory images
+        imagesToShuffle = [...images];
+      }
+
+      if (imagesToShuffle.length === 0) {
+        showToast('No images found', 'warning');
+        setLoadingSlideshow(false);
+        return;
+      }
+
+      const shuffled = shuffleArray(imagesToShuffle);
+      setSlideshowImages(shuffled);
+      setSlideshowIndex(0);
+      setSlideshowHistory([0]);
+      setSlideshowPaused(false);
+      setSlideshowProgress(0);
+      setSlideshowMode(true);
+    } catch (err) {
+      console.error('Failed to start slideshow:', err);
+      showToast('Failed to load images', 'error');
+    }
+    setLoadingSlideshow(false);
+  }
+
+  function exitSlideshow() {
+    setSlideshowMode(false);
+    setSlideshowImages([]);
+    setSlideshowIndex(0);
+    setSlideshowHistory([]);
+    setSlideshowPaused(false);
+    setSlideshowProgress(0);
+    setSlideshowShowControls(true);
+    if (slideshowTimerRef.current) {
+      clearTimeout(slideshowTimerRef.current);
+      slideshowTimerRef.current = null;
+    }
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+      controlsTimeoutRef.current = null;
+    }
+  }
+
+  // Handle mouse movement in slideshow - show controls temporarily
+  const handleSlideshowMouseMove = useCallback(() => {
+    setSlideshowShowControls(true);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      setSlideshowShowControls(false);
+    }, 2000); // Hide after 2 seconds of no movement
+  }, []);
+
+  // Delete current slideshow image
+  const deleteSlideshowImage = useCallback(async () => {
+    if (!slideshowImages[slideshowIndex]) return;
+
+    const imageToDelete = slideshowImages[slideshowIndex];
+
+    try {
+      await API.deleteRepoImage(imageToDelete.path);
+      showToast('Image deleted', 'success');
+
+      // Remove from slideshow
+      const newImages = slideshowImages.filter((_, i) => i !== slideshowIndex);
+
+      if (newImages.length === 0) {
+        exitSlideshow();
+        return;
+      }
+
+      // Adjust index if we were at the end
+      const newIndex = slideshowIndex >= newImages.length ? newImages.length - 1 : slideshowIndex;
+      setSlideshowImages(newImages);
+      setSlideshowIndex(newIndex);
+      setSlideshowProgress(0);
+
+      // Update history to remove references to deleted image
+      setSlideshowHistory([newIndex]);
+    } catch (err) {
+      console.error('Failed to delete image:', err);
+      showToast('Failed to delete image', 'error');
+    }
+  }, [slideshowImages, slideshowIndex]);
+
+  const nextSlideshowImage = useCallback(() => {
+    if (slideshowImages.length === 0) return;
+    const nextIndex = (slideshowIndex + 1) % slideshowImages.length;
+    setSlideshowIndex(nextIndex);
+    setSlideshowHistory(prev => [...prev, nextIndex]);
+    setSlideshowProgress(0);
+  }, [slideshowIndex, slideshowImages.length]);
+
+  const prevSlideshowImage = useCallback(() => {
+    if (slideshowHistory.length <= 1) return;
+    const newHistory = [...slideshowHistory];
+    newHistory.pop();
+    const prevIndex = newHistory[newHistory.length - 1];
+    setSlideshowHistory(newHistory);
+    setSlideshowIndex(prevIndex);
+    setSlideshowProgress(0);
+  }, [slideshowHistory]);
+
+  const toggleSlideshowPause = useCallback(() => {
+    setSlideshowPaused(prev => !prev);
+  }, []);
+
+  // Auto-advance timer for slideshow
+  useEffect(() => {
+    if (!slideshowMode || slideshowPaused || slideshowImages.length === 0) {
+      if (slideshowTimerRef.current) {
+        clearTimeout(slideshowTimerRef.current);
+        slideshowTimerRef.current = null;
+      }
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+      return;
+    }
+
+    // Progress bar update
+    const progressStep = 100 / (slideshowDelay * 10); // Update every 100ms
+    progressIntervalRef.current = setInterval(() => {
+      setSlideshowProgress(prev => Math.min(prev + progressStep, 100));
+    }, 100);
+
+    // Auto-advance timer
+    slideshowTimerRef.current = setTimeout(() => {
+      nextSlideshowImage();
+    }, slideshowDelay * 1000);
+
+    return () => {
+      if (slideshowTimerRef.current) {
+        clearTimeout(slideshowTimerRef.current);
+      }
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+    };
+  }, [slideshowMode, slideshowPaused, slideshowIndex, slideshowDelay, slideshowImages.length, nextSlideshowImage]);
+
+  // Keyboard handler for slideshow
+  useEffect(() => {
+    if (!slideshowMode) return;
+
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') {
+        exitSlideshow();
+      } else if (e.key === 'ArrowRight') {
+        nextSlideshowImage();
+      } else if (e.key === 'ArrowLeft') {
+        prevSlideshowImage();
+      } else if (e.key === ' ') {
+        e.preventDefault();
+        toggleSlideshowPause();
+      } else if (e.key === 'Delete') {
+        e.preventDefault();
+        deleteSlideshowImage();
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [slideshowMode, nextSlideshowImage, prevSlideshowImage, toggleSlideshowPause, deleteSlideshowImage]);
+
+  const currentSlideshowImage = slideshowImages[slideshowIndex];
+
   return (
     <div>
       {/* Sticky header section - negative margin pulls into parent padding, padding-top compensates */}
@@ -290,6 +510,16 @@ export default function ImageRepo() {
             >
               <span style={{ fontSize: '18px' }}>☰</span> List
             </button>
+            <div style={{ borderLeft: '1px solid #ddd', height: '24px', margin: '0 4px' }} />
+            <Button
+              variant="contained"
+              size="small"
+              onClick={() => startSlideshow(isRootLevel)}
+              disabled={isRootLevel ? loadingSlideshow : (images.length === 0 || loadingSlideshow)}
+              title={isRootLevel ? "Slideshow of all images" : "Slideshow of current folder"}
+            >
+              {loadingSlideshow ? <CircularProgress size={16} color="inherit" /> : 'Slideshow'}
+            </Button>
           </div>
         </div>
 
@@ -379,7 +609,9 @@ export default function ImageRepo() {
 
       {/* Loading */}
       {loading && (
-        <div className="alert info">Loading...</div>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+          <CircularProgress />
+        </div>
       )}
 
       {/* Error */}
@@ -533,6 +765,38 @@ export default function ImageRepo() {
             setPreUploadedDimensions(null);
           }}
         />
+      )}
+
+      {/* Fullscreen Slideshow Mode */}
+      {slideshowMode && currentSlideshowImage && (
+        <div
+          className="slideshow-overlay"
+          onClick={toggleSlideshowPause}
+          onMouseMove={handleSlideshowMouseMove}
+        >
+          <img
+            key={currentSlideshowImage.path}
+            src={API.getRepoImage(currentSlideshowImage.path)}
+            alt={currentSlideshowImage.name}
+            className="slideshow-image"
+          />
+          <div className="slideshow-info" style={{ opacity: slideshowShowControls ? 1 : 0 }}>
+            <span className="slideshow-title">{currentSlideshowImage.name}</span>
+            <span className="slideshow-counter">
+              {slideshowHistory.length} / {slideshowImages.length}
+            </span>
+          </div>
+          <div className="slideshow-hint" style={{ opacity: slideshowShowControls ? 1 : 0 }}>
+            ← → Navigate | Space {slideshowPaused ? 'Play' : 'Pause'} | Del Delete | Esc Exit
+          </div>
+          <div
+            className="slideshow-progress"
+            style={{ width: `${slideshowProgress}%`, opacity: slideshowShowControls ? 1 : 0 }}
+          />
+          {slideshowPaused && (
+            <div className="slideshow-paused-indicator" style={{ opacity: slideshowShowControls ? 0.8 : 0 }}>⏸</div>
+          )}
+        </div>
       )}
     </div>
   );

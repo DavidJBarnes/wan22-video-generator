@@ -218,7 +218,7 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
                 onClick={handleCreateJob}
                 disabled={deleting || creatingJob}
               >
-                {creatingJob ? 'Loading...' : 'New Job from Image'}
+                {creatingJob ? <CircularProgress size={20} color="inherit" /> : 'New Job from Image'}
               </Button>
             </div>
           </div>

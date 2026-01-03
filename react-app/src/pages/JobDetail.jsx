@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Button } from '@mui/material';
+import { Button, CircularProgress } from '@mui/material';
 import API from '../api/client';
 import { formatDate, showToast } from '../utils/helpers';
 import SubmitPromptModal from '../components/SubmitPromptModal';
 import CreateJobModal from '../components/CreateJobModal';
 import EditJobModal from '../components/EditJobModal';
+import LoraEditModal from '../components/LoraEditModal';
 import StatusChip from '../components/StatusChip';
 import './JobDetail.css';
 
@@ -24,6 +25,7 @@ export default function JobDetail() {
   const [logs, setLogs] = useState([]);
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [loraLibrary, setLoraLibrary] = useState([]);
+  const [selectedLoraForEdit, setSelectedLoraForEdit] = useState(null);
   const autoFinalizeTriggeredRef = useRef(false);
 
   useEffect(() => {
@@ -174,7 +176,9 @@ export default function JobDetail() {
     return (
       <div>
         <h1>Job Detail</h1>
-        <p>Loading...</p>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+          <CircularProgress />
+        </div>
       </div>
     );
   }
@@ -227,17 +231,24 @@ export default function JobDetail() {
     return 1;
   }
 
-  // Look up friendly name from LoRA library by filename
-  function getLoraFriendlyName(filename) {
+  // Look up LoRA object from library by filename
+  function getLoraByFilename(filename) {
     if (!filename) return null;
     // Extract just the filename if it's a path
     const baseName = filename.split('/').pop();
     // Find matching LoRA in library (check both high_file and low_file)
-    const match = loraLibrary.find(l =>
+    return loraLibrary.find(l =>
       l.high_file === filename || l.low_file === filename ||
       (l.high_file && l.high_file.split('/').pop() === baseName) ||
       (l.low_file && l.low_file.split('/').pop() === baseName)
     );
+  }
+
+  // Look up friendly name from LoRA library by filename
+  function getLoraFriendlyName(filename) {
+    if (!filename) return null;
+    const baseName = filename.split('/').pop();
+    const match = getLoraByFilename(filename);
     if (match) {
       return match.friendly_name || match.base_name || baseName.replace('.safetensors', '');
     }
@@ -268,7 +279,7 @@ export default function JobDetail() {
     return result;
   }
 
-  // Format LoRAs for display (includes weights and friendly names)
+  // Format LoRAs for display (includes weights, friendly names, and lora objects)
   function formatLorasDisplay(highLora, lowLora) {
     const highLoras = parseLoraArray(highLora);
     const lowLoras = parseLoraArray(lowLora);
@@ -287,12 +298,17 @@ export default function JobDetail() {
       // Use friendly name lookup instead of raw filename
       const h = hFile ? getLoraFriendlyName(hFile) : null;
       const l = lFile ? getLoraFriendlyName(lFile) : null;
+      // Get the LoRA object for opening the edit modal
+      const hLora = hFile ? getLoraByFilename(hFile) : null;
+      const lLora = lFile ? getLoraByFilename(lFile) : null;
       if (h || l) {
         pairs.push({
           high: h,
           highWeight: hWeight,
+          highLora: hLora,
           low: l,
           lowWeight: lWeight,
+          lowLora: lLora,
           index: i + 1
         });
       }
@@ -467,7 +483,7 @@ export default function JobDetail() {
                 <div className="segment-header">
                   <div>
                     <strong>Segment {seg.segment_index + 1}</strong>
-                    {seg.status === 'running' && <span className="spinner"></span>}
+                    {seg.status === 'running' && <CircularProgress size={16} sx={{ ml: 1 }} />}
                     {seg.execution_time && (
                       <span style={{ marginLeft: '8px', color: '#666', fontSize: '12px' }}>
                         ({Math.round(seg.execution_time)}s)
@@ -541,13 +557,27 @@ export default function JobDetail() {
                               <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
                                 <td style={{ padding: '6px 12px', color: '#999' }}>{pair.index}</td>
                                 <td style={{ padding: '6px 12px', color: '#2e7d32' }}>
-                                  {pair.high || '-'}
+                                  {pair.highLora ? (
+                                    <span
+                                      style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                                      onClick={() => setSelectedLoraForEdit(pair.highLora)}
+                                    >
+                                      {pair.high}
+                                    </span>
+                                  ) : (pair.high || '-')}
                                 </td>
                                 <td style={{ padding: '6px 12px', textAlign: 'center', color: '#666' }}>
                                   {pair.high ? pair.highWeight : '-'}
                                 </td>
                                 <td style={{ padding: '6px 12px', color: '#1565c0' }}>
-                                  {pair.low || '-'}
+                                  {pair.lowLora ? (
+                                    <span
+                                      style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                                      onClick={() => setSelectedLoraForEdit(pair.lowLora)}
+                                    >
+                                      {pair.low}
+                                    </span>
+                                  ) : (pair.low || '-')}
                                 </td>
                                 <td style={{ padding: '6px 12px', textAlign: 'center', color: '#666' }}>
                                   {pair.low ? pair.lowWeight : '-'}
@@ -574,7 +604,7 @@ export default function JobDetail() {
                     />
                   ) : seg.status === 'running' ? (
                     <div className="image-placeholder running">
-                      <span className="spinner" style={{ margin: 0 }}></span>
+                      <CircularProgress size={24} />
                     </div>
                   ) : (
                     <div className="image-placeholder pending">
@@ -755,6 +785,17 @@ export default function JobDetail() {
           onClose={() => setShowEditModal(false)}
           onSuccess={() => {
             setShowEditModal(false);
+            loadJobDetail();
+          }}
+        />
+      )}
+
+      {selectedLoraForEdit && (
+        <LoraEditModal
+          lora={selectedLoraForEdit}
+          onClose={() => setSelectedLoraForEdit(null)}
+          onSave={() => {
+            setSelectedLoraForEdit(null);
             loadJobDetail();
           }}
         />

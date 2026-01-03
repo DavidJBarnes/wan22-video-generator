@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Button, Rating } from '@mui/material';
+import { Button, Rating, CircularProgress } from '@mui/material';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import LoraEditModal from '../components/LoraEditModal';
@@ -64,7 +64,9 @@ export default function LoraLibrary() {
     return (
       <div>
         <h1>LoRA Library</h1>
-        <p>Loading...</p>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+          <CircularProgress />
+        </div>
       </div>
     );
   }
