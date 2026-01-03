@@ -19,13 +19,13 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
   const [notes, setNotes] = useState(lora.notes || '');
   const [defaultHighWeight, setDefaultHighWeight] = useState(lora.default_high_weight ?? 1.0);
   const [defaultLowWeight, setDefaultLowWeight] = useState(lora.default_low_weight ?? 1.0);
-  const [hasPreview, setHasPreview] = useState(!!lora.preview_image_url);
   const [previewCacheBust, setPreviewCacheBust] = useState(Date.now());
+  const [previewError, setPreviewError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [fetchingPreview, setFetchingPreview] = useState(false);
 
-  // Get the preview URL from the cached endpoint
-  const previewUrl = hasPreview ? `${API.getLoraPreviewUrl(lora.id)}?t=${previewCacheBust}` : '';
+  // Always try to load the preview URL - let onError handle missing previews
+  const previewUrl = `${API.getLoraPreviewUrl(lora.id)}?t=${previewCacheBust}`;
 
   async function handleFetchPreview() {
     if (!url || !url.includes('civitai.com')) {
@@ -36,7 +36,7 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
     setFetchingPreview(true);
     try {
       await API.refreshLoraPreview(lora.id);
-      setHasPreview(true);
+      setPreviewError(false);
       setPreviewCacheBust(Date.now()); // Force refresh the cached image
       showToast('Preview fetched and cached', 'success');
     } catch (error) {
@@ -178,40 +178,31 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
                 overflow: 'hidden',
                 flexShrink: 0
               }}>
-                {previewUrl ? (
-                  previewUrl.match(/\.(mp4|webm|mov)$/i) ? (
-                    <video
-                      src={previewUrl}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      muted
-                      loop
-                      autoPlay
-                      playsInline
-                      onError={(e) => e.target.style.display = 'none'}
-                    />
-                  ) : (
-                    <img
-                      src={previewUrl}
-                      alt="Preview"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      onError={(e) => e.target.style.display = 'none'}
-                    />
-                  )
-                ) : (
-                  <div style={{
+                <img
+                  src={previewUrl}
+                  alt="Preview"
+                  style={{
                     width: '100%',
                     height: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#999',
-                    fontSize: '11px',
-                    textAlign: 'center',
-                    padding: '8px'
-                  }}>
-                    No preview
-                  </div>
-                )}
+                    objectFit: 'cover',
+                    display: previewError ? 'none' : 'block'
+                  }}
+                  onLoad={() => setPreviewError(false)}
+                  onError={() => setPreviewError(true)}
+                />
+                <div style={{
+                  width: '100%',
+                  height: '100%',
+                  display: previewError ? 'flex' : 'none',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#999',
+                  fontSize: '11px',
+                  textAlign: 'center',
+                  padding: '8px'
+                }}>
+                  No preview
+                </div>
               </div>
               <div style={{ flex: 1 }}>
                 <Button

@@ -1374,6 +1374,60 @@ async def browse_image_repo(path: str = ""):
     }
 
 
+@router.get("/image-repo/all-images")
+async def get_all_images(path: str = ""):
+    """Get all images recursively from a path.
+
+    Used for the random image slideshow feature.
+    If path is empty, returns all images from the entire repository.
+    """
+    repo_root = get_setting("image_repo_path", "")
+
+    if not repo_root:
+        raise HTTPException(status_code=400, detail="Image repository path not configured")
+
+    repo_root_path = Path(repo_root)
+    if not repo_root_path.exists() or not repo_root_path.is_dir():
+        raise HTTPException(status_code=400, detail="Image repository path is invalid")
+
+    # Determine starting path
+    if path:
+        start_path = repo_root_path / path
+        start_path = start_path.resolve()
+        if not str(start_path).startswith(str(repo_root_path.resolve())):
+            raise HTTPException(status_code=403, detail="Access denied: Path is outside repository")
+    else:
+        start_path = repo_root_path
+
+    if not start_path.exists() or not start_path.is_dir():
+        raise HTTPException(status_code=404, detail="Path not found")
+
+    # Recursively collect all images
+    images = []
+    all_ratings = get_all_image_ratings()
+
+    def collect_images(dir_path):
+        try:
+            for item in dir_path.iterdir():
+                if item.name.startswith('.'):
+                    continue
+                if item.is_dir():
+                    collect_images(item)
+                elif item.is_file() and item.suffix.lower() in ['.jpg', '.jpeg', '.png']:
+                    rel_path = str(item.relative_to(repo_root_path)).replace("\\", "/")
+                    images.append({
+                        "name": item.name,
+                        "path": rel_path,
+                        "rating": all_ratings.get(rel_path, None)
+                    })
+        except (PermissionError, OSError):
+            pass
+
+    collect_images(start_path)
+
+    return {"images": images, "count": len(images)}
+
+
 @router.get("/image-repo/image")
 async def get_image_from_repo(path: str):
     """Serve an image file from the repository.

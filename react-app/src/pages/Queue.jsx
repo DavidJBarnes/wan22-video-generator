@@ -16,7 +16,8 @@ import {
   TableHead,
   TableRow,
   TablePagination,
-  Paper
+  Paper,
+  CircularProgress
 } from '@mui/material';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
@@ -179,7 +180,9 @@ export default function Queue() {
     return (
       <div>
         <h1>Job Queue</h1>
-        <p>Loading...</p>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+          <CircularProgress />
+        </div>
       </div>
     );
   }

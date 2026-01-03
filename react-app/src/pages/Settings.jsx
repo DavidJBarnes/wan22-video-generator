@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Button, Chip, TextField, IconButton } from '@mui/material';
+import { Button, Chip, TextField, IconButton, CircularProgress } from '@mui/material';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import './Settings.css';
@@ -27,6 +27,7 @@ export default function Settings() {
   const [newPrefix, setNewPrefix] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [promptIdentity, setPromptIdentity] = useState('');
+  const [slideshowDelay, setSlideshowDelay] = useState(5);
 
   useEffect(() => {
     loadSettings();
@@ -59,6 +60,7 @@ export default function Settings() {
       } catch { setNameDescriptions([]); }
 
       setPromptIdentity(s.prompt_identity || '');
+      setSlideshowDelay(parseInt(s.slideshow_delay) || 5);
 
       setLoading(false);
     } catch (error) {
@@ -131,7 +133,8 @@ export default function Settings() {
         segment_execution_timeout: String(segmentExecutionTimeout * 60), // Convert minutes to seconds
         job_name_prefixes: JSON.stringify(namePrefixes),
         job_name_descriptions: JSON.stringify(nameDescriptions),
-        prompt_identity: promptIdentity
+        prompt_identity: promptIdentity,
+        slideshow_delay: String(slideshowDelay)
       };
 
       await API.updateSettings(settingsPayload);
@@ -179,7 +182,9 @@ export default function Settings() {
     return (
       <div>
         <h1>Settings</h1>
-        <p>Loading...</p>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+          <CircularProgress />
+        </div>
       </div>
     );
   }
@@ -245,6 +250,20 @@ export default function Settings() {
             />
             <small style={{ color: '#666', fontSize: '12px' }}>
               Absolute path to a local directory containing your images
+            </small>
+          </div>
+          <div className="form-group">
+            <label>Slideshow Delay (seconds)</label>
+            <input
+              type="number"
+              value={slideshowDelay}
+              onChange={(e) => setSlideshowDelay(Math.max(1, parseInt(e.target.value) || 1))}
+              min="1"
+              max="60"
+              style={{ width: '100px' }}
+            />
+            <small style={{ color: '#666', fontSize: '12px' }}>
+              Time between images in the random slideshow viewer (1-60 seconds)
             </small>
           </div>
         </div>
@@ -348,7 +367,9 @@ export default function Settings() {
             LoRAs you've deleted are hidden from future refreshes. Restore them here if needed.
           </p>
           {loadingHidden ? (
-            <p>Loading...</p>
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
+              <CircularProgress size={24} />
+            </div>
           ) : hiddenLoras.length === 0 ? (
             <p style={{ color: '#999', fontStyle: 'italic' }}>No hidden LoRAs</p>
           ) : (

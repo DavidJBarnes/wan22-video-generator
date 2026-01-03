@@ -12,7 +12,8 @@ import {
   Modal,
   TextField,
   Pagination,
-  Button
+  Button,
+  CircularProgress
 } from '@mui/material';
 import API from '../api/client';
 import { formatDate } from '../utils/helpers';
@@ -191,7 +192,9 @@ export default function Videos() {
     return (
       <div className="videos-page">
         <h1>Videos</h1>
-        <p>Loading...</p>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+          <CircularProgress />
+        </div>
       </div>
     );
   }

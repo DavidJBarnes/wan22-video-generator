@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Button, TextField, FormControlLabel, Checkbox, FormHelperText } from '@mui/material';
+import { Button, TextField, FormControlLabel, Checkbox, FormHelperText, CircularProgress } from '@mui/material';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import LoraAutocomplete from './LoraAutocomplete';
@@ -180,6 +180,22 @@ export default function SubmitPromptModal({
               fullWidth
               variant="outlined"
             />
+            <button
+              type="button"
+              onClick={() => setPrompt('')}
+              disabled={!prompt.trim()}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: prompt.trim() ? '#1976d2' : '#ccc',
+                cursor: prompt.trim() ? 'pointer' : 'default',
+                fontSize: '12px',
+                padding: '4px 0',
+                textDecoration: 'underline'
+              }}
+            >
+              Clear prompt
+            </button>
           </div>
 
           {/* LoRA 1 */}
@@ -192,7 +208,11 @@ export default function SubmitPromptModal({
                   value={selectedLoras[0].lora}
                   onChange={(lora) => {
                     setSelectedLoras(prev => [
-                      { ...prev[0], lora },
+                      {
+                        lora,
+                        highWeight: lora?.default_high_weight ?? 1,
+                        lowWeight: lora?.default_low_weight ?? 1
+                      },
                       prev[1]
                     ]);
                     populatePromptFromLora(lora);
@@ -255,7 +275,11 @@ export default function SubmitPromptModal({
                   value={selectedLoras[1].lora}
                   onChange={(lora) => setSelectedLoras(prev => [
                     prev[0],
-                    { ...prev[1], lora }
+                    {
+                      lora,
+                      highWeight: lora?.default_high_weight ?? 1,
+                      lowWeight: lora?.default_low_weight ?? 1
+                    }
                   ])}
                   loras={loras}
                 />
@@ -335,7 +359,7 @@ export default function SubmitPromptModal({
               variant="contained"
               disabled={submitting}
             >
-              {submitting ? 'Submitting...' : 'Submit Prompt'}
+              {submitting ? <CircularProgress size={20} color="inherit" /> : 'Submit Prompt'}
             </Button>
           </div>
         </form>

@@ -14,7 +14,8 @@ import {
   TableHead,
   TableRow,
   TablePagination,
-  Paper
+  Paper,
+  CircularProgress
 } from '@mui/material';
 import API from '../api/client';
 import { formatDate } from '../utils/helpers';
@@ -161,7 +162,9 @@ export default function Dashboard() {
     return (
       <div>
         <h1>Dashboard</h1>
-        <p>Loading...</p>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+          <CircularProgress />
+        </div>
       </div>
     );
   }
