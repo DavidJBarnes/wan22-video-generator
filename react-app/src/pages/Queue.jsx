@@ -22,7 +22,7 @@ import {
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import API from '../api/client';
-import { formatDate, showToast } from '../utils/helpers';
+import { formatDate, showToast, getFaceswapName } from '../utils/helpers';
 import CreateJobModal from '../components/CreateJobModal';
 import StatusChip from '../components/StatusChip';
 import './Queue.css';
@@ -230,6 +230,7 @@ export default function Queue() {
               <TableCell style={{fontWeight:'bold', width: '60px'}}>#</TableCell>
               <TableCell style={{fontWeight:'bold'}}></TableCell>
               <TableCell style={{fontWeight:'bold'}}>Job Name</TableCell>
+              <TableCell style={{fontWeight:'bold'}}>Faceswap</TableCell>
               <TableCell style={{fontWeight:'bold'}}>Created</TableCell>
               <TableCell style={{fontWeight:'bold'}}>Status</TableCell>
               <TableCell style={{fontWeight:'bold'}}>Segments</TableCell>
@@ -238,7 +239,7 @@ export default function Queue() {
           <TableBody>
             {jobs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ color: '#999' }}>
+                <TableCell colSpan={7} align="center" sx={{ color: '#999' }}>
                   No jobs match the filter
                 </TableCell>
               </TableRow>
@@ -292,6 +293,9 @@ export default function Queue() {
                       </TableCell>
                       <TableCell>
                         {job.name}
+                      </TableCell>
+                      <TableCell sx={{ color: getFaceswapName(job) ? 'inherit' : '#999' }}>
+                        {getFaceswapName(job) || 'N/A'}
                       </TableCell>
                       <TableCell>{formatDate(job.created_at)}</TableCell>
                       <TableCell>
