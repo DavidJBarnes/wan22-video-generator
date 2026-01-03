@@ -1138,6 +1138,7 @@ def _normalize_base_name(base: str) -> str:
     base = re.sub(r'[_-]e\d+', '', base)  # _e320, -e8
     base = re.sub(r'[_-]\d{5,}', '', base)  # _000005, -000030 (5+ digits)
     base = re.sub(r'[_-]\d+epoc', '', base)  # _100epoc, -154epoc
+    base = re.sub(r'\d+$', '', base)  # Trailing digits (70, 80 after {TYPE} removal)
     # Normalize case for grouping (lowercase the whole thing)
     base = base.lower()
     # Strip leading/trailing separators and spaces
