@@ -56,7 +56,6 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
 
     try {
       await API.deleteRepoImage(image.path);
-      showToast('Image deleted successfully', 'success');
       onDelete(); // Parent handles navigation to next image
     } catch (error) {
       console.error('Failed to delete image:', error);

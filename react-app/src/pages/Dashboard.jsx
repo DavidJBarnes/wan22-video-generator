@@ -30,7 +30,15 @@ export default function Dashboard() {
   const [allJobs, setAllJobs] = useState([]);
   const [filteredJobs, setFilteredJobs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState(['running', 'pending','awaiting_prompt']);
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const saved = localStorage.getItem('dashboardStatusFilter');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch { /* fall through */ }
+    }
+    return ['running', 'pending', 'awaiting_prompt'];
+  });
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
@@ -112,6 +120,7 @@ export default function Dashboard() {
   function handleStatusFilterChange(event) {
     const value = event.target.value;
     setStatusFilter(value);
+    localStorage.setItem('dashboardStatusFilter', JSON.stringify(value));
     setPage(0);
   }
 
@@ -221,6 +230,7 @@ export default function Dashboard() {
         <Table>
           <TableHead>
             <TableRow>
+              <TableCell style={{fontWeight:'bold'}}></TableCell>
               <TableCell style={{fontWeight:'bold'}}>Job Name</TableCell>
               <TableCell style={{fontWeight:'bold'}}>Status</TableCell>
               <TableCell style={{fontWeight:'bold'}}>Segments</TableCell>
@@ -230,7 +240,7 @@ export default function Dashboard() {
           <TableBody>
             {filteredJobs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} align="center" sx={{ color: '#999' }}>
+                <TableCell colSpan={5} align="center" sx={{ color: '#999' }}>
                   No jobs match the filter
                 </TableCell>
               </TableRow>
@@ -244,6 +254,14 @@ export default function Dashboard() {
                     sx={{ cursor: 'pointer' }}
                     onClick={() => navigate(`/job/${job.id}`)}
                   >
+                    <TableCell>
+                      <img
+                        className="thumbnail"
+                        src={API.getJobThumbnail(job.id)}
+                        onError={(e) => e.target.style.display = 'none'}
+                        alt=""
+                      />
+                    </TableCell>
                     <TableCell>{job.name}</TableCell>
                     <TableCell>
                       <StatusChip status={job.status} />

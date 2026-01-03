@@ -1138,6 +1138,7 @@ def _normalize_base_name(base: str) -> str:
     base = re.sub(r'[_-]e\d+', '', base)  # _e320, -e8
     base = re.sub(r'[_-]\d{5,}', '', base)  # _000005, -000030 (5+ digits)
     base = re.sub(r'[_-]\d+epoc', '', base)  # _100epoc, -154epoc
+    base = re.sub(r'\d+$', '', base)  # Trailing digits (70, 80 after {TYPE} removal)
     # Normalize case for grouping (lowercase the whole thing)
     base = base.lower()
     # Strip leading/trailing separators and spaces
@@ -1167,6 +1168,7 @@ def _get_lora_base_and_type(filename: str) -> tuple:
         r'[_-]HIGH[_.-]',
         r'[_-]HIGH\.',
         r'[_-]high[_.]',
+        r'[_-][Hh]igh-',  # _High- or -High- (underscore/dash before, dash after)
         r'-H-',
         r'-H\.',  # -H at end of name (before extension)
         r'_H\.',
@@ -1184,6 +1186,7 @@ def _get_lora_base_and_type(filename: str) -> tuple:
         r'[_-]LOW[_.-]',
         r'[_-]LOW\.',
         r'[_-]low[_.]',
+        r'[_-][Ll]ow-',  # _Low- or -Low- (underscore/dash before, dash after)
         r'-L-',
         r'-L\.',  # -L at end of name (before extension)
         r'_L\.',

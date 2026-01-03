@@ -330,9 +330,21 @@ class QueueManager:
         print(f"[QueueManager] Completed count: {completed_count}")
 
         if completed_count > 0:
-            print(f"[QueueManager] {completed_count} segment(s) completed. Awaiting user decision: continue or finalize")
-            update_job_status(job_id, "awaiting_prompt")
-            self._notify_update(job_id, "awaiting_prompt")
+            # Check if auto_finalize is enabled
+            params = job.get("parameters") or {}
+            if isinstance(params, str):
+                try:
+                    params = json.loads(params)
+                except:
+                    params = {}
+
+            if params.get("auto_finalize"):
+                print(f"[QueueManager] Auto-finalize enabled, finalizing job {job_id}")
+                self._finalize_job(job_id)
+            else:
+                print(f"[QueueManager] {completed_count} segment(s) completed. Awaiting user decision: continue or finalize")
+                update_job_status(job_id, "awaiting_prompt")
+                self._notify_update(job_id, "awaiting_prompt")
         else:
             # No segments completed - something went wrong
             print(f"[QueueManager] ERROR: No segments completed for job {job_id}")
