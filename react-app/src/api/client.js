@@ -307,6 +307,10 @@ class APIClient {
     });
   }
 
+  async getJobsForImage(filename) {
+    return this.request(`/image-repo/jobs?filename=${encodeURIComponent(filename)}`);
+  }
+
   // ============== ComfyUI View Proxy ==============
 
   getComfyUIImage(filename, subfolder = '', type = 'input') {
