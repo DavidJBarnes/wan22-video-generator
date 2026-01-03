@@ -1189,6 +1189,7 @@ def _get_lora_base_and_type(filename: str) -> tuple:
         r'[_-]high[_.]',
         r'[_-][Hh]igh-',  # _High- or -High- (underscore/dash before, dash after)
         r'[a-z]High[_.-]',  # TurnsHigh- (no separator before, separator after)
+        r' high ',  # space before and after (wlkng high 250909a)
         r'-H-',
         r'-H\.',  # -H at end of name (before extension)
         r'_H\.',
@@ -1208,6 +1209,7 @@ def _get_lora_base_and_type(filename: str) -> tuple:
         r'[_-]low[_.]',
         r'[_-][Ll]ow-',  # _Low- or -Low- (underscore/dash before, dash after)
         r'[a-z]Low[_.-]',  # TurnsLow- (no separator before, separator after)
+        r' low ',  # space before and after (wlkng low 250909a)
         r'-L-',
         r'-L\.',  # -L at end of name (before extension)
         r'_L\.',
