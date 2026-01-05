@@ -466,25 +466,59 @@ class ComfyUIClient:
         status = self.get_prompt_status(prompt_id)
         if status.get("status") != "completed":
             return None
-        
+
         data = status.get("data") or {}
-        
-        # ComfyUI stores execution time in status.execution_time or status.execution_cached
-        # The structure varies by version, so we check multiple locations
+
+        # ComfyUI stores execution info in different locations depending on version
         status_info = data.get("status", {})
-        
-        # Try to get execution time from status
+
+        # Try to get execution time from status.messages
+        # Messages often contain execution-started and execution-cached/execution-success times
+        messages = status_info.get("messages", [])
+        execution_start = None
+        execution_end = None
+
+        for msg in messages:
+            if isinstance(msg, list) and len(msg) >= 2:
+                msg_type = msg[0]
+                msg_data = msg[1] if isinstance(msg[1], dict) else {}
+
+                if msg_type == "execution_start":
+                    # Some versions include timestamp
+                    execution_start = msg_data.get("timestamp")
+                elif msg_type in ("execution_success", "execution_cached"):
+                    execution_end = msg_data.get("timestamp")
+
+        # Calculate from timestamps if available
+        if execution_start is not None and execution_end is not None:
+            try:
+                return float(execution_end) - float(execution_start)
+            except (ValueError, TypeError):
+                pass
+
+        # Try direct execution_time field (some ComfyUI versions)
         exec_time = status_info.get("execution_time")
         if exec_time is not None:
-            return float(exec_time)
-        
-        # Alternative: calculate from prompt timestamps if available
+            try:
+                return float(exec_time)
+            except (ValueError, TypeError):
+                pass
+
+        # Try to calculate from prompt timestamps
         prompt_info = data.get("prompt", [])
-        if len(prompt_info) >= 2:
-            # prompt_info[0] is the prompt number, prompt_info[1] is the prompt_id
-            # Some versions include timestamps
-            pass
-        
+        if len(prompt_info) >= 4:
+            # prompt_info structure: [number, prompt_id, outputs, extra_data]
+            # extra_data might contain timestamps
+            extra_data = prompt_info[3] if len(prompt_info) > 3 else {}
+            if isinstance(extra_data, dict):
+                start_time = extra_data.get("start_time")
+                end_time = extra_data.get("end_time")
+                if start_time and end_time:
+                    try:
+                        return float(end_time) - float(start_time)
+                    except (ValueError, TypeError):
+                        pass
+
         return None
 
     def get_output_images(self, prompt_id: str) -> List[str]:
