@@ -406,8 +406,8 @@ export default function JobDetail() {
             <div className="value">{segmentDuration}s per segment</div>
           </div>
           <div className="detail-meta-item">
-            <label>FPS</label>
-            <div className="value">{fps} fps</div>
+            <label>FPS / RIFE</label>
+            <div className="value">{fps} fps / {params.frame_interpolation === '2x' ? '2x' : 'None'}</div>
           </div>
           <div className="detail-meta-item">
             <label>Seed</label>
