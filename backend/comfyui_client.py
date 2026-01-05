@@ -489,10 +489,11 @@ class ComfyUIClient:
                 elif msg_type in ("execution_success", "execution_cached"):
                     execution_end = msg_data.get("timestamp")
 
-        # Calculate from timestamps if available
+        # Calculate from timestamps if available (timestamps are in milliseconds)
         if execution_start is not None and execution_end is not None:
             try:
-                return float(execution_end) - float(execution_start)
+                # Convert from milliseconds to seconds
+                return (float(execution_end) - float(execution_start)) / 1000.0
             except (ValueError, TypeError):
                 pass
 
