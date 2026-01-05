@@ -27,6 +27,7 @@ export default function JobDetail() {
   const [loraLibrary, setLoraLibrary] = useState([]);
   const [selectedLoraForEdit, setSelectedLoraForEdit] = useState(null);
   const [segmentVideoIndex, setSegmentVideoIndex] = useState(null);
+  const [segmentVideoKey, setSegmentVideoKey] = useState(null);
   const autoFinalizeTriggeredRef = useRef(false);
 
   useEffect(() => {
@@ -631,7 +632,10 @@ export default function JobDetail() {
                       />
                       <button
                         type="button"
-                        onClick={() => setSegmentVideoIndex(seg.segment_index)}
+                        onClick={() => {
+                          setSegmentVideoIndex(seg.segment_index);
+                          setSegmentVideoKey(Date.now());
+                        }}
                         style={{
                           background: 'none',
                           border: 'none',
@@ -879,7 +883,7 @@ export default function JobDetail() {
             style={{ maxWidth: '800px' }}
           >
             <video
-              src={`${API.getSegmentVideo(id, segmentVideoIndex)}?t=${Date.now()}`}
+              src={`${API.getSegmentVideo(id, segmentVideoIndex)}?t=${segmentVideoKey}`}
               controls
               autoPlay
               playsInline
