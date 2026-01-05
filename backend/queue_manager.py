@@ -565,11 +565,14 @@ class QueueManager:
         prompt_id = result
         add_job_log(job_id, "INFO", f"Segment {segment_index} queued successfully", segment_index=segment_index, details=f"prompt_id={prompt_id}")
         update_segment_status(job_id, segment_index, "running", comfyui_prompt_id=prompt_id)
-        
-        # Wait for completion
-        return self._wait_for_segment_completion(job_id, segment_index, prompt_id, client)
 
-    def _wait_for_segment_completion(self, job_id: int, segment_index: int, prompt_id: str, client: ComfyUIClient) -> bool:
+        # Record start time for execution tracking
+        execution_start_time = time.time()
+
+        # Wait for completion
+        return self._wait_for_segment_completion(job_id, segment_index, prompt_id, client, execution_start_time)
+
+    def _wait_for_segment_completion(self, job_id: int, segment_index: int, prompt_id: str, client: ComfyUIClient, execution_start_time: float = None) -> bool:
         """Wait for a segment to complete and process its outputs."""
         comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
         max_wait = int(get_setting("segment_execution_timeout", "1200"))  # configurable, default 20 min
@@ -648,8 +651,13 @@ class QueueManager:
                                 # Build the URL for the uploaded frame
                                 end_frame_url = f"{comfyui_url}/view?filename={uploaded_filename}&subfolder=&type=input"
 
-                                # Get execution time from ComfyUI history
-                                exec_time = client.get_execution_time(prompt_id)
+                                # Calculate execution time from our own tracking (more reliable)
+                                exec_time = None
+                                if execution_start_time:
+                                    exec_time = time.time() - execution_start_time
+                                else:
+                                    # Fallback to ComfyUI history if start time not available
+                                    exec_time = client.get_execution_time(prompt_id)
 
                                 # Update segment with video path, end frame URL, and execution time
                                 update_segment_status(
