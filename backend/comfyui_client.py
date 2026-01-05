@@ -246,6 +246,7 @@ class ComfyUIClient:
         faceswap_image: str = "",
         faceswap_faces_order: str = "left-right",
         faceswap_faces_index: str = "0",
+        frame_interpolation: str = "none",
     ) -> Dict[str, Any]:
         """Build a Wan2.2 i2v workflow using the pre-converted API template.
 
@@ -260,6 +261,7 @@ class ComfyUIClient:
             faceswap_image: Filename of the face image to swap in
             faceswap_faces_order: Order to process faces (left-right, right-left, etc.)
             faceswap_faces_index: Which face indices to process (e.g., "0", "0,1")
+            frame_interpolation: Frame interpolation mode - "none" or "2x" (RIFE)
         """
         return _build_wan_i2v_workflow(
             prompt=prompt,
@@ -278,6 +280,7 @@ class ComfyUIClient:
             faceswap_image=faceswap_image,
             faceswap_faces_order=faceswap_faces_order,
             faceswap_faces_index=faceswap_faces_index,
+            frame_interpolation=frame_interpolation,
         )
 
     def build_workflow(

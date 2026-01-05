@@ -502,6 +502,9 @@ class QueueManager:
         faceswap_faces_order = params.get("faceswap_faces_order", "left-right")
         faceswap_faces_index = params.get("faceswap_faces_index", "0")
 
+        # Get frame interpolation setting
+        frame_interpolation = params.get("frame_interpolation", "none")
+
         # Use the job's seed for all segments (fixed seed per job)
         job_seed = job.get("seed")
         if job_seed is not None:
@@ -524,6 +527,7 @@ class QueueManager:
             faceswap_image=faceswap_image,
             faceswap_faces_order=faceswap_faces_order,
             faceswap_faces_index=faceswap_faces_index,
+            frame_interpolation=frame_interpolation,
         )
 
         # Queue the prompt

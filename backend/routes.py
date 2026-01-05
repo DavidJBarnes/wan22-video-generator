@@ -14,6 +14,8 @@ import tempfile
 import httpx
 from pathlib import Path
 
+from video_utils import get_segment_video_path, optimize_video_for_web
+
 from database import (
     get_all_jobs,
     get_job,
@@ -656,6 +658,64 @@ async def get_job_video(job_id: int):
             "Pragma": "no-cache",
             "Expires": "0",
             "ETag": f'"{file_mtime}"'
+        }
+    )
+
+
+@router.get("/jobs/{job_id}/segments/{segment_index}/video")
+async def get_segment_video(job_id: int, segment_index: int):
+    """Get the video for a specific segment.
+
+    Returns the segment video file directly for playback in the browser.
+    Converts MP4 to WebM for universal browser compatibility (Firefox/Linux).
+    """
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    video_path = get_segment_video_path(job_id, segment_index)
+
+    if not video_path or not os.path.exists(video_path):
+        raise HTTPException(status_code=404, detail="Segment video not found")
+
+    # Convert MP4 to WebM for universal browser support (Firefox lacks H.264)
+    if video_path.endswith('.mp4'):
+        webm_path = video_path.replace('.mp4', '.webm')
+        if not os.path.exists(webm_path):
+            print(f"[Routes] Converting segment to WebM: {video_path}")
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", video_path,
+                "-c:v", "libvpx-vp9",
+                "-crf", "30",
+                "-b:v", "0",
+                "-pix_fmt", "yuv420p",
+                "-deadline", "realtime",
+                "-cpu-used", "8",
+                "-row-mt", "1",
+                webm_path
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"[Routes] WebM conversion failed: {result.stderr}")
+            else:
+                print(f"[Routes] Created WebM: {webm_path}")
+
+        if os.path.exists(webm_path):
+            video_path = webm_path
+
+    media_type = "video/webm" if video_path.endswith('.webm') else "video/mp4"
+    file_mtime = os.path.getmtime(video_path)
+
+    return FileResponse(
+        video_path,
+        media_type=media_type,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "ETag": f'"{file_mtime}"',
+            "Content-Disposition": "inline"
         }
     )
 

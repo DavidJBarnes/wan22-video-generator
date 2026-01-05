@@ -17,8 +17,43 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 print(f"[VideoUtils] Output directory: {OUTPUT_DIR}")
 
 
+def optimize_video_for_web(video_path: str) -> bool:
+    """Optimize an MP4 video for web streaming by moving moov atom to start.
+
+    This uses ffmpeg's faststart flag to enable progressive download/streaming.
+    """
+    try:
+        temp_path = video_path + ".temp.mp4"
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i", video_path,
+            "-c", "copy",  # No re-encoding, just remux
+            "-movflags", "+faststart",
+            temp_path
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+
+        if result.returncode == 0 and os.path.exists(temp_path):
+            # Replace original with optimized version
+            os.replace(temp_path, video_path)
+            print(f"[VideoUtils] Optimized video for web: {video_path}")
+            return True
+        else:
+            print(f"[VideoUtils] ffmpeg optimization error: {result.stderr}")
+            # Clean up temp file if it exists
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            return False
+
+    except Exception as e:
+        print(f"[VideoUtils] Error optimizing video: {e}")
+        return False
+
+
 def download_video_from_comfyui(video_url: str, output_path: str) -> bool:
-    """Download a video from ComfyUI to a local path."""
+    """Download a video from ComfyUI to a local path and optimize for web."""
     try:
         with httpx.Client(timeout=60.0) as client:
             response = client.get(video_url)
@@ -26,6 +61,12 @@ def download_video_from_comfyui(video_url: str, output_path: str) -> bool:
                 with open(output_path, "wb") as f:
                     f.write(response.content)
                 print(f"[VideoUtils] Downloaded video to {output_path}")
+
+                # Optimize for web streaming and create marker file
+                if optimize_video_for_web(output_path):
+                    marker_path = output_path + '.web_optimized'
+                    Path(marker_path).touch()
+
                 return True
             else:
                 print(f"[VideoUtils] Failed to download video: {response.status_code}")

@@ -201,6 +201,10 @@ class APIClient {
     return `${API_BASE_URL}/jobs/${jobId}/video`;
   }
 
+  getSegmentVideo(jobId, segmentIndex) {
+    return `${API_BASE_URL}/jobs/${jobId}/segments/${segmentIndex}/video`;
+  }
+
   async submitSegmentPrompt(jobId, segmentIndex, prompt, loras = [], autoFinalize = false) {
     const formData = new FormData();
     formData.append('prompt', prompt);

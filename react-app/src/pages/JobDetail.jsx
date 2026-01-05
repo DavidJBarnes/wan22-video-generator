@@ -26,6 +26,7 @@ export default function JobDetail() {
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [loraLibrary, setLoraLibrary] = useState([]);
   const [selectedLoraForEdit, setSelectedLoraForEdit] = useState(null);
+  const [segmentVideoIndex, setSegmentVideoIndex] = useState(null);
   const autoFinalizeTriggeredRef = useRef(false);
 
   useEffect(() => {
@@ -595,13 +596,32 @@ export default function JobDetail() {
                 <div className="segment-image-container">
                   <div className="segment-image-label">End Image</div>
                   {seg.status === 'completed' && seg.end_frame_url ? (
-                    <img
-                      src={seg.end_frame_url}
-                      alt="End frame"
-                      className="segment-image end clickable"
-                      onClick={() => setLightboxImage(seg.end_frame_url)}
-                      onError={(e) => e.target.style.display = 'none'}
-                    />
+                    <>
+                      <img
+                        src={seg.end_frame_url}
+                        alt="End frame"
+                        className="segment-image end clickable"
+                        onClick={() => setLightboxImage(seg.end_frame_url)}
+                        onError={(e) => e.target.style.display = 'none'}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setSegmentVideoIndex(seg.segment_index)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#1976d2',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          padding: '4px 0',
+                          textDecoration: 'underline',
+                          marginTop: '4px',
+                          display: 'block'
+                        }}
+                      >
+                        View segment video
+                      </button>
+                    </>
                   ) : seg.status === 'running' ? (
                     <div className="image-placeholder running">
                       <CircularProgress size={24} />
@@ -817,6 +837,37 @@ export default function JobDetail() {
             </button>
             <div className="lightbox-info">
               Click outside or press × to close
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Segment Video Modal */}
+      {segmentVideoIndex !== null && (
+        <div
+          className="lightbox-overlay"
+          onClick={() => setSegmentVideoIndex(null)}
+        >
+          <div
+            className="lightbox-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '800px' }}
+          >
+            <video
+              src={`${API.getSegmentVideo(id, segmentVideoIndex)}?t=${Date.now()}`}
+              controls
+              autoPlay
+              playsInline
+              style={{ maxWidth: '100%', maxHeight: '70vh', borderRadius: '4px' }}
+            />
+            <button
+              className="lightbox-close"
+              onClick={() => setSegmentVideoIndex(null)}
+            >
+              ×
+            </button>
+            <div className="lightbox-info">
+              Segment {segmentVideoIndex + 1} • Click outside or press × to close
             </div>
           </div>
         </div>
