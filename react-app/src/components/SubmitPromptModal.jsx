@@ -157,6 +157,7 @@ export default function SubmitPromptModal({
   return (
     <div className="modal-overlay">
       <div className="modal-content">
+        <button type="button" className="modal-close" onClick={onClose}>×</button>
         <h2>Submit Prompt for Segment {segmentIndex}</h2>
 
         {defaultPrompt && (
@@ -346,14 +347,6 @@ export default function SubmitPromptModal({
           </div>
 
           <div className="modal-actions">
-            <Button
-              type="button"
-              variant="outlined"
-              onClick={onClose}
-              disabled={submitting}
-            >
-              Cancel
-            </Button>
             <Button
               type="submit"
               variant="contained"

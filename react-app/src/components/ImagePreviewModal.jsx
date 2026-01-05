@@ -133,37 +133,19 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
   return (
     <div className="modal-overlay">
       <div className="modal-content" style={{ maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto', display: 'flex', gap: '24px' }}>
-        {/* Main Content */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={() => onNavigate(currentIndex - 1)}
-              disabled={!hasPrev || deleting || creatingJob}
-            >
-              ← Prev
-            </Button>
-            <h2 style={{ margin: 0, fontSize: '18px' }}>{image.name}</h2>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={() => onNavigate(currentIndex + 1)}
-              disabled={!hasNext || deleting || creatingJob}
-            >
-              Next →
-            </Button>
-          </div>
+        <button type="button" className="modal-close" onClick={onClose}>×</button>
 
+        {/* Left Side - Image Preview */}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           {/* Image Preview */}
-          <div style={{ marginBottom: '16px', textAlign: 'center' }}>
+          <div style={{ flex: 1, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <img
               ref={imageRef}
               src={API.getRepoImage(image.path)}
               alt={image.name}
               style={{
                 maxWidth: '100%',
-                maxHeight: '50vh',
+                maxHeight: '60vh',
                 objectFit: 'contain',
                 borderRadius: '4px',
                 border: '1px solid #ddd'
@@ -174,102 +156,119 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
             />
           </div>
 
-          {/* Rating */}
-          <Box sx={{ marginBottom: '16px', textAlign: 'center' }}>
-            <Typography component="legend" sx={{ fontSize: '14px', mb: 1, color: '#666' }}>
-              Rating
-            </Typography>
-            <Rating
-              value={rating}
-              onChange={handleRatingChange}
-              size="large"
-            />
-          </Box>
-
-          {/* Path Info */}
-          <div style={{ marginBottom: '16px', padding: '12px', background: '#f5f5f5', borderRadius: '4px' }}>
-            <strong style={{ fontSize: '12px', color: '#666' }}>Path:</strong>
-            <div style={{ marginTop: '4px', fontSize: '13px', fontFamily: 'monospace', wordBreak: 'break-all' }}>
-              {image.path}
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="modal-actions" style={{ justifyContent: 'space-between' }}>
+          {/* Navigation Buttons */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
             <Button
-              variant="contained"
-              color="error"
-              onClick={handleDelete}
-              disabled={deleting || creatingJob}
+              variant="outlined"
+              size="small"
+              onClick={() => onNavigate(currentIndex - 1)}
+              disabled={!hasPrev || deleting || creatingJob}
             >
-              {deleting ? 'Deleting...' : 'Delete Image'}
+              ← Prev
             </Button>
-
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <Button
-                variant="outlined"
-                onClick={onClose}
-                disabled={deleting || creatingJob}
-              >
-                Close
-              </Button>
-              <Button
-                variant="contained"
-                onClick={handleCreateJob}
-                disabled={deleting || creatingJob}
-              >
-                {creatingJob ? <CircularProgress size={20} color="inherit" /> : 'New Job from Image'}
-              </Button>
-            </div>
+            <Typography sx={{ color: '#666', fontSize: '14px', alignSelf: 'center' }}>
+              {currentIndex + 1} / {images.length}
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => onNavigate(currentIndex + 1)}
+              disabled={!hasNext || deleting || creatingJob}
+            >
+              Next →
+            </Button>
           </div>
         </div>
 
-        {/* Side Panel - Job History */}
+        {/* Right Side Panel */}
         <div style={{
-          width: '220px',
+          width: '240px',
           flexShrink: 0,
           borderLeft: '1px solid #e0e0e0',
           paddingLeft: '24px',
           display: 'flex',
           flexDirection: 'column'
         }}>
-          <Typography variant="subtitle2" sx={{ mb: 2, color: '#666', fontWeight: 600 }}>
-            Jobs Using This Image
-          </Typography>
-          {loadingJobs ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-              <CircularProgress size={24} />
-            </Box>
-          ) : relatedJobs.length === 0 ? (
-            <Typography variant="body2" sx={{ color: '#999', fontStyle: 'italic' }}>
-              No jobs found
+          {/* Image Path */}
+          <div style={{ marginBottom: '16px' }}>
+            <Typography variant="body2" sx={{ fontSize: '12px', color: '#666', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+              {image.path}
             </Typography>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto' }}>
-              {relatedJobs.map(job => (
-                <Link
-                  key={job.id}
-                  to={`/job/${job.id}`}
-                  onClick={onClose}
-                  style={{
-                    textDecoration: 'none',
-                    color: '#1976d2',
-                    fontSize: '14px',
-                    padding: '6px 8px',
-                    borderRadius: '4px',
-                    background: '#f5f5f5',
-                    display: 'block',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}
-                  title={job.name}
-                >
-                  {job.name}
-                </Link>
-              ))}
-            </div>
-          )}
+          </div>
+
+          {/* Rating */}
+          <div style={{ marginBottom: '20px' }}>
+            <Typography variant="subtitle2" sx={{ fontSize: '12px', color: '#666', mb: 1 }}>
+              Rating
+            </Typography>
+            <Rating
+              value={rating}
+              onChange={handleRatingChange}
+              size="medium"
+            />
+          </div>
+
+          {/* Jobs Using This Image */}
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', marginBottom: '20px' }}>
+            <Typography variant="subtitle2" sx={{ fontSize: '12px', color: '#666', mb: 1 }}>
+              Jobs Using This Image
+            </Typography>
+            {loadingJobs ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                <CircularProgress size={24} />
+              </Box>
+            ) : relatedJobs.length === 0 ? (
+              <Typography variant="body2" sx={{ color: '#999', fontStyle: 'italic', fontSize: '13px' }}>
+                No jobs found
+              </Typography>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', maxHeight: '150px' }}>
+                {relatedJobs.map(job => (
+                  <Link
+                    key={job.id}
+                    to={`/job/${job.id}`}
+                    onClick={onClose}
+                    style={{
+                      textDecoration: 'none',
+                      color: '#1976d2',
+                      fontSize: '13px',
+                      padding: '6px 8px',
+                      borderRadius: '4px',
+                      background: '#f5f5f5',
+                      display: 'block',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title={job.name}
+                  >
+                    {job.name}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <Button
+              variant="contained"
+              fullWidth
+              onClick={handleCreateJob}
+              disabled={deleting || creatingJob}
+            >
+              {creatingJob ? <CircularProgress size={20} color="inherit" /> : 'New Job'}
+            </Button>
+            <Button
+              variant="outlined"
+              color="error"
+              fullWidth
+              onClick={handleDelete}
+              disabled={deleting || creatingJob}
+            >
+              {deleting ? 'Deleting...' : 'Delete Image'}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
