@@ -204,6 +204,25 @@ export default function JobDetail() {
 
   const lastCompletedSegment = segments.filter(s => s.status === 'completed').pop();
 
+  // Calculate total execution time from all completed segments
+  const totalExecutionTime = segments
+    .filter(s => s.status === 'completed' && s.execution_time)
+    .reduce((sum, s) => sum + s.execution_time, 0);
+
+  // Format time as mm:ss or hh:mm:ss
+  function formatExecutionTime(seconds) {
+    if (!seconds || seconds <= 0) return null;
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.round(seconds % 60);
+    if (hrs > 0) {
+      return `${hrs}h ${mins}m ${secs}s`;
+    } else if (mins > 0) {
+      return `${mins}m ${secs}s`;
+    }
+    return `${secs}s`;
+  }
+
   // Helper to parse LoRA data from segment (could be JSON arrays or single strings)
   function parseLoraArray(value) {
     if (!value) return [];
@@ -372,6 +391,12 @@ export default function JobDetail() {
             <label>Segments</label>
             <div className="value">{completedSegments} segments completed</div>
           </div>
+          {totalExecutionTime > 0 && (
+            <div className="detail-meta-item">
+              <label>Total Run Time</label>
+              <div className="value">{formatExecutionTime(totalExecutionTime)}</div>
+            </div>
+          )}
           <div className="detail-meta-item">
             <label>Dimensions</label>
             <div className="value">{width}x{height}</div>
@@ -487,7 +512,7 @@ export default function JobDetail() {
                     {seg.status === 'running' && <CircularProgress size={16} sx={{ ml: 1 }} />}
                     {seg.execution_time && (
                       <span style={{ marginLeft: '8px', color: '#666', fontSize: '12px' }}>
-                        ({Math.round(seg.execution_time)}s)
+                        ({formatExecutionTime(seg.execution_time)})
                       </span>
                     )}
                   </div>

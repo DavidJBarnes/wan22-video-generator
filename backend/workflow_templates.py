@@ -427,12 +427,12 @@ def build_wan_i2v_workflow(
         workflow["200"] = {
             "class_type": "RIFE VFI",
             "inputs": {
-                "ckpt_name": "rife49.pth",
+                "ckpt_name": "rife47.pth",
                 "clear_cache_after_n_frames": 10,
                 "multiplier": 2,
                 "fast_mode": True,
                 "ensemble": True,
-                "scale_factor": 1.0,
+                "scale_factor": 1,
                 # frames input will be wired below
             },
             "_meta": {"title": "RIFE Frame Interpolation"}
@@ -444,9 +444,32 @@ def build_wan_i2v_workflow(
             workflow["186"]["inputs"]["images"] = ["200", 0]
             print("[Workflow] RIFE wired: ReActor(183) → RIFE(200) → VHS_VideoCombine(186)")
         else:
-            # Without faceswap: 87 (VAEDecode) → 200 (RIFE) → 94 (CreateVideo)
+            # Without faceswap + RIFE: use VHS_VideoCombine instead of CreateVideo+SaveVideo
+            # Remove CreateVideo and SaveVideo nodes
+            del workflow["94"]
+            del workflow["108"]
+
+            # Add VHS_VideoCombine node (node 186)
+            workflow["186"] = {
+                "class_type": "VHS_VideoCombine",
+                "inputs": {
+                    "frame_rate": fps,
+                    "loop_count": 0,
+                    "filename_prefix": safe_prefix,
+                    "format": "video/h264-mp4",
+                    "pix_fmt": "yuv420p",
+                    "crf": 15,
+                    "save_metadata": True,
+                    "trim_to_audio": False,
+                    "pingpong": False,
+                    "save_output": True,
+                    "images": ["200", 0]  # From RIFE output
+                },
+                "_meta": {"title": "Video Combine (RIFE)"}
+            }
+
+            # Wire: VAEDecode(87) → RIFE(200) → VHS_VideoCombine(186)
             workflow["200"]["inputs"]["frames"] = ["87", 0]
-            workflow["94"]["inputs"]["images"] = ["200", 0]
-            print("[Workflow] RIFE wired: VAEDecode(87) → RIFE(200) → CreateVideo(94)")
+            print("[Workflow] RIFE wired: VAEDecode(87) → RIFE(200) → VHS_VideoCombine(186)")
 
     return workflow
