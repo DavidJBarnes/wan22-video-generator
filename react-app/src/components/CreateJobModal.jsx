@@ -45,6 +45,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   const [selectedPrefix, setSelectedPrefix] = useState(null);
   const [selectedDescription, setSelectedDescription] = useState(null);
   const [autoFinalize, setAutoFinalize] = useState(false);
+  const [frameInterpolation, setFrameInterpolation] = useState('none');
 
   useEffect(() => {
     async function initialize() {
@@ -72,6 +73,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
         setHeight(cloneData.height || cloneData.parameters?.height || 640);
         setFps(cloneData.fps || cloneData.parameters?.fps || 16);
         setSegmentDuration(cloneData.segment_duration || cloneData.parameters?.segment_duration || 5);
+        setFrameInterpolation(cloneData.parameters?.frame_interpolation || 'none');
 
         // Set the input image if available - use thumbnail endpoint for proper URL
         if (cloneData.input_image && cloneData.id) {
@@ -323,7 +325,8 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
           faceswap_image: faceswapEnabled ? faceswapImage : null,
           faceswap_faces_order: faceswapEnabled ? faceswapFacesOrder : null,
           faceswap_faces_index: faceswapEnabled ? faceswapFacesIndex : null,
-          auto_finalize: autoFinalize
+          auto_finalize: autoFinalize,
+          frame_interpolation: frameInterpolation
         }
       };
 
@@ -459,6 +462,20 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                   <MenuItem value={16}>16 fps</MenuItem>
                   <MenuItem value={20}>20 fps</MenuItem>
                   <MenuItem value={24}>24 fps</MenuItem>
+                  <MenuItem value={32}>32 fps</MenuItem>
+                </Select>
+              </FormControl>
+            </div>
+            <div className="form-group">
+              <FormControl fullWidth variant="outlined" size="small">
+                <InputLabel>Frame Interpolation</InputLabel>
+                <Select
+                  value={frameInterpolation}
+                  onChange={(e) => setFrameInterpolation(e.target.value)}
+                  label="Frame Interpolation"
+                >
+                  <MenuItem value="none">None</MenuItem>
+                  <MenuItem value="2x">2x (RIFE)</MenuItem>
                 </Select>
               </FormControl>
             </div>
