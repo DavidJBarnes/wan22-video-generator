@@ -214,6 +214,7 @@ def build_wan_i2v_workflow(
     faceswap_image: str = "",
     faceswap_faces_order: str = "left-right",
     faceswap_faces_index: str = "0",
+    frame_interpolation: str = "none",
 ) -> Dict[str, Any]:
     """Build a Wan2.2 i2v workflow by injecting values into the pre-converted template.
 
@@ -235,6 +236,7 @@ def build_wan_i2v_workflow(
         output_prefix: Filename prefix for output video (sanitized job name)
         faceswap_enabled: Whether to enable face swapping via ReActor
         faceswap_image: Filename of the face image to swap in (in ComfyUI input folder)
+        frame_interpolation: Frame interpolation mode - "none" or "2x" (RIFE)
 
     Returns:
         ComfyUI API workflow dict ready to submit
@@ -416,5 +418,58 @@ def build_wan_i2v_workflow(
         # Standard output via SaveVideo (node 108)
         workflow["108"]["inputs"]["filename_prefix"] = safe_prefix
         print(f"[Workflow] Set output prefix: {safe_prefix}")
+
+    # Add RIFE frame interpolation if enabled
+    if frame_interpolation == "2x":
+        print("[Workflow] Adding RIFE 2x frame interpolation")
+
+        # Add RIFE VFI node (node 200)
+        workflow["200"] = {
+            "class_type": "RIFE VFI",
+            "inputs": {
+                "ckpt_name": "rife47.pth",
+                "clear_cache_after_n_frames": 10,
+                "multiplier": 2,
+                "fast_mode": True,
+                "ensemble": True,
+                "scale_factor": 1,
+                # frames input will be wired below
+            },
+            "_meta": {"title": "RIFE Frame Interpolation"}
+        }
+
+        if faceswap_enabled:
+            # With faceswap: 183 (ReActor) → 200 (RIFE) → 186 (VHS_VideoCombine)
+            workflow["200"]["inputs"]["frames"] = ["183", 0]
+            workflow["186"]["inputs"]["images"] = ["200", 0]
+            print("[Workflow] RIFE wired: ReActor(183) → RIFE(200) → VHS_VideoCombine(186)")
+        else:
+            # Without faceswap + RIFE: use VHS_VideoCombine instead of CreateVideo+SaveVideo
+            # Remove CreateVideo and SaveVideo nodes
+            del workflow["94"]
+            del workflow["108"]
+
+            # Add VHS_VideoCombine node (node 186)
+            workflow["186"] = {
+                "class_type": "VHS_VideoCombine",
+                "inputs": {
+                    "frame_rate": fps,
+                    "loop_count": 0,
+                    "filename_prefix": safe_prefix,
+                    "format": "video/h264-mp4",
+                    "pix_fmt": "yuv420p",
+                    "crf": 15,
+                    "save_metadata": True,
+                    "trim_to_audio": False,
+                    "pingpong": False,
+                    "save_output": True,
+                    "images": ["200", 0]  # From RIFE output
+                },
+                "_meta": {"title": "Video Combine (RIFE)"}
+            }
+
+            # Wire: VAEDecode(87) → RIFE(200) → VHS_VideoCombine(186)
+            workflow["200"]["inputs"]["frames"] = ["87", 0]
+            print("[Workflow] RIFE wired: VAEDecode(87) → RIFE(200) → VHS_VideoCombine(186)")
 
     return workflow

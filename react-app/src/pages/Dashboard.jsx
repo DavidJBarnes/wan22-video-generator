@@ -140,7 +140,8 @@ export default function Dashboard() {
     const queueRunning = comfyStatus.queue?.queue_running?.length || 0;
     const queuePending = comfyStatus.queue?.queue_pending?.length || 0;
 
-    if (queueRunning > 0 || queuePending > 0) {
+    // Show blue (running) if ComfyUI queue has items OR our app has running jobs
+    if (queueRunning > 0 || queuePending > 0 || runningJobsCount > 0) {
       return 'blue';
     }
     return 'green';
@@ -152,7 +153,8 @@ export default function Dashboard() {
     const queueRunning = comfyStatus.queue?.queue_running?.length || 0;
     const queuePending = comfyStatus.queue?.queue_pending?.length || 0;
 
-    if (queueRunning > 0 || queuePending > 0) {
+    // Show "Running" if ComfyUI queue has items OR our app has running jobs
+    if (queueRunning > 0 || queuePending > 0 || runningJobsCount > 0) {
       return 'Connected - Running...';
     }
     return 'Connected - Idle';

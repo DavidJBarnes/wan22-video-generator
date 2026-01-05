@@ -13,8 +13,8 @@ DEFAULT_FRAMES_PER_SEGMENT = 81  # 5 seconds at 16 FPS
 # Note: Update these to match the models available on your ComfyUI server
 # Common variants: fp16 (full precision) or fp8_scaled (quantized)
 MODELS = {
-    "high_noise": "wan2.2_i2v_high_noise_14B_fp16.safetensors",
-    "low_noise": "wan2.2_i2v_low_noise_14B_fp16.safetensors",
+    "high_noise": "wan22RemixT2VI2V_i2vHighV20.safetensors",
+    "low_noise": "wan22RemixT2VI2V_i2vLowV20.safetensors",
     "vae": "wan_2.1_vae.safetensors",
     "text_encoder": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
 }
