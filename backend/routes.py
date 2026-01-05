@@ -644,10 +644,19 @@ async def get_job_video(job_id: int):
     actual_filename = os.path.basename(video_path)
     media_type = "video/webm" if video_path.endswith('.webm') else "video/mp4"
 
+    # Get file modification time for cache busting
+    file_mtime = os.path.getmtime(video_path)
+
     return FileResponse(
         video_path,
         media_type=media_type,
-        filename=actual_filename
+        filename=actual_filename,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "ETag": f'"{file_mtime}"'
+        }
     )
 
 

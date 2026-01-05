@@ -59,6 +59,7 @@ export default function EditJobModal({ job, onClose, onSuccess }) {
   return (
     <div className="modal-overlay">
       <div className="modal-content">
+        <button type="button" className="modal-close" onClick={onClose}>×</button>
         <h2>Edit Job Settings</h2>
 
         <form onSubmit={handleSubmit}>
@@ -153,9 +154,6 @@ export default function EditJobModal({ job, onClose, onSuccess }) {
           </div>
 
           <div className="modal-actions">
-            <Button type="button" variant="outlined" onClick={onClose} disabled={saving}>
-              Cancel
-            </Button>
             <Button type="submit" variant="contained" disabled={saving}>
               {saving ? 'Saving...' : 'Save Changes'}
             </Button>

@@ -77,6 +77,7 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
   return (
     <div className="modal-overlay">
       <div className="modal-content">
+        <button type="button" className="modal-close" onClick={onClose}>×</button>
         <h2>Edit LoRA Metadata</h2>
 
         <div style={{ marginBottom: '16px', padding: '12px', background: '#f5f5f5', borderRadius: '4px' }}>
@@ -267,14 +268,6 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
           </div>
 
           <div className="modal-actions">
-            <Button
-              type="button"
-              variant="outlined"
-              onClick={onClose}
-              disabled={saving}
-            >
-              Cancel
-            </Button>
             <Button
               type="submit"
               variant="contained"

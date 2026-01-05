@@ -341,6 +341,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   return (
     <div className="modal-overlay">
       <div className="modal-content">
+        <button type="button" className="modal-close" onClick={onClose}>×</button>
         <h2>{cloneData ? 'Clone Job' : 'Create New Video Job'}</h2>
 
         <form onSubmit={handleSubmit}>
@@ -722,9 +723,6 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
           </div>
 
           <div className="modal-actions">
-            <Button type="button" variant="outlined" onClick={onClose} disabled={uploading}>
-              Cancel
-            </Button>
             <Button type="submit" variant="contained" disabled={uploading}>
               {uploading ? <CircularProgress size={20} color="inherit" /> : 'Create Job'}
             </Button>
