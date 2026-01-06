@@ -36,7 +36,12 @@ export default function Queue() {
     const saved = localStorage.getItem('queueStatusFilter');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        let parsed = JSON.parse(saved);
+        // Migrate old 'cancelled' status to 'paused'
+        parsed = parsed.map(s => s === 'cancelled' ? 'paused' : s);
+        // Remove duplicates
+        parsed = [...new Set(parsed)];
+        return parsed;
       } catch { /* fall through */ }
     }
     return ['pending', 'running', 'awaiting_prompt', 'completed', 'failed', 'paused'];

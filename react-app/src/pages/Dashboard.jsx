@@ -35,7 +35,12 @@ export default function Dashboard() {
     const saved = localStorage.getItem('dashboardStatusFilter');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        let parsed = JSON.parse(saved);
+        // Migrate old 'cancelled' status to 'paused'
+        parsed = parsed.map(s => s === 'cancelled' ? 'paused' : s);
+        // Remove duplicates
+        parsed = [...new Set(parsed)];
+        return parsed;
       } catch { /* fall through */ }
     }
     return ['running', 'pending', 'awaiting_prompt'];
