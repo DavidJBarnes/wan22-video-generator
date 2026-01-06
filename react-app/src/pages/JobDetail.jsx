@@ -775,7 +775,7 @@ export default function JobDetail() {
                             sx={{ height: 8, borderRadius: 4 }}
                           />
                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, textAlign: 'center' }}>
-                            Step {progress.current_step} / {progress.total_steps}
+                            {progress.current_step} / {progress.total_steps} nodes
                           </Typography>
                         </Box>
                       ) : (

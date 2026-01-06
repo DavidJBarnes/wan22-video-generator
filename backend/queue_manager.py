@@ -49,6 +49,7 @@ class QueueManager:
         self._poll_interval = 2.0  # seconds between queue checks
         self._status_poll_interval = 1.0  # seconds between status checks
         self._on_job_update: Optional[Callable] = None
+        self._resumed_segments: set = set()  # Track (job_id, segment_index) being monitored
 
     @property
     def is_running(self) -> bool:
@@ -69,12 +70,15 @@ class QueueManager:
             return
 
         self._running = True
+
+        # Resume monitoring any segments that were running before restart
+        # MUST be called BEFORE starting the main loop to prevent race condition
+        # where _process_queue submits new work before resumed segments are tracked
+        self._resume_running_segments()
+
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
         print("Queue manager started")
-
-        # Resume monitoring any segments that were running before restart
-        self._resume_running_segments()
 
     def _resume_running_segments(self):
         """Resume monitoring segments that are still running in ComfyUI after backend restart."""
@@ -98,6 +102,9 @@ class QueueManager:
         for seg_row in running_segments:
             job_id, segment_index, prompt_id, job_name = seg_row
             print(f"[QueueManager] Resuming segment {segment_index} of job {job_id} ({job_name}), prompt_id={prompt_id}")
+
+            # Track this segment so _process_queue doesn't submit new work
+            self._resumed_segments.add((job_id, segment_index))
 
             # Start a background thread to monitor this segment
             resume_thread = threading.Thread(
@@ -132,6 +139,9 @@ class QueueManager:
             update_segment_status(job_id, segment_index, "failed", error_message=str(e))
             update_job_status(job_id, "failed", error_message=f"Error resuming segment {segment_index}: {str(e)}")
             self._notify_update(job_id, "failed")
+        finally:
+            # Remove from tracking so new work can be submitted
+            self._resumed_segments.discard((job_id, segment_index))
 
     def _check_job_continuation(self, job_id: int):
         """Check if a job should continue processing or await user input after a segment completes."""
@@ -204,6 +214,11 @@ class QueueManager:
 
     def _process_queue(self):
         """Process the next pending job if any."""
+        # Don't submit new work if we're still monitoring resumed segments from backend restart
+        if self._resumed_segments:
+            print(f"[QueueManager] Waiting for {len(self._resumed_segments)} resumed segment(s) to complete before processing new jobs")
+            return
+
         # Check for pending jobs
         pending_jobs = get_pending_jobs()
         print(f"[QueueManager] Checking queue: {len(pending_jobs)} pending jobs")

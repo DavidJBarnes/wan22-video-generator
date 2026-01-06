@@ -189,11 +189,6 @@ class ProgressTracker:
             data = json.loads(message)
             msg_type = data.get("type")
 
-            # Only log progress-related messages
-            if msg_type in ("progress", "progress_state", "executing", "execution_start"):
-                prompt_id = data.get("data", {}).get("prompt_id")
-                if prompt_id:
-                    print(f"[ProgressTracker] Received {msg_type} for prompt {prompt_id[:12]}...")
 
             if msg_type == "progress":
                 self._handle_progress(data.get("data", {}))
@@ -213,21 +208,43 @@ class ProgressTracker:
             print(f"[ProgressTracker] Error handling message: {e}")
 
     def _handle_progress_state(self, data: Dict[str, Any]):
-        """Handle progress_state message (alternative format).
+        """Handle progress_state message.
 
-        Format: {prompt_id, current_node, current_step, total_steps, percent, ...}
-        or: {prompt_id, value, max, node, ...}
+        Format: {prompt_id, nodes: {node_id: {value, max, state, node_id, ...}, ...}}
+        Calculate overall progress as: finished_nodes / total_nodes
         """
         prompt_id = data.get("prompt_id")
-        current_step = data.get("current_step") or data.get("value") or 0
-        total_steps = data.get("total_steps") or data.get("max") or 0
-        current_node = data.get("current_node") or data.get("node")
+        nodes = data.get("nodes", {})
+
+        if not nodes:
+            return
+
+        # Count finished vs total nodes for overall progress
+        total_nodes = len(nodes)
+        finished_nodes = sum(1 for n in nodes.values() if n.get("state") == "finished")
+
+        # Find the currently running node
+        current_node = None
+        running_step = 0
+        running_max = 0
+
+        for node_id, node_data in nodes.items():
+            if node_data.get("state") == "running":
+                current_node = node_id
+                running_step = node_data.get("value", 0)
+                running_max = node_data.get("max", 0)
+                break
 
         with self._lock:
             for job_id, progress in self._progress.items():
                 if progress.prompt_id == prompt_id:
-                    progress.current_step = current_step
-                    progress.total_steps = total_steps
+                    # Use node count for progress: finished + partial progress of current
+                    if running_max > 0:
+                        partial = running_step / running_max
+                    else:
+                        partial = 0
+                    progress.current_step = finished_nodes
+                    progress.total_steps = total_nodes
                     progress.current_node = current_node
                     progress.last_update = datetime.now()
                     progress.status = "running"
