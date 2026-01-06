@@ -55,6 +55,7 @@ from database import (
 )
 from comfyui_client import ComfyUIClient
 from queue_manager import queue_manager
+from progress_tracker import progress_tracker
 from config import (
     COMFYUI_SERVER_URL,
     DEFAULT_WIDTH,
@@ -346,6 +347,43 @@ async def get_job_logs(job_id: int, limit: int = 100):
         raise HTTPException(status_code=404, detail="Job not found")
     logs = db_get_job_logs(job_id, limit=limit)
     return {"job_id": job_id, "logs": logs}
+
+
+@router.get("/jobs/{job_id}/progress")
+async def get_job_progress(job_id: int):
+    """Get real-time progress for a running job.
+
+    Returns progress information including:
+    - current_step: Current sampler step
+    - total_steps: Total sampler steps
+    - percent: Progress percentage (0-100)
+    - status: waiting, running, completed, or error
+    - current_node: Currently executing node ID
+    """
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Get progress from tracker
+    progress = progress_tracker.get_progress(job_id)
+
+    if progress:
+        return progress
+
+    # No progress being tracked - return default based on job status
+    return {
+        "job_id": job_id,
+        "segment_index": None,
+        "prompt_id": None,
+        "current_step": 0,
+        "total_steps": 0,
+        "percent": 0,
+        "current_node": None,
+        "current_node_title": None,
+        "status": "not_tracking" if job["status"] != "running" else "waiting",
+        "started_at": None,
+        "last_update": None,
+    }
 
 
 @router.post("/jobs", response_model=JobResponse)

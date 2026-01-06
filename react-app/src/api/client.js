@@ -60,6 +60,10 @@ class APIClient {
     return this.request(`/jobs/${jobId}/logs?limit=${limit}`);
   }
 
+  async getJobProgress(jobId) {
+    return this.request(`/jobs/${jobId}/progress`);
+  }
+
   async createJob(jobData) {
     return this.request('/jobs', {
       method: 'POST',
