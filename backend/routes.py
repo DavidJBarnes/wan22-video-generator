@@ -391,12 +391,18 @@ async def create_new_job(job: JobCreate):
 
     # Create only the first segment (on-demand workflow)
     # Additional segments will be created when user provides prompts
+    # Extract faceswap settings from job parameters for first segment
+    params = job.parameters or {}
     create_first_segment(
         job_id,
         full_prompt,
         start_image_url,
         high_loras=high_loras if high_loras else None,
-        low_loras=low_loras if low_loras else None
+        low_loras=low_loras if low_loras else None,
+        faceswap_enabled=params.get("faceswap_enabled", False),
+        faceswap_image=params.get("faceswap_image", ""),
+        faceswap_faces_order=params.get("faceswap_faces_order", "left-right"),
+        faceswap_faces_index=params.get("faceswap_faces_index", "0")
     )
     
     return get_job(job_id)
@@ -739,7 +745,11 @@ async def update_segment_prompt_endpoint(
     segment_index: int,
     prompt: str = Form(...),
     loras: Optional[str] = Form(None),  # JSON array: '[{"high_file": "...", "low_file": "..."}]'
-    auto_finalize: Optional[bool] = Form(False)  # Auto-finalize after this segment completes
+    auto_finalize: Optional[bool] = Form(False),  # Auto-finalize after this segment completes
+    faceswap_enabled: Optional[bool] = Form(False),  # Enable faceswap for this segment
+    faceswap_image: Optional[str] = Form(None),  # Face image filename
+    faceswap_faces_order: Optional[str] = Form("left-right"),  # Faces order
+    faceswap_faces_index: Optional[str] = Form("0")  # Faces index
 ):
     """Create or update a segment with a prompt and resume job processing (on-demand workflow).
 
@@ -747,6 +757,10 @@ async def update_segment_prompt_endpoint(
         loras: Optional JSON string containing array of LoRA pairs (max 2).
                Format: '[{"high_file": "path/to/high.safetensors", "low_file": "path/to/low.safetensors"}]'
         auto_finalize: If true, automatically finalize the job after this segment completes.
+        faceswap_enabled: Whether to enable face swapping for this segment.
+        faceswap_image: Filename of the face image to swap in (in ComfyUI input folder).
+        faceswap_faces_order: Order to process faces (left-right, right-left, etc.).
+        faceswap_faces_index: Which face indices to process (e.g., "0", "0,1").
     """
     job = get_job(job_id)
     if not job:
@@ -813,14 +827,22 @@ async def update_segment_prompt_endpoint(
             full_prompt,
             start_image_url,
             high_loras=high_loras if high_loras else None,
-            low_loras=low_loras if low_loras else None
+            low_loras=low_loras if low_loras else None,
+            faceswap_enabled=faceswap_enabled or False,
+            faceswap_image=faceswap_image or "",
+            faceswap_faces_order=faceswap_faces_order or "left-right",
+            faceswap_faces_index=faceswap_faces_index or "0"
         )
     else:
-        # Segment exists - update its prompt and LoRA selections
+        # Segment exists - update its prompt, LoRA, and faceswap settings
         update_segment_prompt(
             job_id, segment_index, full_prompt,
             high_loras=high_loras if high_loras else None,
-            low_loras=low_loras if low_loras else None
+            low_loras=low_loras if low_loras else None,
+            faceswap_enabled=faceswap_enabled,
+            faceswap_image=faceswap_image,
+            faceswap_faces_order=faceswap_faces_order,
+            faceswap_faces_index=faceswap_faces_index
         )
 
     # Update auto_finalize in job parameters
