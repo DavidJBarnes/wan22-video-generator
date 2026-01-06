@@ -686,10 +686,11 @@ class QueueManager:
                         update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
                         return False
                 else:
-                    logger.warning(f"[Job {job_id}] No video output found for segment {segment_index}. Media URLs: {media_urls}")
-                    # Still mark as completed but without video
-                    update_segment_status(job_id, segment_index, "completed")
-                    return True
+                    error_msg = f"No video output found for segment {segment_index}. ComfyUI reported completion but returned no video. Media URLs: {media_urls}"
+                    logger.error(f"[Job {job_id}] {error_msg}")
+                    add_job_log(job_id, "ERROR", f"Segment {segment_index} has no video output", segment_index=segment_index, details=error_msg)
+                    update_segment_status(job_id, segment_index, "failed", error_message="No video output from ComfyUI")
+                    return False
 
                 # If we got here, something failed in post-processing
                 add_job_log(job_id, "ERROR", f"Segment {segment_index} post-processing failed", segment_index=segment_index)
