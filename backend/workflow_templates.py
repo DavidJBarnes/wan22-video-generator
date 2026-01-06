@@ -436,7 +436,7 @@ def build_wan_i2v_workflow(
             "class_type": "RIFE VFI",
             "inputs": {
                 "ckpt_name": "rife47.pth",
-                "clear_cache_after_n_frames": 10,
+                "clear_cache_after_n_frames": 0,  # Disable cache clearing for better performance
                 "multiplier": 2,
                 "fast_mode": True,
                 "ensemble": True,
