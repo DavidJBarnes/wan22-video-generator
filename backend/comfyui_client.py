@@ -501,7 +501,8 @@ class ComfyUIClient:
 
         if execution_start and execution_end:
             try:
-                return float(execution_end) - float(execution_start)
+                # ComfyUI timestamps are in milliseconds, convert to seconds
+                return (float(execution_end) - float(execution_start)) / 1000.0
             except (TypeError, ValueError):
                 pass
 

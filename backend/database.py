@@ -745,6 +745,10 @@ def update_job_status(
         if status in ("completed", "failed"):
             updates.append("completed_at = ?")
             params.append(utc_now_iso())
+        elif status in ("pending", "running", "awaiting_prompt"):
+            # Clear completed_at when job is restarted/retried
+            updates.append("completed_at = ?")
+            params.append(None)
 
         if error_message is not None:
             updates.append("error_message = ?")
