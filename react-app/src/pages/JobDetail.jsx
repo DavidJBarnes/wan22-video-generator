@@ -29,7 +29,18 @@ export default function JobDetail() {
   const [segmentVideoIndex, setSegmentVideoIndex] = useState(null);
   const [segmentVideoKey, setSegmentVideoKey] = useState(null);
   const [progress, setProgress] = useState(null);
+  const [elapsedTime, setElapsedTime] = useState(null);
   const autoFinalizeTriggeredRef = useRef(false);
+
+  // Format elapsed time as "Xm Ys" or "Xs"
+  const formatElapsedTime = (seconds) => {
+    if (seconds < 60) {
+      return `${seconds}s`;
+    }
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}m ${secs}s`;
+  };
 
   // Poll for progress when job is running
   useEffect(() => {
@@ -52,6 +63,26 @@ export default function JobDetail() {
 
     return () => clearInterval(progressInterval);
   }, [id, job?.status]);
+
+  // Update elapsed time ticker every second when running
+  useEffect(() => {
+    if (!progress?.started_at || job?.status !== 'running') {
+      setElapsedTime(null);
+      return;
+    }
+
+    const updateElapsed = () => {
+      const startTime = new Date(progress.started_at);
+      const now = new Date();
+      const diffSeconds = Math.floor((now - startTime) / 1000);
+      setElapsedTime(diffSeconds);
+    };
+
+    updateElapsed();
+    const timer = setInterval(updateElapsed, 1000);
+
+    return () => clearInterval(timer);
+  }, [progress?.started_at, job?.status]);
 
   useEffect(() => {
     // Reset auto-finalize tracking when job changes
@@ -777,9 +808,21 @@ export default function JobDetail() {
                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, textAlign: 'center' }}>
                             {progress.current_step} / {progress.total_steps} nodes
                           </Typography>
+                          {elapsedTime !== null && (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, textAlign: 'center', fontFamily: 'monospace' }}>
+                              Running for {formatElapsedTime(elapsedTime)}
+                            </Typography>
+                          )}
                         </Box>
                       ) : (
-                        <CircularProgress size={24} />
+                        <Box sx={{ textAlign: 'center' }}>
+                          <CircularProgress size={24} />
+                          {elapsedTime !== null && (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, fontFamily: 'monospace' }}>
+                              Running for {formatElapsedTime(elapsedTime)}
+                            </Typography>
+                          )}
+                        </Box>
                       )}
                     </div>
                   ) : (
