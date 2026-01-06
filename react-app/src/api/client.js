@@ -80,8 +80,14 @@ class APIClient {
     });
   }
 
-  async cancelJob(jobId) {
-    return this.request(`/jobs/${jobId}/cancel`, {
+  async pauseJob(jobId) {
+    return this.request(`/jobs/${jobId}/pause`, {
+      method: 'POST'
+    });
+  }
+
+  async unpauseJob(jobId) {
+    return this.request(`/jobs/${jobId}/unpause`, {
       method: 'POST'
     });
   }

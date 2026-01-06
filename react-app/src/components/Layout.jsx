@@ -5,12 +5,18 @@ import './Layout.css';
 
 export default function Layout() {
   const [comfyStatus, setComfyStatus] = useState({ reachable: false });
+  const [runningJobsCount, setRunningJobsCount] = useState(0);
 
-  // Poll ComfyUI status
+  // Poll ComfyUI status and jobs
   useEffect(() => {
     async function checkStatus() {
-      const status = await API.checkComfyStatus();
+      const [status, jobsData] = await Promise.all([
+        API.checkComfyStatus(),
+        API.getJobs().catch(() => ({ jobs: [] }))
+      ]);
       setComfyStatus(status);
+      const jobs = jobsData.jobs || jobsData || [];
+      setRunningJobsCount(jobs.filter(j => j.status === 'running').length);
     }
 
     checkStatus();
@@ -30,12 +36,13 @@ export default function Layout() {
     const queueRunning = comfyStatus.queue?.queue_running?.length || 0;
     const queuePending = comfyStatus.queue?.queue_pending?.length || 0;
 
-    if (queueRunning > 0 || queuePending > 0) {
+    // Show "Running" if ComfyUI queue has items OR our app has running jobs
+    if (queueRunning > 0 || queuePending > 0 || runningJobsCount > 0) {
       document.title = `Running... | ${baseTitle}`;
     } else {
       document.title = `Idle | ${baseTitle}`;
     }
-  }, [comfyStatus]);
+  }, [comfyStatus, runningJobsCount]);
 
   return (
     <div className="app-container">

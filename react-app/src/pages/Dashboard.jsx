@@ -43,7 +43,7 @@ export default function Dashboard() {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  const allStatuses = ['pending', 'running', 'awaiting_prompt', 'completed', 'failed', 'cancelled'];
+  const allStatuses = ['pending', 'running', 'awaiting_prompt', 'completed', 'failed', 'paused'];
 
   useEffect(() => {
     loadDashboard();
@@ -84,7 +84,7 @@ export default function Dashboard() {
       ? allJobs
       : allJobs.filter(job => statusFilter.includes(job.status));
 
-    // Sort: awaiting_prompt, running, pending (oldest first), then completed/failed/cancelled (newest first)
+    // Sort: awaiting_prompt, running, pending (oldest first), then completed/failed/paused (newest first)
     filtered.sort((a, b) => {
       // Priority order for statuses
       const statusPriority = {
@@ -93,7 +93,7 @@ export default function Dashboard() {
         'pending': 3,
         'completed': 4,
         'failed': 4,  // Same priority as completed
-        'cancelled': 4  // Same priority as completed
+        'paused': 4  // Same priority as completed
       };
 
       const priorityA = statusPriority[a.status] || 99;
@@ -104,7 +104,7 @@ export default function Dashboard() {
       }
 
       // For awaiting_prompt/running/pending, sort oldest first (by creation date)
-      // For completed/failed/cancelled, sort newest first (by completed_at or created_at)
+      // For completed/failed/paused, sort newest first (by completed_at or created_at)
       if (['awaiting_prompt', 'running', 'pending'].includes(a.status)) {
         return new Date(a.created_at) - new Date(b.created_at);
       } else {

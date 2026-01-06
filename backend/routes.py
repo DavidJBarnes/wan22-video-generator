@@ -458,18 +458,40 @@ async def delete_job_endpoint(job_id: int):
     return {"status": "deleted", "id": job_id}
 
 
-@router.post("/jobs/{job_id}/cancel")
-async def cancel_job(job_id: int):
-    """Cancel a pending job."""
+@router.post("/jobs/{job_id}/pause")
+async def pause_job(job_id: int):
+    """Pause a job to prevent it from being processed."""
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    if job["status"] != "pending":
-        raise HTTPException(status_code=400, detail="Only pending jobs can be cancelled")
+    if job["status"] not in ("pending", "awaiting_prompt"):
+        raise HTTPException(status_code=400, detail="Only pending or awaiting_prompt jobs can be paused")
 
-    update_job_status(job_id, "cancelled")
-    return {"status": "cancelled", "id": job_id}
+    update_job_status(job_id, "paused")
+    return {"status": "paused", "id": job_id}
+
+
+@router.post("/jobs/{job_id}/unpause")
+async def unpause_job(job_id: int):
+    """Unpause a job to return it to the queue."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job["status"] != "paused":
+        raise HTTPException(status_code=400, detail="Only paused jobs can be unpaused")
+
+    # Check if there are completed segments - if so, go to awaiting_prompt
+    segments = db_get_job_segments(job_id)
+    completed_count = sum(1 for s in segments if s.get("status") == "completed")
+
+    if completed_count > 0:
+        update_job_status(job_id, "awaiting_prompt", error_message=None)
+        return {"status": "awaiting_prompt", "id": job_id}
+    else:
+        update_job_status(job_id, "pending", error_message=None)
+        return {"status": "pending", "id": job_id}
 
 
 @router.post("/jobs/{job_id}/move-up")
@@ -513,8 +535,8 @@ async def retry_job(job_id: int):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    if job["status"] not in ("failed", "cancelled"):
-        raise HTTPException(status_code=400, detail="Only failed or cancelled jobs can be retried")
+    if job["status"] not in ("failed", "paused"):
+        raise HTTPException(status_code=400, detail="Only failed or paused jobs can be retried")
 
     # Get existing segments
     existing_segments = db_get_job_segments(job_id)

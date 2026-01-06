@@ -6,7 +6,7 @@ const STATUS_CONFIG = {
   awaiting_prompt: { color: 'warning', label: 'Awaiting Prompt' },
   completed: { color: 'success', label: 'Completed' },
   failed: { color: 'error', label: 'Failed' },
-  cancelled: { color: 'default', label: 'Cancelled' },
+  paused: { color: 'secondary', label: 'Paused' },
 };
 
 export default function StatusChip({ status, queuePosition }) {
