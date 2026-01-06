@@ -435,10 +435,10 @@ def build_wan_i2v_workflow(
         workflow["200"] = {
             "class_type": "RIFE VFI",
             "inputs": {
-                "ckpt_name": "rife47.pth",
-                "clear_cache_after_n_frames": 0,  # Disable cache clearing for better performance
+                "ckpt_name": "rife49.pth",  # rife49 has better quality, less VRAM than rife47
+                "clear_cache_after_n_frames": 0,  # Disable cache clearing (3090 has plenty of VRAM)
                 "multiplier": 2,
-                "fast_mode": True,
+                "fast_mode": True,  # Ignored in v4.5+ but kept for compatibility
                 "ensemble": True,
                 "scale_factor": 1,
                 # frames input will be wired below
