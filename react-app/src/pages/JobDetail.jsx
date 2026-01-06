@@ -485,11 +485,23 @@ export default function JobDetail() {
                       sx={{ height: 10, borderRadius: 5, mb: 1 }}
                     />
                     <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
-                      Step {progress.current_step} / {progress.total_steps} ({progress.percent}%)
+                      {progress.current_step} / {progress.total_steps} nodes ({progress.percent}%)
                     </Typography>
+                    {elapsedTime !== null && (
+                      <Typography variant="body2" sx={{ textAlign: 'center', mt: 1, fontFamily: 'monospace', color: 'text.secondary' }}>
+                        Running for {formatElapsedTime(elapsedTime)}
+                      </Typography>
+                    )}
                   </>
                 ) : (
-                  <LinearProgress sx={{ height: 10, borderRadius: 5 }} />
+                  <>
+                    <LinearProgress sx={{ height: 10, borderRadius: 5 }} />
+                    {elapsedTime !== null && (
+                      <Typography variant="body2" sx={{ textAlign: 'center', mt: 1, fontFamily: 'monospace', color: 'text.secondary' }}>
+                        Running for {formatElapsedTime(elapsedTime)}
+                      </Typography>
+                    )}
+                  </>
                 )}
               </Box>
             ) : '📹 Video will appear here when complete'}
