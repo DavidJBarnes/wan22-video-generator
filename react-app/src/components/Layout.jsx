@@ -1,7 +1,42 @@
+import { useState, useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import API from '../api/client';
 import './Layout.css';
 
 export default function Layout() {
+  const [comfyStatus, setComfyStatus] = useState({ reachable: false });
+
+  // Poll ComfyUI status
+  useEffect(() => {
+    async function checkStatus() {
+      const status = await API.checkComfyStatus();
+      setComfyStatus(status);
+    }
+
+    checkStatus();
+    const interval = setInterval(checkStatus, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Update page title based on ComfyUI status (matches Dashboard display)
+  useEffect(() => {
+    const baseTitle = 'Wan2.2 Video Gen';
+
+    if (!comfyStatus.reachable) {
+      document.title = `Not Connected | ${baseTitle}`;
+      return;
+    }
+
+    const queueRunning = comfyStatus.queue?.queue_running?.length || 0;
+    const queuePending = comfyStatus.queue?.queue_pending?.length || 0;
+
+    if (queueRunning > 0 || queuePending > 0) {
+      document.title = `Running... | ${baseTitle}`;
+    } else {
+      document.title = `Idle | ${baseTitle}`;
+    }
+  }, [comfyStatus]);
+
   return (
     <div className="app-container">
       <div className="sidebar">
