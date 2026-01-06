@@ -496,11 +496,11 @@ class QueueManager:
         job_name = job.get("name", f"job_{job_id}")
         output_prefix = f"{job_name}_seg{segment_index}"
 
-        # Get faceswap settings from job parameters
-        faceswap_enabled = params.get("faceswap_enabled", False)
-        faceswap_image = params.get("faceswap_image", "")
-        faceswap_faces_order = params.get("faceswap_faces_order", "left-right")
-        faceswap_faces_index = params.get("faceswap_faces_index", "0")
+        # Get faceswap settings from segment (per-segment faceswap)
+        faceswap_enabled = bool(segment.get("faceswap_enabled", 0))
+        faceswap_image = segment.get("faceswap_image", "") or ""
+        faceswap_faces_order = segment.get("faceswap_faces_order", "left-right") or "left-right"
+        faceswap_faces_index = segment.get("faceswap_faces_index", "0") or "0"
 
         # Get frame interpolation setting
         frame_interpolation = params.get("frame_interpolation", "none")

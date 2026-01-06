@@ -1,15 +1,30 @@
 import { useState, useEffect, useRef } from 'react';
-import { Button, TextField, FormControlLabel, Checkbox, FormHelperText, CircularProgress } from '@mui/material';
+import { Button, TextField, FormControlLabel, Checkbox, FormHelperText, CircularProgress, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import LoraAutocomplete from './LoraAutocomplete';
 import './CreateJobModal.css';
+
+// Available face swap images (in ComfyUI input folder)
+// Configure these values to match your local face image files
+const FACESWAP_FACES = [
+  { value: 'Andrea_all.safetensors.png', label: 'Andrea' },
+  { value: 'Chelsea_all.safetensors.png', label: 'Chelsea' },
+  { value: 'gena.safetensors.png', label: 'Gena' },
+  { value: 'Kelly__all.safetensors.png', label: 'Kelly (All)' },
+  { value: 'Kelly_young.safetensors.png', label: 'Kelly (Young)' },
+  { value: 'Kelly_20251124.safetensors.png', label: 'Kelly (2025)' },
+  { value: 'Kerry_all.safetensors.png', label: 'Kerry' },
+  { value: 'Me.safetensors.png', label: 'Me' },
+  { value: 'Udycz_all.safetensors.png', label: 'Udycz' },
+];
 
 export default function SubmitPromptModal({
   jobId,
   segmentIndex,
   defaultPrompt = '',
   defaultLoras = [],  // Array of {high_file, high_weight, low_file, low_weight} pairs
+  defaultFaceswap = null,  // {enabled, image, facesOrder, facesIndex} from previous segment or job
   onClose,
   onSuccess
 }) {
@@ -23,6 +38,12 @@ export default function SubmitPromptModal({
   const [submitting, setSubmitting] = useState(false);
   const [autoFinalize, setAutoFinalize] = useState(false);
   const defaultsAppliedRef = useRef(false);
+
+  // Faceswap state (initialized from defaults)
+  const [faceswapEnabled, setFaceswapEnabled] = useState(defaultFaceswap?.enabled || false);
+  const [faceswapImage, setFaceswapImage] = useState(defaultFaceswap?.image || FACESWAP_FACES[0]?.value || '');
+  const [faceswapFacesOrder, setFaceswapFacesOrder] = useState(defaultFaceswap?.facesOrder || 'left-right');
+  const [faceswapFacesIndex, setFaceswapFacesIndex] = useState(defaultFaceswap?.facesIndex || '0');
 
   useEffect(() => {
     loadLoras();
@@ -137,12 +158,21 @@ export default function SubmitPromptModal({
           low_weight: slot.lowWeight
         }));
 
+      // Build faceswap options
+      const faceswapOptions = {
+        enabled: faceswapEnabled,
+        image: faceswapEnabled ? faceswapImage : '',
+        facesOrder: faceswapEnabled ? faceswapFacesOrder : 'left-right',
+        facesIndex: faceswapEnabled ? faceswapFacesIndex : '0'
+      };
+
       await API.submitSegmentPrompt(
         jobId,
         segmentIndex,
         prompt.trim(),
         lorasArray,
-        autoFinalize
+        autoFinalize,
+        faceswapOptions
       );
 
       showToast('Prompt submitted successfully', 'success');
@@ -328,6 +358,69 @@ export default function SubmitPromptModal({
                 disabled={!selectedLoras[1].lora}
               />
             </div>
+          </div>
+
+          {/* Face Swap */}
+          <div className="form-group" style={{
+            marginTop: '16px',
+            padding: '12px',
+            background: '#f5f5f5',
+            borderRadius: '8px',
+            border: '1px solid #e0e0e0'
+          }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={faceswapEnabled}
+                  onChange={(e) => setFaceswapEnabled(e.target.checked)}
+                />
+              }
+              label={<span style={{ fontWeight: 500 }}>Enable Face Swap (ReActor)</span>}
+            />
+            {faceswapEnabled && (
+              <>
+                <FormControl fullWidth variant="outlined" size="small" sx={{ mt: 1 }}>
+                  <InputLabel>Face</InputLabel>
+                  <Select
+                    value={faceswapImage}
+                    onChange={(e) => setFaceswapImage(e.target.value)}
+                    label="Face"
+                  >
+                    {FACESWAP_FACES.map((face) => (
+                      <MenuItem key={face.value} value={face.value}>
+                        {face.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                  <FormControl variant="outlined" size="small" sx={{ flex: 1 }}>
+                    <InputLabel>Faces Order</InputLabel>
+                    <Select
+                      value={faceswapFacesOrder}
+                      onChange={(e) => setFaceswapFacesOrder(e.target.value)}
+                      label="Faces Order"
+                    >
+                      <MenuItem value="left-right">Left to Right</MenuItem>
+                      <MenuItem value="right-left">Right to Left</MenuItem>
+                      <MenuItem value="top-bottom">Top to Bottom</MenuItem>
+                      <MenuItem value="bottom-top">Bottom to Top</MenuItem>
+                      <MenuItem value="small-large">Small to Large</MenuItem>
+                      <MenuItem value="large-small">Large to Small</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <TextField
+                    label="Faces Index"
+                    value={faceswapFacesIndex}
+                    onChange={(e) => setFaceswapFacesIndex(e.target.value)}
+                    variant="outlined"
+                    size="small"
+                    sx={{ width: '120px' }}
+                    helperText="e.g. 0 or 0,1"
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           {/* Auto Finalize */}
