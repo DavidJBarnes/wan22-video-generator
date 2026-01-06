@@ -1054,6 +1054,14 @@ def get_job_segments(job_id: int) -> List[Dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
 
 
+def get_all_segments() -> List[Dict[str, Any]]:
+    """Get all segments across all jobs."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM job_segments ORDER BY job_id, segment_index ASC")
+        return [dict(row) for row in cursor.fetchall()]
+
+
 def get_segment(job_id: int, segment_index: int) -> Optional[Dict[str, Any]]:
     """Get a specific segment by job_id and segment_index."""
     with get_connection() as conn:

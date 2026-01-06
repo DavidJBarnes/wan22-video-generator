@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Button, CircularProgress } from '@mui/material';
+import { Button, CircularProgress, LinearProgress, Box, Typography } from '@mui/material';
 import API from '../api/client';
 import { formatDate, showToast } from '../utils/helpers';
 import SubmitPromptModal from '../components/SubmitPromptModal';
@@ -28,7 +28,30 @@ export default function JobDetail() {
   const [selectedLoraForEdit, setSelectedLoraForEdit] = useState(null);
   const [segmentVideoIndex, setSegmentVideoIndex] = useState(null);
   const [segmentVideoKey, setSegmentVideoKey] = useState(null);
+  const [progress, setProgress] = useState(null);
   const autoFinalizeTriggeredRef = useRef(false);
+
+  // Poll for progress when job is running
+  useEffect(() => {
+    if (!job || job.status !== 'running') {
+      setProgress(null);
+      return;
+    }
+
+    const pollProgress = async () => {
+      try {
+        const progressData = await API.getJobProgress(id);
+        setProgress(progressData);
+      } catch (error) {
+        console.error('Failed to fetch progress:', error);
+      }
+    };
+
+    pollProgress();
+    const progressInterval = setInterval(pollProgress, 1000);
+
+    return () => clearInterval(progressInterval);
+  }, [id, job?.status]);
 
   useEffect(() => {
     // Reset auto-finalize tracking when job changes
@@ -418,7 +441,27 @@ export default function JobDetail() {
           </div>
         ) : (
           <div className="placeholder-box">
-            {job.status === 'running' ? '⏳ Generating...' : '📹 Video will appear here when complete'}
+            {job.status === 'running' ? (
+              <Box sx={{ width: '100%', maxWidth: 400, mx: 'auto' }}>
+                <Typography variant="body1" sx={{ mb: 2, textAlign: 'center' }}>
+                  Generating...
+                </Typography>
+                {progress && progress.status === 'running' && progress.total_steps > 0 ? (
+                  <>
+                    <LinearProgress
+                      variant="determinate"
+                      value={progress.percent}
+                      sx={{ height: 10, borderRadius: 5, mb: 1 }}
+                    />
+                    <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
+                      Step {progress.current_step} / {progress.total_steps} ({progress.percent}%)
+                    </Typography>
+                  </>
+                ) : (
+                  <LinearProgress sx={{ height: 10, borderRadius: 5 }} />
+                )}
+              </Box>
+            ) : '📹 Video will appear here when complete'}
           </div>
         )}
       </div>
@@ -718,7 +761,26 @@ export default function JobDetail() {
                     </>
                   ) : seg.status === 'running' ? (
                     <div className="image-placeholder running">
-                      <CircularProgress size={24} />
+                      {progress && progress.status === 'running' && progress.total_steps > 0 ? (
+                        <Box sx={{ width: '100%', p: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1 }}>
+                            <CircularProgress size={20} sx={{ mr: 1 }} />
+                            <Typography variant="body2" color="text.secondary">
+                              {progress.percent}%
+                            </Typography>
+                          </Box>
+                          <LinearProgress
+                            variant="determinate"
+                            value={progress.percent}
+                            sx={{ height: 8, borderRadius: 4 }}
+                          />
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, textAlign: 'center' }}>
+                            Step {progress.current_step} / {progress.total_steps}
+                          </Typography>
+                        </Box>
+                      ) : (
+                        <CircularProgress size={24} />
+                      )}
                     </div>
                   ) : (
                     <div className="image-placeholder pending">

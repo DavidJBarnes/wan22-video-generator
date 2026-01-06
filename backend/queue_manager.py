@@ -27,6 +27,7 @@ from database import (
     add_job_log
 )
 from comfyui_client import ComfyUIClient
+from progress_tracker import progress_tracker
 from video_utils import (
     download_video_from_comfyui,
     extract_last_frame,
@@ -567,6 +568,10 @@ class QueueManager:
         update_job_status(job_id, "running")
         self._notify_update(job_id, "running")
 
+        # Start progress tracking via WebSocket
+        comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
+        progress_tracker.start_tracking(job_id, segment_index, prompt_id, comfyui_url)
+
         # Wait for completion
         return self._wait_for_segment_completion(job_id, segment_index, prompt_id, client)
 
@@ -668,35 +673,42 @@ class QueueManager:
                                 add_job_log(job_id, "INFO", f"Segment {segment_index} completed", segment_index=segment_index,
                                            details=f"execution_time={exec_time_str}, video={video_path}")
                                 logger.info(f"[Job {job_id}] Segment {segment_index} fully processed")
+                                # Stop progress tracking
+                                progress_tracker.stop_tracking(job_id)
                                 return True
                             else:
                                 error_msg = f"Failed to upload last frame to ComfyUI for segment {segment_index}"
                                 logger.error(f"[Job {job_id}] {error_msg}")
                                 add_job_log(job_id, "ERROR", f"Segment {segment_index} frame upload failed", segment_index=segment_index, details=error_msg)
                                 update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
+                                progress_tracker.stop_tracking(job_id)
                                 return False
                         else:
                             error_msg = f"Failed to extract last frame from video at {video_path}"
                             logger.error(f"[Job {job_id}] {error_msg}")
                             add_job_log(job_id, "ERROR", f"Segment {segment_index} frame extraction failed", segment_index=segment_index, details=error_msg)
                             update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
+                            progress_tracker.stop_tracking(job_id)
                             return False
                     else:
                         error_msg = f"Failed to download video from ComfyUI: {video_url}"
                         logger.error(f"[Job {job_id}] {error_msg}")
                         add_job_log(job_id, "ERROR", f"Segment {segment_index} video download failed", segment_index=segment_index, details=error_msg)
                         update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
+                        progress_tracker.stop_tracking(job_id)
                         return False
                 else:
                     error_msg = f"No video output found for segment {segment_index}. ComfyUI reported completion but returned no video. Media URLs: {media_urls}"
                     logger.error(f"[Job {job_id}] {error_msg}")
                     add_job_log(job_id, "ERROR", f"Segment {segment_index} has no video output", segment_index=segment_index, details=error_msg)
                     update_segment_status(job_id, segment_index, "failed", error_message="No video output from ComfyUI")
+                    progress_tracker.stop_tracking(job_id)
                     return False
 
                 # If we got here, something failed in post-processing
                 add_job_log(job_id, "ERROR", f"Segment {segment_index} post-processing failed", segment_index=segment_index)
                 update_segment_status(job_id, segment_index, "failed", error_message="Post-processing failed")
+                progress_tracker.stop_tracking(job_id)
                 return False
             
             if status.get("status") == "error":
@@ -704,6 +716,7 @@ class QueueManager:
                 logger.error(f"[Job {job_id}] Segment {segment_index} reported error from ComfyUI: {error}")
                 add_job_log(job_id, "ERROR", f"Segment {segment_index} failed - ComfyUI error", segment_index=segment_index, details=error)
                 update_segment_status(job_id, segment_index, "failed", error_message=f"ComfyUI error: {error}")
+                progress_tracker.stop_tracking(job_id)
                 return False
 
             if status.get("status") == "not_found":
@@ -711,6 +724,7 @@ class QueueManager:
                 logger.error(f"[Job {job_id}] Segment {segment_index}: {error_msg}")
                 add_job_log(job_id, "ERROR", f"Segment {segment_index} failed - prompt lost", segment_index=segment_index, details=error_msg)
                 update_segment_status(job_id, segment_index, "failed", error_message="ComfyUI prompt not found")
+                progress_tracker.stop_tracking(job_id)
                 return False
 
             time.sleep(self._status_poll_interval)
@@ -723,8 +737,10 @@ class QueueManager:
             add_job_log(job_id, "ERROR", f"Segment {segment_index} timed out", segment_index=segment_index,
                        details=f"Waited {max_wait}s (limit: {max_wait}s). Consider increasing segment_execution_timeout in Settings.")
             update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
+            progress_tracker.stop_tracking(job_id)
             return False
 
+        progress_tracker.stop_tracking(job_id)
         return False
 
     def _finalize_job(self, job_id: int):

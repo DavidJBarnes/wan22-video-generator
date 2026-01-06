@@ -15,6 +15,7 @@ from database import (
 from routes import router
 from queue_manager import queue_manager
 from comfyui_client import ComfyUIClient
+from progress_tracker import progress_tracker
 from video_utils import download_video_from_comfyui, extract_last_frame, get_segment_video_path, get_segment_frame_path
 
 
@@ -144,6 +145,22 @@ async def lifespan(app: FastAPI):
                     update_job_status(job_id, "pending", error_message="")
 
     client.close()
+
+    # Restore progress tracking for running segments
+    if connected:
+        from database import get_all_segments
+        all_segments = get_all_segments()
+        running_segments = [s for s in all_segments if s.get("status") == "running" and s.get("comfyui_prompt_id")]
+        if running_segments:
+            print(f"[Progress] Restoring progress tracking for {len(running_segments)} running segment(s)")
+            for seg in running_segments:
+                progress_tracker.start_tracking(
+                    seg["job_id"],
+                    seg["segment_index"],
+                    seg["comfyui_prompt_id"],
+                    comfyui_url
+                )
+                print(f"[Progress] Tracking job {seg['job_id']} segment {seg['segment_index']} (prompt_id: {seg['comfyui_prompt_id'][:8]}...)")
 
     # Auto-start queue if enabled
     auto_start = get_setting("auto_start_queue", "true")
