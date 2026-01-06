@@ -420,11 +420,16 @@ def build_wan_i2v_workflow(
         print(f"[Workflow] Set output prefix: {safe_prefix}")
 
     # Add RIFE frame interpolation if enabled
-    if frame_interpolation == "2x":
-        print("[Workflow] Adding RIFE 2x frame interpolation")
+    if frame_interpolation in ("2x", "2x-smoother", "2x-longer"):
+        print(f"[Workflow] Adding RIFE 2x frame interpolation (mode: {frame_interpolation})")
 
-        # RIFE doubles frames, so output fps must also double to maintain duration
-        output_fps = fps * 2
+        # Determine output fps based on mode:
+        # - "2x-smoother" (or legacy "2x"): double fps to maintain same duration
+        # - "2x-longer": keep original fps, resulting in 2x duration (slow-motion effect)
+        if frame_interpolation == "2x-longer":
+            output_fps = fps  # Keep original fps = double duration
+        else:
+            output_fps = fps * 2  # Double fps = same duration
 
         # Add RIFE VFI node (node 200)
         workflow["200"] = {

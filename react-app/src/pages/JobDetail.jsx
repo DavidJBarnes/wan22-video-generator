@@ -408,7 +408,11 @@ export default function JobDetail() {
           </div>
           <div className="detail-meta-item">
             <label>FPS / RIFE</label>
-            <div className="value">{fps} fps / {params.frame_interpolation === '2x' ? '2x' : 'None'}</div>
+            <div className="value">{fps} fps / {
+              params.frame_interpolation === '2x-smoother' ? '2x Smoother' :
+              params.frame_interpolation === '2x-longer' ? '2x Longer' :
+              params.frame_interpolation === '2x' ? '2x' : 'None'
+            }</div>
           </div>
           <div className="detail-meta-item">
             <label>Seed</label>
