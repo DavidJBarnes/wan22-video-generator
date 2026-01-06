@@ -180,6 +180,24 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Add faceswap columns for per-segment faceswap settings
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN faceswap_enabled INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN faceswap_image TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN faceswap_faces_order TEXT DEFAULT 'left-right'")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN faceswap_faces_index TEXT DEFAULT '0'")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Add priority column for queue ordering (lower number = higher priority)
         try:
             cursor.execute("ALTER TABLE jobs ADD COLUMN priority INTEGER DEFAULT 0")
@@ -884,7 +902,11 @@ def create_first_segment(
     initial_prompt: str,
     start_image_url: str,
     high_loras: Optional[List[str]] = None,
-    low_loras: Optional[List[str]] = None
+    low_loras: Optional[List[str]] = None,
+    faceswap_enabled: bool = False,
+    faceswap_image: Optional[str] = None,
+    faceswap_faces_order: str = "left-right",
+    faceswap_faces_index: str = "0"
 ):
     """Create the first segment for a job (on-demand workflow).
 
@@ -897,14 +919,20 @@ def create_first_segment(
         start_image_url: ComfyUI image URL for the starting image
         high_loras: List of high noise LoRA filenames (max 2)
         low_loras: List of low noise LoRA filenames (max 2)
+        faceswap_enabled: Whether to enable face swapping for this segment
+        faceswap_image: Filename of the face image to swap in
+        faceswap_faces_order: Order to process faces (left-right, right-left, etc.)
+        faceswap_faces_index: Which face indices to process (e.g., "0", "0,1")
     """
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora)
-            VALUES (?, ?, 'pending', ?, ?, ?, ?)
+            INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora,
+                                      faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)
         """, (job_id, 0, initial_prompt, start_image_url,
-              serialize_loras(high_loras), serialize_loras(low_loras)))
+              serialize_loras(high_loras), serialize_loras(low_loras),
+              1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index))
 
 
 def create_next_segment(
@@ -913,7 +941,11 @@ def create_next_segment(
     prompt: str,
     start_image_url: str,
     high_loras: Optional[List[str]] = None,
-    low_loras: Optional[List[str]] = None
+    low_loras: Optional[List[str]] = None,
+    faceswap_enabled: bool = False,
+    faceswap_image: Optional[str] = None,
+    faceswap_faces_order: str = "left-right",
+    faceswap_faces_index: str = "0"
 ):
     """Create the next segment for a job (on-demand workflow).
 
@@ -926,14 +958,20 @@ def create_next_segment(
         start_image_url: ComfyUI image URL for the starting image
         high_loras: List of high noise LoRA filenames (max 2)
         low_loras: List of low noise LoRA filenames (max 2)
+        faceswap_enabled: Whether to enable face swapping for this segment
+        faceswap_image: Filename of the face image to swap in
+        faceswap_faces_order: Order to process faces (left-right, right-left, etc.)
+        faceswap_faces_index: Which face indices to process (e.g., "0", "0,1")
     """
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora)
-            VALUES (?, ?, 'pending', ?, ?, ?, ?)
+            INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora,
+                                      faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)
         """, (job_id, segment_index, prompt, start_image_url,
-              serialize_loras(high_loras), serialize_loras(low_loras)))
+              serialize_loras(high_loras), serialize_loras(low_loras),
+              1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index))
 
 
 def create_segments_for_job(
@@ -1064,9 +1102,13 @@ def update_segment_prompt(
     segment_index: int,
     prompt: str,
     high_loras: Optional[List[str]] = None,
-    low_loras: Optional[List[str]] = None
+    low_loras: Optional[List[str]] = None,
+    faceswap_enabled: Optional[bool] = None,
+    faceswap_image: Optional[str] = None,
+    faceswap_faces_order: Optional[str] = None,
+    faceswap_faces_index: Optional[str] = None
 ):
-    """Update a segment's prompt and optionally its LoRA selections.
+    """Update a segment's prompt and optionally its LoRA and faceswap settings.
 
     Args:
         job_id: The job ID
@@ -1074,6 +1116,10 @@ def update_segment_prompt(
         prompt: The new prompt
         high_loras: List of high noise LoRA filenames (max 2), or None to not update
         low_loras: List of low noise LoRA filenames (max 2), or None to not update
+        faceswap_enabled: Whether to enable face swapping, or None to not update
+        faceswap_image: Face image filename, or None to not update
+        faceswap_faces_order: Faces order, or None to not update
+        faceswap_faces_index: Faces index, or None to not update
     """
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -1088,6 +1134,22 @@ def update_segment_prompt(
         if low_loras is not None:
             updates.append("low_lora = ?")
             params.append(serialize_loras(low_loras))
+
+        if faceswap_enabled is not None:
+            updates.append("faceswap_enabled = ?")
+            params.append(1 if faceswap_enabled else 0)
+
+        if faceswap_image is not None:
+            updates.append("faceswap_image = ?")
+            params.append(faceswap_image)
+
+        if faceswap_faces_order is not None:
+            updates.append("faceswap_faces_order = ?")
+            params.append(faceswap_faces_order)
+
+        if faceswap_faces_index is not None:
+            updates.append("faceswap_faces_index = ?")
+            params.append(faceswap_faces_index)
 
         params.extend([job_id, segment_index])
 

@@ -300,6 +300,42 @@ export default function JobDetail() {
     return result;
   }
 
+  // Build defaultFaceswap object for SubmitPromptModal (from previous segment or job params)
+  function buildDefaultFaceswap(segment, jobParams) {
+    // First try to get from segment (previous segment's settings)
+    if (segment && segment.faceswap_enabled) {
+      return {
+        enabled: Boolean(segment.faceswap_enabled),
+        image: segment.faceswap_image || '',
+        facesOrder: segment.faceswap_faces_order || 'left-right',
+        facesIndex: segment.faceswap_faces_index || '0'
+      };
+    }
+    // Fall back to job parameters (initial job settings)
+    if (jobParams && jobParams.faceswap_enabled) {
+      return {
+        enabled: Boolean(jobParams.faceswap_enabled),
+        image: jobParams.faceswap_image || '',
+        facesOrder: jobParams.faceswap_faces_order || 'left-right',
+        facesIndex: jobParams.faceswap_faces_index || '0'
+      };
+    }
+    return null;
+  }
+
+  // Get faceswap display name from image filename
+  function getFaceswapDisplayName(faceswapImage) {
+    if (!faceswapImage) return null;
+    // Extract name from filename like "Andrea_all.safetensors.png"
+    let name = faceswapImage
+      .replace('.safetensors.png', '')
+      .replace('_all', '')
+      .replace('_young', ' (Young)')
+      .replace('_20251124', ' (2025)');
+    // Capitalize first letter
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+
   // Format LoRAs for display (includes weights, friendly names, and lora objects)
   function formatLorasDisplay(highLora, lowLora) {
     const highLoras = parseLoraArray(highLora);
@@ -620,6 +656,17 @@ export default function JobDetail() {
                       </div>
                     );
                   })()}
+                  {/* Per-segment Faceswap Info */}
+                  <div style={{ marginTop: '8px' }}>
+                    <strong>Face Swap:</strong>{' '}
+                    {seg.faceswap_enabled ? (
+                      <span style={{ color: '#7b1fa2' }}>
+                        {getFaceswapDisplayName(seg.faceswap_image) || 'Enabled'}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#999' }}>N/A</span>
+                    )}
+                  </div>
                 </div>
 
                 {/* End Image */}
@@ -812,6 +859,7 @@ export default function JobDetail() {
           segmentIndex={nextSegmentIndex}
           defaultPrompt={lastCompletedSegment?.prompt || ''}
           defaultLoras={buildDefaultLoras(lastCompletedSegment)}
+          defaultFaceswap={buildDefaultFaceswap(lastCompletedSegment, job?.parameters)}
           onClose={() => setShowPromptModal(false)}
           onSuccess={() => {
             setShowPromptModal(false);

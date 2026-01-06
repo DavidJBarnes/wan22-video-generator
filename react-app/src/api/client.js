@@ -205,7 +205,7 @@ class APIClient {
     return `${API_BASE_URL}/jobs/${jobId}/segments/${segmentIndex}/video`;
   }
 
-  async submitSegmentPrompt(jobId, segmentIndex, prompt, loras = [], autoFinalize = false) {
+  async submitSegmentPrompt(jobId, segmentIndex, prompt, loras = [], autoFinalize = false, faceswapOptions = null) {
     const formData = new FormData();
     formData.append('prompt', prompt);
 
@@ -228,6 +228,14 @@ class APIClient {
 
     // Auto-finalize flag
     formData.append('auto_finalize', autoFinalize.toString());
+
+    // Faceswap options (per-segment)
+    if (faceswapOptions) {
+      formData.append('faceswap_enabled', (faceswapOptions.enabled || false).toString());
+      formData.append('faceswap_image', faceswapOptions.image || '');
+      formData.append('faceswap_faces_order', faceswapOptions.facesOrder || 'left-right');
+      formData.append('faceswap_faces_index', faceswapOptions.facesIndex || '0');
+    }
 
     return this.request(`/jobs/${jobId}/segments/${segmentIndex}/prompt`, {
       method: 'POST',
