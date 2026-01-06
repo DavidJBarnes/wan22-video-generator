@@ -405,11 +405,12 @@ class ComfyUIClient:
         """Get the status of a queued prompt.
 
         Returns a dict with:
-        - status: "pending", "completed", "error", or "unknown"
+        - status: "pending", "running", "completed", "not_found", "error", or "unknown"
         - data: output data if completed
         - error: error message if error/unknown (includes "connect" for connection errors)
         """
         try:
+            # First check history for completed prompts
             response = self.client.get(f"{self.base_url}/history/{prompt_id}")
             if response.status_code == 200:
                 data = response.json()
@@ -418,8 +419,22 @@ class ComfyUIClient:
                         "status": "completed",
                         "data": data[prompt_id]
                     }
-                return {"status": "pending"}
-            return {"status": "unknown", "error": f"Status code: {response.status_code}"}
+
+            # Not in history - check if it's in the queue
+            queue_response = self.client.get(f"{self.base_url}/queue")
+            if queue_response.status_code == 200:
+                queue_data = queue_response.json()
+                # Check running queue
+                for item in queue_data.get("queue_running", []):
+                    if isinstance(item, list) and len(item) > 1 and item[1] == prompt_id:
+                        return {"status": "running"}
+                # Check pending queue
+                for item in queue_data.get("queue_pending", []):
+                    if isinstance(item, list) and len(item) > 1 and item[1] == prompt_id:
+                        return {"status": "pending"}
+
+            # Not in history and not in queue - prompt is gone/lost
+            return {"status": "not_found", "error": "Prompt not in history or queue"}
         except httpx.ConnectError:
             return {"status": "error", "error": "Connection refused - is ComfyUI running?"}
         except Exception as e:
@@ -461,19 +476,15 @@ class ComfyUIClient:
                 "error": str(e)
             }
 
-    def get_execution_time(self, prompt_id: str) -> Optional[float]:
-        """Get the total execution time in seconds for a completed prompt."""
-        status = self.get_prompt_status(prompt_id)
-        if status.get("status") != "completed":
+    def extract_execution_time_from_data(self, data: Dict[str, Any]) -> Optional[float]:
+        """Extract execution time from already-fetched ComfyUI completion data."""
+        if not data:
             return None
-
-        data = status.get("data") or {}
 
         # ComfyUI stores execution info in different locations depending on version
         status_info = data.get("status", {})
 
         # Try to get execution time from status.messages
-        # Messages often contain execution-started and execution-cached/execution-success times
         messages = status_info.get("messages", [])
         execution_start = None
         execution_end = None
@@ -484,43 +495,55 @@ class ComfyUIClient:
                 msg_data = msg[1] if isinstance(msg[1], dict) else {}
 
                 if msg_type == "execution_start":
-                    # Some versions include timestamp
                     execution_start = msg_data.get("timestamp")
                 elif msg_type in ("execution_success", "execution_cached"):
                     execution_end = msg_data.get("timestamp")
 
-        # Calculate from timestamps if available (timestamps are in milliseconds)
-        if execution_start is not None and execution_end is not None:
+        if execution_start and execution_end:
             try:
-                # Convert from milliseconds to seconds
-                return (float(execution_end) - float(execution_start)) / 1000.0
-            except (ValueError, TypeError):
+                return float(execution_end) - float(execution_start)
+            except (TypeError, ValueError):
                 pass
 
-        # Try direct execution_time field (some ComfyUI versions)
-        exec_time = status_info.get("execution_time")
-        if exec_time is not None:
-            try:
-                return float(exec_time)
-            except (ValueError, TypeError):
-                pass
-
-        # Try to calculate from prompt timestamps
-        prompt_info = data.get("prompt", [])
-        if len(prompt_info) >= 4:
-            # prompt_info structure: [number, prompt_id, outputs, extra_data]
-            # extra_data might contain timestamps
-            extra_data = prompt_info[3] if len(prompt_info) > 3 else {}
-            if isinstance(extra_data, dict):
-                start_time = extra_data.get("start_time")
-                end_time = extra_data.get("end_time")
-                if start_time and end_time:
-                    try:
-                        return float(end_time) - float(start_time)
-                    except (ValueError, TypeError):
-                        pass
+        # Try prompt_outputs timing
+        prompt_outputs = data.get("prompt_outputs", {})
+        for node_id, output in prompt_outputs.items():
+            if isinstance(output, dict) and "execution_time" in output:
+                return output["execution_time"]
 
         return None
+
+    def get_execution_time(self, prompt_id: str) -> Optional[float]:
+        """Get the total execution time in seconds for a completed prompt."""
+        status = self.get_prompt_status(prompt_id)
+        if status.get("status") != "completed":
+            return None
+
+        data = status.get("data") or {}
+        return self.extract_execution_time_from_data(data)
+
+    def extract_media_urls_from_data(self, data: Dict[str, Any]) -> List[str]:
+        """Extract media URLs from ComfyUI completion data (already fetched)."""
+        media_urls = []
+        outputs = data.get("outputs", {})
+
+        print(f"[ComfyUI] extract_media_urls: outputs keys = {list(outputs.keys())}")
+
+        for node_id, node_output in outputs.items():
+            # Check for images, videos, and gifs (different node types use different keys)
+            for media_key in ("images", "videos", "gifs"):
+                if media_key in node_output:
+                    print(f"[ComfyUI] Found {media_key} in node {node_id}: {len(node_output[media_key])} items")
+                    for media in node_output[media_key]:
+                        filename = media.get("filename")
+                        subfolder = media.get("subfolder", "")
+                        media_type = media.get("type", "output")
+                        if filename:
+                            url = f"{self.base_url}/view?filename={filename}&subfolder={subfolder}&type={media_type}"
+                            media_urls.append(url)
+                            print(f"[ComfyUI] Added media URL: {url}")
+
+        return media_urls
 
     def get_output_images(self, prompt_id: str) -> List[str]:
         """Get output media URLs (images, videos, gifs) for a completed prompt."""
@@ -529,7 +552,7 @@ class ComfyUIClient:
             return []
 
         media_urls = []
-        
+
         # Handle both possible response structures
         data = status.get("data") or status
         outputs = data.get("outputs", {})

@@ -592,9 +592,11 @@ def reset_orphaned_running_jobs(comfyui_client=None):
 
             # If we have a ComfyUI client and a prompt_id, check various states
             if comfyui_client and prompt_id:
-                # Check if prompt completed in ComfyUI history
+                # Check prompt status (completed, running, pending, not_found, error)
                 status = comfyui_client.get_prompt_status(prompt_id)
-                if status.get("status") == "completed":
+                prompt_status = status.get("status")
+
+                if prompt_status == "completed":
                     print(f"[Database] Segment {seg_index} of job {job_id} completed in ComfyUI - needs video recovery")
                     cursor.execute(
                         "UPDATE job_segments SET status = 'needs_recovery' WHERE id = ?",
@@ -603,14 +605,23 @@ def reset_orphaned_running_jobs(comfyui_client=None):
                     segments_recovered += 1
                     continue
 
-                # Check if prompt is still actively running/pending in ComfyUI queue
-                if prompt_id in active_prompt_ids:
-                    print(f"[Database] Segment {seg_index} of job {job_id} still running in ComfyUI - keeping status")
+                if prompt_status in ("running", "pending"):
+                    print(f"[Database] Segment {seg_index} of job {job_id} still {prompt_status} in ComfyUI - keeping status")
                     segments_still_running += 1
                     continue
 
-            # Video doesn't exist, not in history, not in queue - reset to pending for retry
-            print(f"[Database] Segment {seg_index} of job {job_id} not completed - resetting to pending")
+                # Prompt not found or error - mark as failed (don't reset to pending)
+                if prompt_status == "not_found":
+                    print(f"[Database] Segment {seg_index} of job {job_id} prompt lost in ComfyUI - marking failed")
+                    cursor.execute(
+                        "UPDATE job_segments SET status = 'failed', error_message = 'ComfyUI prompt not found' WHERE id = ?",
+                        (seg_id,)
+                    )
+                    segments_reset += 1
+                    continue
+
+            # No prompt_id or couldn't check - reset to pending for retry
+            print(f"[Database] Segment {seg_index} of job {job_id} orphaned - resetting to pending")
             cursor.execute(
                 "UPDATE job_segments SET status = 'pending' WHERE id = ?",
                 (seg_id,)
@@ -622,17 +633,35 @@ def reset_orphaned_running_jobs(comfyui_client=None):
         cursor.execute("SELECT DISTINCT job_id FROM job_segments WHERE status = 'running'")
         jobs_with_running_segments = {row[0] for row in cursor.fetchall()}
 
+        # Get job IDs that have failed segments (from this cleanup)
+        cursor.execute("SELECT DISTINCT job_id FROM job_segments WHERE status = 'failed'")
+        jobs_with_failed_segments = {row[0] for row in cursor.fetchall()}
+
+        # Ensure jobs with running segments are in "running" status
+        jobs_fixed_to_running = 0
+        for job_id in jobs_with_running_segments:
+            cursor.execute("SELECT status FROM jobs WHERE id = ?", (job_id,))
+            row = cursor.fetchone()
+            if row and row[0] != 'running':
+                print(f"[Database] Job {job_id} has running segments but status was '{row[0]}' - fixing to 'running'")
+                cursor.execute("UPDATE jobs SET status = 'running', error_message = NULL WHERE id = ?", (job_id,))
+                jobs_fixed_to_running += 1
+
         # Reset running jobs that don't have active segments
         cursor.execute("SELECT id FROM jobs WHERE status = 'running'")
         running_jobs = [row[0] for row in cursor.fetchall()]
 
         jobs_reset = 0
+        jobs_failed = 0
         for job_id in running_jobs:
-            if job_id not in jobs_with_running_segments:
+            if job_id in jobs_with_running_segments:
+                print(f"[Database] Job {job_id} still has running segments in ComfyUI - keeping status")
+            elif job_id in jobs_with_failed_segments:
+                cursor.execute("UPDATE jobs SET status = 'failed', error_message = 'Segment failed during processing' WHERE id = ?", (job_id,))
+                jobs_failed += 1
+            else:
                 cursor.execute("UPDATE jobs SET status = 'pending' WHERE id = ?", (job_id,))
                 jobs_reset += 1
-            else:
-                print(f"[Database] Job {job_id} still has running segments in ComfyUI - keeping status")
 
         conn.commit()
 
@@ -660,10 +689,11 @@ def reset_orphaned_running_jobs(comfyui_client=None):
 
         conn.commit()
 
-        if jobs_reset > 0 or segments_reset > 0 or segments_completed > 0 or segments_recovered > 0 or segments_still_running > 0 or segments_failed_sync > 0:
+        if jobs_reset > 0 or jobs_failed > 0 or segments_reset > 0 or segments_completed > 0 or segments_recovered > 0 or segments_still_running > 0 or segments_failed_sync > 0:
             print(f"[Database] Startup cleanup: {jobs_reset} job(s) reset to pending, "
+                  f"{jobs_failed} job(s) marked failed, "
                   f"{segments_completed} segment(s) marked completed, "
-                  f"{segments_reset} segment(s) reset to pending, "
+                  f"{segments_reset} segment(s) reset/failed, "
                   f"{segments_recovered} segment(s) need recovery from ComfyUI, "
                   f"{segments_still_running} segment(s) still running in ComfyUI, "
                   f"{segments_failed_sync} segment(s) synced to failed status")

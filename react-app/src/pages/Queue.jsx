@@ -39,13 +39,13 @@ export default function Queue() {
         return JSON.parse(saved);
       } catch { /* fall through */ }
     }
-    return ['pending', 'running', 'awaiting_prompt', 'completed', 'failed', 'cancelled'];
+    return ['pending', 'running', 'awaiting_prompt', 'completed', 'failed', 'paused'];
   });
   const [showModal, setShowModal] = useState(false);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  const allStatuses = ['pending', 'running', 'awaiting_prompt', 'completed', 'failed', 'cancelled'];
+  const allStatuses = ['pending', 'running', 'awaiting_prompt', 'completed', 'failed', 'paused'];
 
   useEffect(() => {
     loadJobs();
@@ -75,7 +75,7 @@ export default function Queue() {
       ? allJobs
       : allJobs.filter(job => statusFilter.includes(job.status));
 
-    // Sort: awaiting_prompt, running, pending (oldest first), then completed/failed/cancelled (newest first)
+    // Sort: awaiting_prompt, running, pending (oldest first), then completed/failed/paused (newest first)
     filtered.sort((a, b) => {
       // Priority order for statuses
       const statusPriority = {
@@ -84,7 +84,7 @@ export default function Queue() {
         'pending': 3,
         'completed': 4,
         'failed': 4,  // Same priority as completed
-        'cancelled': 4  // Same priority as completed
+        'paused': 4  // Same priority as completed
       };
 
       const priorityA = statusPriority[a.status] || 99;
@@ -96,7 +96,7 @@ export default function Queue() {
 
       // For awaiting_prompt/running, sort oldest first (by creation date)
       // For pending, sort by priority (lower number = higher priority)
-      // For completed/failed/cancelled, sort newest first (by completed_at or created_at)
+      // For completed/failed/paused, sort newest first (by completed_at or created_at)
       if (['awaiting_prompt', 'running'].includes(a.status)) {
         return new Date(a.created_at) - new Date(b.created_at);
       } else if (a.status === 'pending') {

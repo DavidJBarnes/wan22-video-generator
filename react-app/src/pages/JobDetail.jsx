@@ -101,16 +101,25 @@ export default function JobDetail() {
     }
   }
 
-  async function handleCancelJob() {
-    if (!confirm('Are you sure you want to cancel this job?')) return;
-
+  async function handlePauseJob() {
     try {
-      await API.cancelJob(id);
-      showToast('Job cancelled', 'success');
+      await API.pauseJob(id);
+      showToast('Job paused', 'success');
       await loadJobDetail();
     } catch (error) {
-      console.error('Failed to cancel job:', error);
-      showToast('Failed to cancel job', 'error');
+      console.error('Failed to pause job:', error);
+      showToast('Failed to pause job', 'error');
+    }
+  }
+
+  async function handleUnpauseJob() {
+    try {
+      await API.unpauseJob(id);
+      showToast('Job resumed', 'success');
+      await loadJobDetail();
+    } catch (error) {
+      console.error('Failed to resume job:', error);
+      showToast('Failed to resume job', 'error');
     }
   }
 
@@ -502,9 +511,14 @@ export default function JobDetail() {
           >
             Clone Job
           </Button>
-          {job.status === 'running' && (
-            <Button variant="outlined" onClick={handleCancelJob}>
-              Cancel Job
+          {(job.status === 'pending' || job.status === 'awaiting_prompt') && (
+            <Button variant="outlined" onClick={handlePauseJob}>
+              Pause Job
+            </Button>
+          )}
+          {job.status === 'paused' && (
+            <Button variant="contained" onClick={handleUnpauseJob}>
+              Resume Job
             </Button>
           )}
           {job.status === 'failed' && (

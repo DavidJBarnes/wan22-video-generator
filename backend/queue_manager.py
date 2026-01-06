@@ -234,9 +234,7 @@ class QueueManager:
                 self._current_job_id = None
                 return
 
-            # Update status to running
-            update_job_status(job_id, "running")
-            self._notify_update(job_id, "running")
+            # Log connection but keep job pending until segment is actually submitted
             add_job_log(job_id, "INFO", "Connected to ComfyUI", details=comfyui_url)
 
             # Process segments one by one
@@ -565,6 +563,9 @@ class QueueManager:
         prompt_id = result
         add_job_log(job_id, "INFO", f"Segment {segment_index} queued successfully", segment_index=segment_index, details=f"prompt_id={prompt_id}")
         update_segment_status(job_id, segment_index, "running", comfyui_prompt_id=prompt_id)
+        # NOW set job to running (segment is actually submitted to ComfyUI)
+        update_job_status(job_id, "running")
+        self._notify_update(job_id, "running")
 
         # Wait for completion
         return self._wait_for_segment_completion(job_id, segment_index, prompt_id, client)
@@ -611,8 +612,9 @@ class QueueManager:
                 consecutive_errors = 0
 
             if status.get("status") == "completed":
-                # Get output media URLs
-                media_urls = client.get_output_images(prompt_id)
+                # Extract output media URLs from the status data (don't fetch again - history might be cleared)
+                completion_data = status.get("data", {})
+                media_urls = client.extract_media_urls_from_data(completion_data)
                 print(f"[QueueManager] Segment {segment_index} completed with {len(media_urls)} outputs")
                 print(f"[QueueManager] Media URLs: {media_urls}")
 
@@ -648,8 +650,8 @@ class QueueManager:
                                 # Build the URL for the uploaded frame
                                 end_frame_url = f"{comfyui_url}/view?filename={uploaded_filename}&subfolder=&type=input"
 
-                                # Get execution time from ComfyUI history (actual GPU processing time)
-                                exec_time = client.get_execution_time(prompt_id)
+                                # Get execution time from the completion data (don't fetch again)
+                                exec_time = client.extract_execution_time_from_data(completion_data)
 
                                 # Update segment with video path, end frame URL, and execution time
                                 update_segment_status(
@@ -702,6 +704,13 @@ class QueueManager:
                 logger.error(f"[Job {job_id}] Segment {segment_index} reported error from ComfyUI: {error}")
                 add_job_log(job_id, "ERROR", f"Segment {segment_index} failed - ComfyUI error", segment_index=segment_index, details=error)
                 update_segment_status(job_id, segment_index, "failed", error_message=f"ComfyUI error: {error}")
+                return False
+
+            if status.get("status") == "not_found":
+                error_msg = f"ComfyUI prompt {prompt_id} not found - may have been cleared or lost"
+                logger.error(f"[Job {job_id}] Segment {segment_index}: {error_msg}")
+                add_job_log(job_id, "ERROR", f"Segment {segment_index} failed - prompt lost", segment_index=segment_index, details=error_msg)
+                update_segment_status(job_id, segment_index, "failed", error_message="ComfyUI prompt not found")
                 return False
 
             time.sleep(self._status_poll_interval)
