@@ -66,23 +66,23 @@ export default function JobDetail() {
 
   // Update elapsed time ticker every second when running
   useEffect(() => {
-    if (!progress?.started_at || job?.status !== 'running') {
+    // Use Unix timestamp to avoid timezone issues
+    if (!progress?.started_at_ts || job?.status !== 'running') {
       setElapsedTime(null);
       return;
     }
 
     const updateElapsed = () => {
-      const startTime = new Date(progress.started_at);
-      const now = new Date();
-      const diffSeconds = Math.floor((now - startTime) / 1000);
-      setElapsedTime(diffSeconds);
+      const nowSeconds = Date.now() / 1000;
+      const diffSeconds = Math.floor(nowSeconds - progress.started_at_ts);
+      setElapsedTime(Math.max(0, diffSeconds)); // Never show negative
     };
 
     updateElapsed();
     const timer = setInterval(updateElapsed, 1000);
 
     return () => clearInterval(timer);
-  }, [progress?.started_at, job?.status]);
+  }, [progress?.started_at_ts, job?.status]);
 
   useEffect(() => {
     // Reset auto-finalize tracking when job changes

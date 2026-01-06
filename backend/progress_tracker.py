@@ -51,6 +51,8 @@ class ProgressState:
             "current_node": self.current_node,
             "current_node_title": self.current_node_title,
             "status": self.status,
+            # Use Unix timestamp (seconds since epoch) to avoid timezone issues
+            "started_at_ts": self.started_at.timestamp() if self.started_at else None,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "last_update": self.last_update.isoformat() if self.last_update else None,
         }
