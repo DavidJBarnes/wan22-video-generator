@@ -34,6 +34,7 @@ from database import (
     get_segment,
     delete_job_segments,
     delete_segment,
+    restore_segment,
     get_completed_segments_count,
     get_all_loras as db_get_all_loras,
     get_lora as db_get_lora,
@@ -600,17 +601,17 @@ async def retry_job(job_id: int):
 
 @router.post("/jobs/{job_id}/finalize")
 async def finalize_job(job_id: int):
-    """Finalize a job and merge all completed segments into final video."""
+    """Finalize a job and merge all completed (non-deleted) segments into final video."""
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Get all segments to check if we have any completed
+    # Get all segments to check if we have any completed (excluding deleted)
     segments = db_get_job_segments(job_id)
-    completed_segments = [s for s in segments if s.get("status") == "completed"]
+    completed_segments = [s for s in segments if s.get("status") == "completed" and not s.get("deleted_at")]
 
     if len(completed_segments) == 0:
-        raise HTTPException(status_code=400, detail="No completed segments to finalize")
+        raise HTTPException(status_code=400, detail="No completed segments to finalize (deleted segments are excluded)")
 
     # Update job status to 'running' and trigger finalization through queue manager
     update_job_status(job_id, "running")
@@ -622,7 +623,7 @@ async def finalize_job(job_id: int):
         "status": "finalizing",
         "id": job_id,
         "completed_segments": len(completed_segments),
-        "message": "Job is being finalized. All completed segments will be merged into final video."
+        "message": "Job is being finalized. All completed (non-deleted) segments will be merged into final video."
     }
 
 
@@ -925,53 +926,73 @@ async def update_segment_prompt_endpoint(
 
 @router.delete("/jobs/{job_id}/segments/{segment_index}")
 async def delete_segment_endpoint(job_id: int, segment_index: int):
-    """Delete a specific segment from a job.
+    """Soft delete a specific segment from a job.
 
-    Can only delete the last segment, and only when the job is in awaiting_prompt status.
+    Marks the segment as deleted (preserves historical data) rather than removing it.
+    Deleted segments are excluded from the final video merge but remain visible for reference.
     """
     # Get job and validate
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Validate job status
-    if job.get("status") != "awaiting_prompt":
+    # Validate job status - allow deletion when awaiting_prompt or completed (for cleanup)
+    if job.get("status") not in ("awaiting_prompt", "completed"):
         raise HTTPException(
             status_code=400,
-            detail="Can only delete segments when job is awaiting prompt"
+            detail="Can only delete segments when job is awaiting prompt or completed"
         )
 
-    # Get all segments to validate this is the last one
-    segments = db_get_job_segments(job_id)
-    if not segments:
-        raise HTTPException(status_code=404, detail="No segments found for this job")
+    # Validate the segment exists and is not already deleted
+    segment = get_segment(job_id, segment_index)
+    if not segment:
+        raise HTTPException(status_code=404, detail="Segment not found")
 
-    # Find the highest segment index (last segment)
-    max_segment_index = max(seg["segment_index"] for seg in segments)
+    if segment.get("deleted_at"):
+        raise HTTPException(status_code=400, detail="Segment is already deleted")
 
-    # Validate that we're deleting the last segment
-    if segment_index != max_segment_index:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Can only delete the last segment (segment {max_segment_index}). To delete segment {segment_index}, first delete segments {max_segment_index} down to {segment_index + 1}."
-        )
+    # Soft delete the segment
+    success = delete_segment(job_id, segment_index)
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete segment")
+
+    return {
+        "status": "success",
+        "message": f"Segment {segment_index} deleted (soft delete - data preserved)",
+        "job_status": job.get("status")
+    }
+
+
+@router.post("/jobs/{job_id}/segments/{segment_index}/restore")
+async def restore_segment_endpoint(job_id: int, segment_index: int):
+    """Restore a soft-deleted segment.
+
+    Brings back a previously deleted segment so it can be included in the final merge.
+    """
+    # Get job and validate
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
 
     # Validate the segment exists
     segment = get_segment(job_id, segment_index)
     if not segment:
         raise HTTPException(status_code=404, detail="Segment not found")
 
-    # Delete the segment
-    success = delete_segment(job_id, segment_index)
+    if not segment.get("deleted_at"):
+        raise HTTPException(status_code=400, detail="Segment is not deleted")
+
+    # Restore the segment
+    success = restore_segment(job_id, segment_index)
 
     if not success:
-        raise HTTPException(status_code=500, detail="Failed to delete segment")
+        raise HTTPException(status_code=500, detail="Failed to restore segment")
 
-    # Job remains in awaiting_prompt status
     return {
         "status": "success",
-        "message": f"Segment {segment_index} deleted successfully",
-        "job_status": "awaiting_prompt"
+        "message": f"Segment {segment_index} restored",
+        "job_status": job.get("status")
     }
 
 

@@ -259,6 +259,12 @@ class APIClient {
     });
   }
 
+  async restoreSegment(jobId, segmentIndex) {
+    return this.request(`/jobs/${jobId}/segments/${segmentIndex}/restore`, {
+      method: 'POST'
+    });
+  }
+
   // ============== Image Upload ==============
 
   async uploadImage(file) {
