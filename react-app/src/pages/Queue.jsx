@@ -99,11 +99,11 @@ export default function Queue() {
         return priorityA - priorityB;
       }
 
-      // For awaiting_prompt/running, sort oldest first (by creation date)
+      // For awaiting_prompt/running, sort newest first (by creation date)
       // For pending, sort by priority (lower number = higher priority)
       // For completed/failed/paused, sort newest first (by completed_at or created_at)
       if (['awaiting_prompt', 'running'].includes(a.status)) {
-        return new Date(a.created_at) - new Date(b.created_at);
+        return new Date(b.created_at) - new Date(a.created_at);
       } else if (a.status === 'pending') {
         // Sort by priority (lower number = higher in queue)
         return (a.priority || 0) - (b.priority || 0);
