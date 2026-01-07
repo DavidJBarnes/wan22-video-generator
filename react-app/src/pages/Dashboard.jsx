@@ -108,9 +108,12 @@ export default function Dashboard() {
         return priorityA - priorityB;
       }
 
-      // For awaiting_prompt/running/pending, sort oldest first (by creation date)
+      // For awaiting_prompt/running, sort newest first (by creation date)
+      // For pending, sort oldest first (queue order)
       // For completed/failed/paused, sort newest first (by completed_at or created_at)
-      if (['awaiting_prompt', 'running', 'pending'].includes(a.status)) {
+      if (['awaiting_prompt', 'running'].includes(a.status)) {
+        return new Date(b.created_at) - new Date(a.created_at);
+      } else if (a.status === 'pending') {
         return new Date(a.created_at) - new Date(b.created_at);
       } else {
         // Use completed_at if available, otherwise created_at
