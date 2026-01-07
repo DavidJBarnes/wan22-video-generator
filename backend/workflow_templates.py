@@ -420,23 +420,17 @@ def build_wan_i2v_workflow(
         print(f"[Workflow] Set output prefix: {safe_prefix}")
 
     # Add RIFE frame interpolation if enabled
-    if frame_interpolation in ("2x", "2x-smoother", "2x-longer"):
-        print(f"[Workflow] Adding RIFE 2x frame interpolation (mode: {frame_interpolation})")
-
-        # Determine output fps based on mode:
-        # - "2x-smoother" (or legacy "2x"): double fps to maintain same duration
-        # - "2x-longer": keep original fps, resulting in 2x duration (slow-motion effect)
-        if frame_interpolation == "2x-longer":
-            output_fps = fps  # Keep original fps = double duration
-        else:
-            output_fps = fps * 2  # Double fps = same duration
+    # "2x" doubles frames while keeping original fps, resulting in 2x duration (10s from 5s)
+    if frame_interpolation == "2x":
+        print(f"[Workflow] Adding RIFE 2x frame interpolation")
+        output_fps = fps  # Keep original fps = double duration with interpolated frames
 
         # Add RIFE VFI node (node 200)
         workflow["200"] = {
             "class_type": "RIFE VFI",
             "inputs": {
                 "ckpt_name": "rife49.pth",  # rife49 has better quality, less VRAM than rife47
-                "clear_cache_after_n_frames": 100,  # Clear rarely (every 100 frames) for 3090's 24GB VRAM
+                "clear_cache_after_n_frames": 25,  # Clear more frequently to reduce system RAM usage
                 "multiplier": 2,
                 "fast_mode": True,  # Ignored in v4.5+ but kept for compatibility
                 "ensemble": True,
@@ -450,7 +444,7 @@ def build_wan_i2v_workflow(
             # With faceswap: 183 (ReActor) → 200 (RIFE) → 186 (VHS_VideoCombine)
             workflow["200"]["inputs"]["frames"] = ["183", 0]
             workflow["186"]["inputs"]["images"] = ["200", 0]
-            workflow["186"]["inputs"]["frame_rate"] = output_fps  # Double fps for RIFE
+            workflow["186"]["inputs"]["frame_rate"] = output_fps  # Keep original fps for 2x duration
             print(f"[Workflow] RIFE wired: ReActor(183) → RIFE(200) → VHS_VideoCombine(186) @ {output_fps}fps")
         else:
             # Without faceswap + RIFE: use VHS_VideoCombine instead of CreateVideo+SaveVideo
@@ -462,7 +456,7 @@ def build_wan_i2v_workflow(
             workflow["186"] = {
                 "class_type": "VHS_VideoCombine",
                 "inputs": {
-                    "frame_rate": output_fps,  # Double fps for RIFE to maintain duration
+                    "frame_rate": output_fps,  # Keep original fps for 2x duration
                     "loop_count": 0,
                     "filename_prefix": safe_prefix,
                     "format": "video/h264-mp4",
