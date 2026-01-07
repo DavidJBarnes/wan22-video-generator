@@ -233,3 +233,60 @@ Settings stored in SQLite `settings` table, editable via Settings page:
 | `low_noise_model` | UNET model for second pass |
 | `image_repo_path` | Local image repository directory |
 | `auto_start_queue` | Start queue on backend startup |
+
+## 3090 Server Setup
+
+ComfyUI runs on a remote server (`3090.zero` / `ssh david@3090.zero`) with:
+- **GPU**: NVIDIA RTX 3090 (24GB VRAM)
+- **RAM**: 61GB system RAM + 38GB swap
+- **Service**: `comfyui.service` (systemd)
+- **Startup script**: `/home/david/projects/scripts/ui.sh`
+- **Logs**: `/home/david/projects/scripts/comfyui.log`
+
+### ComfyUI Startup Args
+```bash
+python3 main.py --output-directory /home/david/StabilityMatrix-linux-x64/Data/Wan --listen --port 8188 --cache-none
+```
+
+### Memory Management (Critical)
+
+Wan2.2 + RIFE has a known RAM leak issue. Without mitigation, ~30GB RAM accumulates after each job until OOM kill.
+
+**Current mitigations:**
+1. `--cache-none` flag - Prevents RAM accumulation between jobs (added 2026-01-06)
+2. RIFE `clear_cache_after_n_frames: 25` - Clears RIFE cache every 25 frames during interpolation
+
+**If OOM issues return, additional options:**
+- Install [ComfyUI-Unload-Model](https://github.com/SeanScripts/ComfyUI-Unload-Model) and add to workflow
+- Call `/free` endpoint between jobs: `curl -X POST "http://3090.zero:8188/free" -d '{"unload_models": true, "free_memory": true}'`
+- Downgrade to PyTorch 2.7.1 if `--cache-none` causes issues
+- Restart ComfyUI every N jobs as nuclear option
+
+**Useful commands:**
+```bash
+# Check ComfyUI service status
+ssh david@3090.zero "systemctl status comfyui"
+
+# View recent logs
+ssh david@3090.zero "tail -50 /home/david/projects/scripts/comfyui.log"
+
+# Check for OOM kills
+ssh david@3090.zero "journalctl -u comfyui --since '1 hour ago' | grep -E 'OOM|kill'"
+
+# Check memory usage
+ssh david@3090.zero "free -h && ps aux --sort=-%mem | head -5"
+
+# Restart ComfyUI (requires sudo)
+ssh david@3090.zero "sudo systemctl restart comfyui"
+```
+
+## RIFE Frame Interpolation
+
+Frame interpolation options in `workflow_templates.py`:
+- **none**: No interpolation, 5s video at original fps
+- **2x**: RIFE doubles frames, keeps original fps → 10s video (double duration)
+
+RIFE settings (node 200):
+- Model: `rife49.pth` (better quality, lower VRAM than rife47)
+- `clear_cache_after_n_frames: 25` (clears RAM during processing)
+- `ensemble: True` (better quality, uses more memory)
