@@ -224,15 +224,27 @@ export default function JobDetail() {
   }
 
   async function handleDeleteSegment(segmentIndex) {
-    if (!confirm(`Are you sure you want to delete Segment ${segmentIndex + 1}?`)) return;
+    if (!confirm(`Are you sure you want to delete Segment ${segmentIndex + 1}? (Data will be preserved but excluded from final video)`)) return;
 
     try {
       await API.deleteSegment(id, segmentIndex);
-      showToast('Segment deleted successfully', 'success');
+      showToast('Segment deleted (data preserved)', 'success');
       await loadJobDetail();
     } catch (error) {
       console.error('Failed to delete segment:', error);
       const errorMessage = error.response?.data?.detail || error.message || 'Failed to delete segment';
+      showToast(errorMessage, 'error');
+    }
+  }
+
+  async function handleRestoreSegment(segmentIndex) {
+    try {
+      await API.restoreSegment(id, segmentIndex);
+      showToast('Segment restored', 'success');
+      await loadJobDetail();
+    } catch (error) {
+      console.error('Failed to restore segment:', error);
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to restore segment';
       showToast(errorMessage, 'error');
     }
   }
@@ -266,11 +278,12 @@ export default function JobDetail() {
   const segmentDuration = job.segment_duration ?? params.segment_duration ?? 5;
   const fps = job.fps ?? params.fps ?? 16;
 
-  const lastCompletedSegment = segments.filter(s => s.status === 'completed').pop();
+  // Exclude deleted segments when calculating last completed and totals
+  const lastCompletedSegment = segments.filter(s => s.status === 'completed' && !s.deleted_at).pop();
 
-  // Calculate total execution time from all completed segments
+  // Calculate total execution time from all completed (non-deleted) segments
   const totalExecutionTime = segments
-    .filter(s => s.status === 'completed' && s.execution_time)
+    .filter(s => s.status === 'completed' && s.execution_time && !s.deleted_at)
     .reduce((sum, s) => sum + s.execution_time, 0);
 
   // Format time as mm:ss or hh:mm:ss
@@ -635,17 +648,44 @@ export default function JobDetail() {
 
         {segments.length === 0 ? (
           <div className="alert info">No segments yet</div>
-        ) : (
-          segments.map((seg, index) => {
-            // Check if this is the last segment
-            const isLastSegment = index === segments.length - 1;
-            const canDelete = job.status === 'awaiting_prompt' && isLastSegment;
+        ) : (() => {
+          // Calculate display numbers: active segments get sequential numbers, deleted segments show original
+          let activeCount = 0;
+          return segments.map((seg, index) => {
+            // Soft delete: segment has deleted_at timestamp
+            const isDeleted = !!seg.deleted_at;
+            // For display: active segments get sequential numbers (1, 2, 3...)
+            // Deleted segments show their original number with strikethrough
+            const displayNumber = isDeleted ? seg.segment_index + 1 : ++activeCount;
+            // Can delete any non-deleted segment when job allows it
+            const canDelete = !isDeleted && (job.status === 'awaiting_prompt' || job.status === 'completed');
+            // Can restore deleted segments
+            const canRestore = isDeleted;
 
             return (
-              <div key={seg.id} className="segment-item">
+              <div
+                key={seg.id}
+                className="segment-item"
+                style={isDeleted ? { opacity: 0.5, backgroundColor: '#f5f5f5' } : {}}
+              >
                 <div className="segment-header">
                   <div>
-                    <strong>Segment {seg.segment_index + 1}</strong>
+                    <strong style={isDeleted ? { textDecoration: 'line-through', color: '#999' } : {}}>
+                      Segment {displayNumber}
+                    </strong>
+                    {isDeleted && (
+                      <span style={{
+                        marginLeft: '8px',
+                        padding: '2px 8px',
+                        backgroundColor: '#e0e0e0',
+                        color: '#666',
+                        borderRadius: '4px',
+                        fontSize: '11px',
+                        fontWeight: 500
+                      }}>
+                        DELETED
+                      </span>
+                    )}
                     {seg.status === 'running' && <CircularProgress size={16} sx={{ ml: 1 }} />}
                     {seg.execution_time && (
                       <span style={{ marginLeft: '8px', color: '#666', fontSize: '12px' }}>
@@ -654,7 +694,19 @@ export default function JobDetail() {
                     )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <StatusChip status={seg.status} />
+                    {!isDeleted && <StatusChip status={seg.status} />}
+                    {canRestore && (
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        size="small"
+                        onClick={() => handleRestoreSegment(seg.segment_index)}
+                        startIcon={<span>↩️</span>}
+                        sx={{ minWidth: 'auto' }}
+                      >
+                        Restore
+                      </Button>
+                    )}
                     {canDelete && (
                       <Button
                         variant="outlined"
@@ -842,8 +894,8 @@ export default function JobDetail() {
               </div>
             </div>
             );
-          })
-        )}
+          });
+        })()}
 
         {/* Continue or Finalize */}
         {job.status === 'awaiting_prompt' && (
