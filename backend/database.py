@@ -198,6 +198,12 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Add deleted_at column for soft delete (preserves historical data)
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN deleted_at TIMESTAMP")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Add priority column for queue ordering (lower number = higher priority)
         try:
             cursor.execute("ALTER TABLE jobs ADD COLUMN priority INTEGER DEFAULT 0")
@@ -1230,14 +1236,33 @@ def delete_job_segments(job_id: int):
 
 
 def delete_segment(job_id: int, segment_index: int) -> bool:
-    """Delete a specific segment from a job.
+    """Soft delete a specific segment from a job.
 
-    Returns True if the segment was deleted, False otherwise.
+    Sets deleted_at timestamp instead of actually removing the row.
+    This preserves historical data while excluding from finalization.
+
+    Returns True if the segment was soft deleted, False otherwise.
     """
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "DELETE FROM job_segments WHERE job_id = ? AND segment_index = ?",
+            "UPDATE job_segments SET deleted_at = ? WHERE job_id = ? AND segment_index = ? AND deleted_at IS NULL",
+            (utc_now_iso(), job_id, segment_index)
+        )
+        return cursor.rowcount > 0
+
+
+def restore_segment(job_id: int, segment_index: int) -> bool:
+    """Restore a soft-deleted segment.
+
+    Clears the deleted_at timestamp to bring the segment back.
+
+    Returns True if the segment was restored, False otherwise.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE job_segments SET deleted_at = NULL WHERE job_id = ? AND segment_index = ? AND deleted_at IS NOT NULL",
             (job_id, segment_index)
         )
         return cursor.rowcount > 0

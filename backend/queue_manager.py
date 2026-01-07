@@ -818,17 +818,17 @@ class QueueManager:
         return False
 
     def _finalize_job(self, job_id: int):
-        """Finalize a job by stitching all completed segment videos together."""
+        """Finalize a job by stitching all completed (non-deleted) segment videos together."""
         # Get job info for naming the final video
         job = get_job(job_id)
         job_name = job.get("name", f"job_{job_id}")
         finalized_at = datetime.now().isoformat()
 
-        # Get all completed segments
+        # Get all completed segments (excluding deleted ones)
         segments = get_job_segments(job_id)
-        completed_segments = [s for s in segments if s.get("status") == "completed"]
+        completed_segments = [s for s in segments if s.get("status") == "completed" and not s.get("deleted_at")]
 
-        print(f"[QueueManager] Finalizing job {job_id} - stitching {len(completed_segments)} segment(s)")
+        print(f"[QueueManager] Finalizing job {job_id} - stitching {len(completed_segments)} segment(s) (deleted segments excluded)")
 
         # Collect all segment video paths
         video_paths = []
