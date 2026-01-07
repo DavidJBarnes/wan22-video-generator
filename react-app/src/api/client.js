@@ -265,6 +265,15 @@ class APIClient {
     });
   }
 
+  async updateSegmentNote(jobId, segmentIndex, note) {
+    const formData = new FormData();
+    formData.append('note', note);
+    return this.request(`/jobs/${jobId}/segments/${segmentIndex}/note`, {
+      method: 'PUT',
+      body: formData
+    });
+  }
+
   // ============== Image Upload ==============
 
   async uploadImage(file) {

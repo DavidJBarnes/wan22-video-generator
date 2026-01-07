@@ -7,6 +7,7 @@ import SubmitPromptModal from '../components/SubmitPromptModal';
 import CreateJobModal from '../components/CreateJobModal';
 import EditJobModal from '../components/EditJobModal';
 import LoraEditModal from '../components/LoraEditModal';
+import SegmentNotesModal from '../components/SegmentNotesModal';
 import StatusChip from '../components/StatusChip';
 import './JobDetail.css';
 
@@ -19,6 +20,7 @@ export default function JobDetail() {
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [showCloneModal, setShowCloneModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showNotesModal, setShowNotesModal] = useState(false);
   const [nextSegmentIndex, setNextSegmentIndex] = useState(0);
   const [lastJobStatus, setLastJobStatus] = useState(null);
   const [lightboxImage, setLightboxImage] = useState(null);
@@ -644,7 +646,19 @@ export default function JobDetail() {
 
       {/* Segments Timeline */}
       <div className="segments-timeline">
-        <h2>Segments Timeline</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h2 style={{ margin: 0 }}>Segments Timeline</h2>
+          {segments.length > 0 && (
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => setShowNotesModal(true)}
+              sx={{ borderColor: '#7b1fa2', color: '#7b1fa2', '&:hover': { borderColor: '#6a1b9a', bgcolor: 'rgba(123, 31, 162, 0.04)' } }}
+            >
+              Segment Notes
+            </Button>
+          )}
+        </div>
 
         {segments.length === 0 ? (
           <div className="alert info">No segments yet</div>
@@ -673,19 +687,6 @@ export default function JobDetail() {
                     <strong style={isDeleted ? { textDecoration: 'line-through', color: '#999' } : {}}>
                       Segment {displayNumber}
                     </strong>
-                    {isDeleted && (
-                      <span style={{
-                        marginLeft: '8px',
-                        padding: '2px 8px',
-                        backgroundColor: '#e0e0e0',
-                        color: '#666',
-                        borderRadius: '4px',
-                        fontSize: '11px',
-                        fontWeight: 500
-                      }}>
-                        DELETED
-                      </span>
-                    )}
                     {seg.status === 'running' && <CircularProgress size={16} sx={{ ml: 1 }} />}
                     {seg.execution_time && (
                       <span style={{ marginLeft: '8px', color: '#666', fontSize: '12px' }}>
@@ -694,7 +695,7 @@ export default function JobDetail() {
                     )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    {!isDeleted && <StatusChip status={seg.status} />}
+                    <StatusChip status={isDeleted ? 'deleted' : seg.status} />
                     {canRestore && (
                       <Button
                         variant="outlined"
@@ -1078,6 +1079,15 @@ export default function JobDetail() {
             setSelectedLoraForEdit(null);
             loadJobDetail();
           }}
+        />
+      )}
+
+      {showNotesModal && (
+        <SegmentNotesModal
+          jobId={id}
+          segments={segments}
+          onClose={() => setShowNotesModal(false)}
+          onUpdate={() => loadJobDetail()}
         />
       )}
 

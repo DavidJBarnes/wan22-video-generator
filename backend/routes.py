@@ -35,6 +35,7 @@ from database import (
     delete_job_segments,
     delete_segment,
     restore_segment,
+    update_segment_note,
     get_completed_segments_count,
     get_all_loras as db_get_all_loras,
     get_lora as db_get_lora,
@@ -993,6 +994,36 @@ async def restore_segment_endpoint(job_id: int, segment_index: int):
         "status": "success",
         "message": f"Segment {segment_index} restored",
         "job_status": job.get("status")
+    }
+
+
+@router.put("/jobs/{job_id}/segments/{segment_index}/note")
+async def update_segment_note_endpoint(job_id: int, segment_index: int, note: str = Form(...)):
+    """Update a segment's note.
+
+    Notes can be added to any segment at any time for testing/learning purposes.
+    Maximum 255 characters.
+    """
+    # Get job and validate
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Validate the segment exists
+    segment = get_segment(job_id, segment_index)
+    if not segment:
+        raise HTTPException(status_code=404, detail="Segment not found")
+
+    # Update the note
+    success = update_segment_note(job_id, segment_index, note)
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update note")
+
+    return {
+        "status": "success",
+        "message": f"Note updated for segment {segment_index}",
+        "note": note[:255]
     }
 
 

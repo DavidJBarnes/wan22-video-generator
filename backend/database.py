@@ -204,6 +204,12 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Add note column for segment notes (testing/learning purposes)
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN note TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Add priority column for queue ordering (lower number = higher priority)
         try:
             cursor.execute("ALTER TABLE jobs ADD COLUMN priority INTEGER DEFAULT 0")
@@ -1264,6 +1270,28 @@ def restore_segment(job_id: int, segment_index: int) -> bool:
         cursor.execute(
             "UPDATE job_segments SET deleted_at = NULL WHERE job_id = ? AND segment_index = ? AND deleted_at IS NOT NULL",
             (job_id, segment_index)
+        )
+        return cursor.rowcount > 0
+
+
+def update_segment_note(job_id: int, segment_index: int, note: str) -> bool:
+    """Update a segment's note.
+
+    Args:
+        job_id: The job ID
+        segment_index: The segment index
+        note: The note text (max 255 characters)
+
+    Returns True if the segment was updated, False otherwise.
+    """
+    # Truncate note to 255 characters
+    note = (note or "")[:255]
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE job_segments SET note = ? WHERE job_id = ? AND segment_index = ?",
+            (note, job_id, segment_index)
         )
         return cursor.rowcount > 0
 
