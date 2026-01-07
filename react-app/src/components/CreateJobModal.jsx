@@ -475,8 +475,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                   label="Frame Interpolation"
                 >
                   <MenuItem value="none">None</MenuItem>
-                  <MenuItem value="2x-smoother">2x Smoother (same duration)</MenuItem>
-                  <MenuItem value="2x-longer">2x Longer (double duration)</MenuItem>
+                  <MenuItem value="2x">2x</MenuItem>
                 </Select>
               </FormControl>
             </div>
