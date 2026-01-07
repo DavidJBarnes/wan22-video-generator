@@ -283,7 +283,14 @@ export default function Dashboard() {
                     <TableCell>
                       <StatusChip status={job.status} />
                     </TableCell>
-                    <TableCell>{job.completed_segments ?? 0} completed</TableCell>
+                    <TableCell>
+                      {job.completed_segments ?? 0} completed
+                      {(job.deleted_segments ?? 0) > 0 && (
+                        <span style={{ color: '#d32f2f', marginLeft: '8px' }}>
+                          + {job.deleted_segments} deleted
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell>{formatDate(job.created_at)}</TableCell>
                   </TableRow>
                 ))
