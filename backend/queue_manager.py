@@ -366,10 +366,67 @@ class QueueManager:
             self._notify_update(job_id, "failed")
 
     def _process_segment(self, job_id: int, job: dict, segment: dict, client: ComfyUIClient) -> bool:
-        """Process a single segment and return True if successful."""
+        """Process a single segment and return True if successful.
+
+        Implements retry logic for prompt lost scenarios:
+        - If prompt is lost, wait and re-check up to 3 times
+        - If still lost, re-submit the workflow
+        - Only fail after re-submission also fails
+        """
+        segment_index = segment["segment_index"]
+        max_retries = 2  # Total attempts = 1 original + 2 retries
+        retry_count = 0
+
+        while retry_count <= max_retries:
+            if retry_count > 0:
+                logger.info(f"[Job {job_id}] Retrying segment {segment_index} (attempt {retry_count + 1}/{max_retries + 1})")
+                add_job_log(job_id, "INFO", f"Retrying segment {segment_index}",
+                           segment_index=segment_index, details=f"attempt {retry_count + 1}/{max_retries + 1}")
+                # Wait before retry
+                time.sleep(10)
+
+            result = self._process_segment_attempt(job_id, job, segment, client)
+
+            if result is True:
+                return True
+            elif result == "prompt_lost":
+                retry_count += 1
+                if retry_count <= max_retries:
+                    logger.warning(f"[Job {job_id}] Segment {segment_index} prompt lost, will retry ({retry_count}/{max_retries})")
+                else:
+                    logger.error(f"[Job {job_id}] Segment {segment_index} prompt lost after {max_retries} retries")
+                    add_job_log(job_id, "ERROR", f"Segment {segment_index} failed - prompt lost after retries",
+                               segment_index=segment_index, details=f"Exhausted {max_retries} retries")
+                    update_segment_status(job_id, segment_index, "failed",
+                                         error_message=f"ComfyUI prompt lost after {max_retries} retries")
+                    return False
+            else:
+                # Hard failure (not prompt_lost)
+                return False
+
+        return False
+
+    def _process_segment_attempt(self, job_id: int, job: dict, segment: dict, client: ComfyUIClient):
+        """Single attempt to process a segment. Returns True, False, or "prompt_lost"."""
         segment_index = segment["segment_index"]
         print(f"[QueueManager] Processing segment {segment_index} for job {job_id}")
-        
+
+        # Health check before submission
+        health = client.health_check()
+        logger.info(f"[Job {job_id}] ComfyUI health check: healthy={health['healthy']}, "
+                   f"connected={health['connected']}, queue_ready={health['queue_ready']}")
+        add_job_log(job_id, "INFO", f"ComfyUI health check before segment {segment_index}",
+                   segment_index=segment_index,
+                   details=f"healthy={health['healthy']}, connected={health['connected']}, "
+                          f"queue={health['details'].get('queue_running', 0)} running/"
+                          f"{health['details'].get('queue_pending', 0)} pending")
+
+        if not health["connected"]:
+            logger.warning(f"[Job {job_id}] ComfyUI not connected: {health['error']}")
+            add_job_log(job_id, "WARN", "ComfyUI health check failed - not connected",
+                       segment_index=segment_index, details=health['error'])
+            # Don't fail immediately, wait for reconnection (existing logic handles this)
+
         # Update segment status to running
         update_segment_status(job_id, segment_index, "running")
         
@@ -735,12 +792,14 @@ class QueueManager:
                 return False
 
             if status.get("status") == "not_found":
-                error_msg = f"ComfyUI prompt {prompt_id} not found - may have been cleared or lost"
-                logger.error(f"[Job {job_id}] Segment {segment_index}: {error_msg}")
-                add_job_log(job_id, "ERROR", f"Segment {segment_index} failed - prompt lost", segment_index=segment_index, details=error_msg)
-                update_segment_status(job_id, segment_index, "failed", error_message="ComfyUI prompt not found")
+                # Prompt lost - this is where we implement retry logic
+                # Signal to caller that prompt was lost (will be handled by _process_segment)
+                logger.warning(f"[Job {job_id}] Segment {segment_index}: Prompt {prompt_id} not found in ComfyUI")
+                add_job_log(job_id, "WARN", f"Segment {segment_index} prompt lost - will retry",
+                           segment_index=segment_index, details=f"prompt_id={prompt_id}")
                 progress_tracker.stop_tracking(job_id)
-                return False
+                # Return special value to indicate prompt lost (not a hard failure)
+                return "prompt_lost"
 
             time.sleep(self._status_poll_interval)
             waited += self._status_poll_interval

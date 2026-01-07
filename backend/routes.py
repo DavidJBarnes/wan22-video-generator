@@ -1041,6 +1041,23 @@ async def get_queue_status():
     )
 
 
+@router.get("/queue/health")
+async def get_comfyui_health():
+    """Get comprehensive ComfyUI health status.
+
+    Returns detailed health check including:
+    - healthy: overall health status
+    - connected: if ComfyUI is reachable
+    - queue_ready: if queue is not overloaded
+    - details: queue counts, system stats
+    """
+    comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
+    client = ComfyUIClient(comfyui_url)
+    health = client.health_check()
+    client.close()
+    return health
+
+
 @router.post("/queue/start")
 async def start_queue():
     """Start the queue manager."""
