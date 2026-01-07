@@ -7,6 +7,7 @@ const STATUS_CONFIG = {
   completed: { color: 'success', label: 'Completed' },
   failed: { color: 'error', label: 'Failed' },
   paused: { color: 'secondary', label: 'Paused' },
+  deleted: { color: 'error', label: 'Deleted' },
 };
 
 export default function StatusChip({ status, queuePosition }) {
