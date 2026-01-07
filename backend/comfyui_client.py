@@ -157,6 +157,93 @@ class ComfyUIClient:
         except Exception as e:
             return False, str(e)
 
+    def get_system_stats(self) -> Dict[str, Any]:
+        """Get detailed system stats from ComfyUI.
+
+        Returns dict with:
+        - connected: bool
+        - error: optional error message
+        - system: system info (devices, memory, etc.) if connected
+        """
+        try:
+            response = self.client.get(f"{self.base_url}/system_stats", timeout=10.0)
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "connected": True,
+                    "system": data
+                }
+            return {
+                "connected": False,
+                "error": f"Unexpected status: {response.status_code}"
+            }
+        except httpx.ConnectError:
+            return {
+                "connected": False,
+                "error": "Connection refused - is ComfyUI running?"
+            }
+        except httpx.TimeoutException:
+            return {
+                "connected": False,
+                "error": "Connection timed out - ComfyUI may be overloaded"
+            }
+        except Exception as e:
+            return {
+                "connected": False,
+                "error": str(e)
+            }
+
+    def health_check(self) -> Dict[str, Any]:
+        """Perform a comprehensive health check before submitting work.
+
+        Returns dict with:
+        - healthy: bool - True if ComfyUI is ready to accept work
+        - connected: bool - True if ComfyUI is reachable
+        - queue_ready: bool - True if queue is not overloaded
+        - details: dict with queue_running, queue_pending, system stats
+        - error: optional error message if unhealthy
+        """
+        result = {
+            "healthy": False,
+            "connected": False,
+            "queue_ready": False,
+            "details": {},
+            "error": None
+        }
+
+        # Check system stats (basic connectivity)
+        stats = self.get_system_stats()
+        result["connected"] = stats.get("connected", False)
+
+        if not result["connected"]:
+            result["error"] = stats.get("error", "ComfyUI not reachable")
+            return result
+
+        result["details"]["system"] = stats.get("system", {})
+
+        # Check queue status
+        queue_status = self.get_queue_status()
+        if not queue_status.get("connected", False):
+            result["error"] = queue_status.get("error", "Failed to get queue status")
+            return result
+
+        queue_running = len(queue_status.get("queue_running", []))
+        queue_pending = len(queue_status.get("queue_pending", []))
+
+        result["details"]["queue_running"] = queue_running
+        result["details"]["queue_pending"] = queue_pending
+
+        # Consider queue ready if not overloaded (configurable threshold)
+        max_queue_size = 10  # Fail-safe if queue is way too backed up
+        result["queue_ready"] = (queue_running + queue_pending) < max_queue_size
+
+        if not result["queue_ready"]:
+            result["error"] = f"Queue overloaded: {queue_running} running, {queue_pending} pending"
+            return result
+
+        result["healthy"] = True
+        return result
+
     def get_checkpoints(self) -> List[str]:
         """Get list of available checkpoint models."""
         try:
