@@ -75,6 +75,14 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
         setSegmentDuration(cloneData.segment_duration || cloneData.parameters?.segment_duration || 5);
         setFrameInterpolation(cloneData.parameters?.frame_interpolation || 'none');
 
+        // Copy faceswap settings
+        if (cloneData.parameters?.faceswap_enabled) {
+          setFaceswapEnabled(true);
+          setFaceswapImage(cloneData.parameters.faceswap_image || FACESWAP_FACES[0]?.value || '');
+          setFaceswapFacesOrder(cloneData.parameters.faceswap_faces_order || 'left-right');
+          setFaceswapFacesIndex(cloneData.parameters.faceswap_faces_index || '0');
+        }
+
         // Set the input image if available - use thumbnail endpoint for proper URL
         if (cloneData.input_image && cloneData.id) {
           setImagePreview(API.getJobThumbnail(cloneData.id));
