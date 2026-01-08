@@ -134,7 +134,7 @@ docker compose logs -f backend
 - Host image directories mounted with `:z` flag (SELinux/Fedora)
 
 ### Ports
-- Frontend: http://localhost:3000
+- Frontend: http://localhost:3030
 - Backend: http://localhost:8000
 - ComfyUI: Configured in Settings (default: http://localhost:8188)
 
