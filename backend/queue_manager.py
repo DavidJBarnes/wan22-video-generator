@@ -843,13 +843,18 @@ class QueueManager:
 
         print(f"[QueueManager] Finalizing job {job_id} - stitching {len(completed_segments)} segment(s) (deleted segments excluded)")
 
-        # Collect all segment video paths
+        # Collect all segment video paths and metadata for fade effects
         video_paths = []
+        segment_info = []
         for segment in completed_segments:
             segment_index = segment["segment_index"]
             video_path = get_segment_video_path(job_id, segment_index)
             if video_path and os.path.exists(video_path):
                 video_paths.append(video_path)
+                # Include segment metadata for fade-to-black effect
+                segment_info.append({
+                    "fade_to_black": bool(segment.get("fade_to_black", 0))
+                })
             else:
                 print(f"[QueueManager] Warning: Segment {segment_index} video not found at {video_path}")
 
@@ -861,7 +866,7 @@ class QueueManager:
 
         # Stitch videos together with descriptive filename
         final_video_path = get_final_video_path(job_id, job_name, finalized_at)
-        if stitch_videos(video_paths, final_video_path):
+        if stitch_videos(video_paths, final_video_path, segment_info=segment_info):
             # Update job with final video path
             update_job_status(job_id, "completed", output_images=[final_video_path])
             self._notify_update(job_id, "completed")
