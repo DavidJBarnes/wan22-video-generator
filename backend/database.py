@@ -216,6 +216,12 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Add custom_start_image column for overriding default start image
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN custom_start_image TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Add priority column for queue ordering (lower number = higher priority)
         try:
             cursor.execute("ALTER TABLE jobs ADD COLUMN priority INTEGER DEFAULT 0")
@@ -1048,7 +1054,8 @@ def create_next_segment(
     faceswap_image: Optional[str] = None,
     faceswap_faces_order: str = "left-right",
     faceswap_faces_index: str = "0",
-    fade_to_black: bool = False
+    fade_to_black: bool = False,
+    custom_start_image: Optional[str] = None
 ):
     """Create the next segment for a job (on-demand workflow).
 
@@ -1066,18 +1073,19 @@ def create_next_segment(
         faceswap_faces_order: Order to process faces (left-right, right-left, etc.)
         faceswap_faces_index: Which face indices to process (e.g., "0", "0,1")
         fade_to_black: Whether to apply fade-to-black transition at segment end
+        custom_start_image: Optional path to custom start image from image repo (overrides default)
     """
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora,
                                       faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index,
-                                      fade_to_black)
-            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      fade_to_black, custom_start_image)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (job_id, segment_index, prompt, start_image_url,
               serialize_loras(high_loras), serialize_loras(low_loras),
               1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index,
-              1 if fade_to_black else 0))
+              1 if fade_to_black else 0, custom_start_image))
 
 
 def create_segments_for_job(
@@ -1253,7 +1261,8 @@ def update_segment_prompt(
     faceswap_image: Optional[str] = None,
     faceswap_faces_order: Optional[str] = None,
     faceswap_faces_index: Optional[str] = None,
-    fade_to_black: Optional[bool] = None
+    fade_to_black: Optional[bool] = None,
+    custom_start_image: Optional[str] = None
 ):
     """Update a segment's prompt and optionally its LoRA and faceswap settings.
 
@@ -1268,6 +1277,8 @@ def update_segment_prompt(
         faceswap_faces_order: Faces order, or None to not update
         faceswap_faces_index: Faces index, or None to not update
         fade_to_black: Whether to apply fade-to-black transition at segment end, or None to not update
+        custom_start_image: Path to custom start image from image repo, or None to not update.
+                           Use empty string to clear custom image and revert to default.
     """
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -1302,6 +1313,11 @@ def update_segment_prompt(
         if fade_to_black is not None:
             updates.append("fade_to_black = ?")
             params.append(1 if fade_to_black else 0)
+
+        if custom_start_image is not None:
+            updates.append("custom_start_image = ?")
+            # Empty string means clear (revert to default), otherwise store the path
+            params.append(custom_start_image if custom_start_image else None)
 
         params.extend([job_id, segment_index])
 

@@ -6,6 +6,7 @@ import time
 import urllib.parse
 import json
 import logging
+from pathlib import Path
 from typing import Optional, Callable
 from datetime import datetime
 
@@ -450,7 +451,17 @@ class QueueManager:
         frames = fps * segment_duration + 1
         
         # Determine the start image for this segment
-        if segment_index == 0:
+        # Check for custom start image first (overrides default behavior)
+        custom_start_image = segment.get("custom_start_image")
+        if custom_start_image and segment_index > 0:
+            # Upload custom image from image repo to ComfyUI
+            input_image = self._upload_custom_start_image(custom_start_image, client)
+            if not input_image:
+                print(f"[QueueManager] Failed to upload custom start image for segment {segment_index}")
+                update_segment_status(job_id, segment_index, "failed", error_message="Failed to upload custom start image")
+                return False
+            print(f"[QueueManager] Segment {segment_index} using CUSTOM start image: {input_image}")
+        elif segment_index == 0:
             # First segment uses the job's input image
             input_image = job.get("input_image")
         else:
@@ -829,6 +840,71 @@ class QueueManager:
 
         progress_tracker.stop_tracking(job_id)
         return False
+
+    def _upload_custom_start_image(self, image_path: str, client: ComfyUIClient) -> Optional[str]:
+        """Upload a custom start image from the image repo to ComfyUI.
+
+        Args:
+            image_path: Path to the image within the image repo (relative path)
+            client: ComfyUI client instance
+
+        Returns:
+            The ComfyUI filename of the uploaded image, or None if upload failed
+        """
+        from database import compute_image_hash, get_image_by_hash, store_uploaded_image
+
+        repo_root = get_setting("image_repo_path", "")
+        if not repo_root:
+            print(f"[QueueManager] Image repository path not configured")
+            return None
+
+        repo_root_path = Path(repo_root)
+        full_path = (repo_root_path / image_path).resolve()
+
+        # Security: Ensure path is within repo root
+        if not str(full_path).startswith(str(repo_root_path.resolve())):
+            print(f"[QueueManager] Custom image path is outside repository: {image_path}")
+            return None
+
+        if not full_path.exists() or not full_path.is_file():
+            print(f"[QueueManager] Custom image not found: {full_path}")
+            return None
+
+        # Check file extension
+        if full_path.suffix.lower() not in ['.jpg', '.jpeg', '.png']:
+            print(f"[QueueManager] Unsupported image format: {full_path.suffix}")
+            return None
+
+        try:
+            # Read the image file
+            with open(full_path, 'rb') as f:
+                image_content = f.read()
+
+            # Check if this image was already uploaded (by content hash)
+            content_hash = compute_image_hash(image_content)
+            existing = get_image_by_hash(content_hash)
+
+            if existing:
+                # Image already exists, return existing filename without re-uploading
+                print(f"[QueueManager] Custom image already in ComfyUI (deduplicated): {existing['comfyui_filename']}")
+                return existing['comfyui_filename']
+
+            # Upload to ComfyUI
+            result_filename = client.upload_image(image_content, full_path.name)
+
+            if not result_filename:
+                print(f"[QueueManager] Failed to upload custom image to ComfyUI")
+                return None
+
+            # Store the hash for future deduplication
+            store_uploaded_image(content_hash, result_filename, full_path.name)
+
+            print(f"[QueueManager] Uploaded custom start image: {result_filename}")
+            return result_filename
+
+        except Exception as e:
+            print(f"[QueueManager] Error uploading custom start image: {e}")
+            return None
 
     def _finalize_job(self, job_id: int):
         """Finalize a job by stitching all completed (non-deleted) segment videos together."""
