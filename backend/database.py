@@ -1090,6 +1090,31 @@ def get_segment(job_id: int, segment_index: int) -> Optional[Dict[str, Any]]:
         return dict(row) if row else None
 
 
+def get_last_active_segment_before(job_id: int, before_index: int) -> Optional[Dict[str, Any]]:
+    """Get the last non-deleted, completed segment before a given index.
+
+    Used to determine the correct start image for a new segment when
+    previous segments may have been soft-deleted.
+
+    Returns the segment dict if found, or None if no active segment exists
+    before the given index (meaning the original job input image should be used).
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT * FROM job_segments
+               WHERE job_id = ?
+                 AND segment_index < ?
+                 AND deleted_at IS NULL
+                 AND status = 'completed'
+               ORDER BY segment_index DESC
+               LIMIT 1""",
+            (job_id, before_index)
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
 def get_next_pending_segment(job_id: int) -> Optional[Dict[str, Any]]:
     """Get the next pending segment for a job."""
     with get_connection() as conn:
