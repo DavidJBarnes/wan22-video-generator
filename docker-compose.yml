@@ -20,7 +20,7 @@ services:
       context: ./react-app
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "3030:3030"
     environment:
       - VITE_API_URL=http://backend:9090
     depends_on:
