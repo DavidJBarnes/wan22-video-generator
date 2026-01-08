@@ -28,6 +28,7 @@ export default function Dashboard() {
   const [runningJobsCount, setRunningJobsCount] = useState(0);
   const [pendingJobsCount, setPendingJobsCount] = useState(0);
   const [awaitingPromptJobsCount, setAwaitingPromptJobsCount] = useState(0);
+  const [avgRunTime, setAvgRunTime] = useState(null);
   const [allJobs, setAllJobs] = useState([]);
   const [filteredJobs, setFilteredJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -75,6 +76,7 @@ export default function Dashboard() {
       setRunningJobsCount(jobs.filter(j => j.status === 'running').length);
       setPendingJobsCount(jobs.filter(j => j.status === 'pending').length);
       setAwaitingPromptJobsCount(jobs.filter(j => j.status === 'awaiting_prompt').length);
+      setAvgRunTime(jobsData.avg_run_time);
 
       setAllJobs(jobs);
       setLoading(false);
@@ -166,6 +168,13 @@ export default function Dashboard() {
     return 'Connected - Idle';
   }
 
+  function formatRunTime(seconds) {
+    if (seconds == null) return 'N/A';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    return `${mins}m ${secs}s`;
+  }
+
   if (loading) {
     return (
       <div>
@@ -205,6 +214,11 @@ export default function Dashboard() {
         <div className="card">
           <h3>Awaiting Prompt</h3>
           <div className="value">{awaitingPromptJobsCount}</div>
+        </div>
+
+        <div className="card">
+          <h3>Avg Run Time</h3>
+          <div className="value">{formatRunTime(avgRunTime)}</div>
         </div>
       </div>
 
