@@ -32,6 +32,7 @@ from database import (
     get_job_segments as db_get_job_segments,
     update_segment_prompt,
     get_segment,
+    get_last_active_segment_before,
     delete_job_segments,
     delete_segment,
     restore_segment,
@@ -870,17 +871,26 @@ async def update_segment_prompt_endpoint(
                 comfyui_url = get_setting("comfyui_url", COMFYUI_SERVER_URL)
                 start_image_url = f"{comfyui_url}/view?filename={input_image}&subfolder=&type=input"
         else:
-            # Get the previous segment's end frame as the start image for this segment
-            previous_segment = get_segment(job_id, segment_index - 1)
-            if not previous_segment:
-                raise HTTPException(status_code=400, detail=f"Previous segment {segment_index - 1} does not exist")
-
-            if previous_segment.get("status") != "completed":
-                raise HTTPException(status_code=400, detail=f"Previous segment {segment_index - 1} must be completed first")
-
-            start_image_url = previous_segment.get("end_frame_url")
-            if not start_image_url:
-                raise HTTPException(status_code=400, detail=f"Previous segment {segment_index - 1} has no end frame")
+            # Find the last non-deleted, completed segment to use as start image
+            # This handles cases where earlier segments were soft-deleted
+            previous_segment = get_last_active_segment_before(job_id, segment_index)
+            if previous_segment:
+                start_image_url = previous_segment.get("end_frame_url")
+                if not start_image_url:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Previous segment {previous_segment['segment_index']} has no end frame"
+                    )
+            else:
+                # No active previous segment - use the job's original input image
+                input_image = job.get("input_image")
+                if not input_image:
+                    raise HTTPException(status_code=400, detail="Job has no input image")
+                if input_image.startswith("http"):
+                    start_image_url = input_image
+                else:
+                    comfyui_url = get_setting("comfyui_url", COMFYUI_SERVER_URL)
+                    start_image_url = f"{comfyui_url}/view?filename={input_image}&subfolder=&type=input"
 
         # Create new segment on-demand
         create_next_segment(
