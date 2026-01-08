@@ -273,6 +273,7 @@ class JobResponse(BaseModel):
     # Computed segment fields
     total_segments: Optional[int] = 0
     completed_segments: Optional[int] = 0
+    deleted_segments: Optional[int] = 0
     progress_percent: Optional[int] = 0
 
 
@@ -293,20 +294,26 @@ def enrich_job_with_segments(job: Dict[str, Any]) -> Dict[str, Any]:
     """Add computed segment fields to a job dict."""
     job_id = job["id"]
     segments = db_get_job_segments(job_id)
-    
+
     # Get total segments from actual segments or from parameters
     if segments:
         total = len(segments)
-        completed = sum(1 for s in segments if s.get("status") == "completed")
+        deleted = sum(1 for s in segments if s.get("deleted_at"))
+        # Completed excludes deleted segments
+        completed = sum(1 for s in segments if s.get("status") == "completed" and not s.get("deleted_at"))
     else:
         params = job.get("parameters") or {}
         total = int(params.get("total_segments", 1))
         completed = 0
-    
+        deleted = 0
+
     job["total_segments"] = total
     job["completed_segments"] = completed
-    job["progress_percent"] = round((completed / total) * 100) if total > 0 else 0
-    
+    job["deleted_segments"] = deleted
+    # Progress based on non-deleted segments
+    active_total = total - deleted
+    job["progress_percent"] = round((completed / active_total) * 100) if active_total > 0 else 0
+
     return job
 
 
