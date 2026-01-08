@@ -232,6 +232,12 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Add last_segment_run column to track when last segment completed/failed
+        try:
+            cursor.execute("ALTER TABLE jobs ADD COLUMN last_segment_run TIMESTAMP")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Settings table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -1140,40 +1146,47 @@ def update_segment_status(
     """Update a segment's status and related fields."""
     with get_connection() as conn:
         cursor = conn.cursor()
-        
+
         updates = ["status = ?"]
         params = [status]
-        
+
         if status == "completed":
             updates.append("completed_at = ?")
             params.append(utc_now_iso())
-        
+
         if comfyui_prompt_id is not None:
             updates.append("comfyui_prompt_id = ?")
             params.append(comfyui_prompt_id)
-        
+
         if end_frame_url is not None:
             updates.append("end_frame_url = ?")
             params.append(end_frame_url)
-        
+
         if video_path is not None:
             updates.append("video_path = ?")
             params.append(video_path)
-        
+
         if error_message is not None:
             updates.append("error_message = ?")
             params.append(error_message)
-        
+
         if execution_time is not None:
             updates.append("execution_time = ?")
             params.append(execution_time)
-        
+
         params.extend([job_id, segment_index])
-        
+
         cursor.execute(
             f"UPDATE job_segments SET {', '.join(updates)} WHERE job_id = ? AND segment_index = ?",
             params
         )
+
+        # Update job's last_segment_run when segment completes or fails
+        if status in ("completed", "failed"):
+            cursor.execute(
+                "UPDATE jobs SET last_segment_run = ? WHERE id = ?",
+                (utc_now_iso(), job_id)
+            )
 
 
 def update_segment_prompt(

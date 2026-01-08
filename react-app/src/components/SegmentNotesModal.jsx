@@ -84,7 +84,7 @@ export default function SegmentNotesModal({ jobId, segments, onClose, onUpdate }
               <TableRow>
                 <TableCell sx={{ fontWeight: 600, width: '70px', fontSize: '14px' }}>Seg</TableCell>
                 <TableCell sx={{ fontWeight: 600, width: '100px', fontSize: '14px', textAlign: 'right' }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 600, width: '150px', fontSize: '14px' }}>Timestamp</TableCell>
+                <TableCell sx={{ fontWeight: 600, width: '150px', fontSize: '14px' }}>Segment Run</TableCell>
                 <TableCell sx={{ fontWeight: 600, width: '28%', fontSize: '14px' }}>Prompt</TableCell>
                 <TableCell sx={{ fontWeight: 600, width: '22%', fontSize: '14px' }}>LoRAs</TableCell>
                 <TableCell sx={{ fontWeight: 600, width: '28%', fontSize: '14px' }}>Note</TableCell>
@@ -112,7 +112,7 @@ export default function SegmentNotesModal({ jobId, segments, onClose, onUpdate }
                       <StatusChip status={isDeleted ? 'deleted' : seg.status} />
                     </TableCell>
                     <TableCell sx={{ fontSize: '13px', color: '#666', pt: 2 }}>
-                      {seg.completed_at ? formatDate(seg.completed_at) : (seg.created_at ? formatDate(seg.created_at) : '-')}
+                      {seg.completed_at ? formatDate(seg.completed_at) : '-'}
                     </TableCell>
                     <TableCell sx={{ fontSize: '13px', pt: 2 }} title={seg.prompt}>
                       {truncatePrompt(seg.prompt)}

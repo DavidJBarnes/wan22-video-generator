@@ -89,7 +89,8 @@ export default function Dashboard() {
       ? allJobs
       : allJobs.filter(job => statusFilter.includes(job.status));
 
-    // Sort: awaiting_prompt, running, pending (oldest first), then completed/failed/paused (newest first)
+    // Sort: by status priority first, then by last_segment_run within each status group
+    // NULL last_segment_run values appear last within their status group
     filtered.sort((a, b) => {
       // Priority order for statuses
       const statusPriority = {
@@ -108,19 +109,16 @@ export default function Dashboard() {
         return priorityA - priorityB;
       }
 
-      // For awaiting_prompt/running, sort newest first (by creation date)
-      // For pending, sort oldest first (queue order)
-      // For completed/failed/paused, sort newest first (by completed_at or created_at)
-      if (['awaiting_prompt', 'running'].includes(a.status)) {
-        return new Date(b.created_at) - new Date(a.created_at);
-      } else if (a.status === 'pending') {
-        return new Date(a.created_at) - new Date(b.created_at);
-      } else {
-        // Use completed_at if available, otherwise created_at
-        const dateA = a.completed_at ? new Date(a.completed_at) : new Date(a.created_at);
-        const dateB = b.completed_at ? new Date(b.completed_at) : new Date(b.created_at);
-        return dateB - dateA; // Descending (newest first)
-      }
+      // Within same status group, sort by last_segment_run (newest first, NULL last)
+      const dateA = a.last_segment_run ? new Date(a.last_segment_run) : null;
+      const dateB = b.last_segment_run ? new Date(b.last_segment_run) : null;
+
+      // Handle NULL values - they go last
+      if (dateA === null && dateB === null) return 0;
+      if (dateA === null) return 1;  // A (null) goes after B
+      if (dateB === null) return -1; // B (null) goes after A
+
+      return dateB - dateA; // Descending (newest first)
     });
 
     setFilteredJobs(filtered);
@@ -248,7 +246,7 @@ export default function Dashboard() {
               <TableCell style={{fontWeight:'bold'}}>Faceswap</TableCell>
               <TableCell style={{fontWeight:'bold'}}>Status</TableCell>
               <TableCell style={{fontWeight:'bold'}}>Segments</TableCell>
-              <TableCell style={{fontWeight:'bold'}}>Created</TableCell>
+              <TableCell style={{fontWeight:'bold'}}>Segment Run</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -291,7 +289,7 @@ export default function Dashboard() {
                         </span>
                       )}
                     </TableCell>
-                    <TableCell>{formatDate(job.created_at)}</TableCell>
+                    <TableCell>{job.last_segment_run ? formatDate(job.last_segment_run) : '-'}</TableCell>
                   </TableRow>
                 ))
             )}
