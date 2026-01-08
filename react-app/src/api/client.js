@@ -215,7 +215,7 @@ class APIClient {
     return `${API_BASE_URL}/jobs/${jobId}/segments/${segmentIndex}/video`;
   }
 
-  async submitSegmentPrompt(jobId, segmentIndex, prompt, loras = [], autoFinalize = false, faceswapOptions = null, fadeToBlack = false) {
+  async submitSegmentPrompt(jobId, segmentIndex, prompt, loras = [], autoFinalize = false, faceswapOptions = null, fadeToBlack = false, customStartImage = null) {
     const formData = new FormData();
     formData.append('prompt', prompt);
 
@@ -248,6 +248,11 @@ class APIClient {
       formData.append('faceswap_image', faceswapOptions.image || '');
       formData.append('faceswap_faces_order', faceswapOptions.facesOrder || 'left-right');
       formData.append('faceswap_faces_index', faceswapOptions.facesIndex || '0');
+    }
+
+    // Custom start image (overrides default previous segment's last frame)
+    if (customStartImage) {
+      formData.append('custom_start_image', customStartImage);
     }
 
     return this.request(`/jobs/${jobId}/segments/${segmentIndex}/prompt`, {

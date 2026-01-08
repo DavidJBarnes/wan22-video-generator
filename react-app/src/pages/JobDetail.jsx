@@ -741,8 +741,22 @@ export default function JobDetail() {
               <div className="segment-content">
                 {/* Start Image */}
                 <div className="segment-image-container">
-                  <div className="segment-image-label">Start Image</div>
-                  {seg.start_image_url ? (
+                  <div className="segment-image-label">
+                    Start Image
+                    {seg.custom_start_image && (
+                      <span style={{ marginLeft: '6px', fontSize: '10px', color: '#1976d2', fontWeight: 'normal' }}>(custom)</span>
+                    )}
+                  </div>
+                  {seg.custom_start_image ? (
+                    <img
+                      src={API.getRepoImage(seg.custom_start_image)}
+                      alt="Custom start image"
+                      className="segment-image start clickable"
+                      style={{ border: '2px solid #1976d2' }}
+                      onClick={() => setLightboxImage(API.getRepoImage(seg.custom_start_image))}
+                      onError={(e) => e.target.style.display = 'none'}
+                    />
+                  ) : seg.start_image_url ? (
                     <img
                       src={seg.start_image_url}
                       alt={seg.start_image_url}
@@ -1105,6 +1119,7 @@ export default function JobDetail() {
           defaultPrompt={lastCompletedSegment?.prompt || ''}
           defaultLoras={buildDefaultLoras(lastCompletedSegment)}
           defaultFaceswap={buildDefaultFaceswap(lastCompletedSegment, job?.parameters)}
+          defaultStartImageUrl={lastCompletedSegment?.end_frame_url || null}
           onClose={() => setShowPromptModal(false)}
           onSuccess={() => {
             setShowPromptModal(false);
