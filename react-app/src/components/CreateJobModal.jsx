@@ -45,7 +45,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   const [selectedPrefix, setSelectedPrefix] = useState(null);
   const [selectedDescription, setSelectedDescription] = useState(null);
   const [autoFinalize, setAutoFinalize] = useState(false);
-  const [frameInterpolation, setFrameInterpolation] = useState('none');
+  const [frameInterpolation, setFrameInterpolation] = useState('2x');
 
   useEffect(() => {
     async function initialize() {
@@ -73,7 +73,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
         setHeight(cloneData.height || cloneData.parameters?.height || 640);
         setFps(cloneData.fps || cloneData.parameters?.fps || 16);
         setSegmentDuration(cloneData.segment_duration || cloneData.parameters?.segment_duration || 5);
-        setFrameInterpolation(cloneData.parameters?.frame_interpolation || 'none');
+        setFrameInterpolation(cloneData.parameters?.frame_interpolation || '2x');
 
         // Copy faceswap settings
         if (cloneData.parameters?.faceswap_enabled) {
