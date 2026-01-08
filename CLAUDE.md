@@ -127,7 +127,7 @@ docker compose up -d --build
 docker compose logs -f backend
 ```
 
-**Important**: Always run `docker compose up -d --build` after making frontend (react-app) or backend changes. The app runs in Docker, so code changes won't take effect until containers are rebuilt.
+**IMPORTANT**: After making ANY frontend (react-app) or backend code changes, Claude MUST run `docker compose up -d --build` to rebuild and restart the containers. The app runs in Docker, so code changes won't take effect until containers are rebuilt.
 
 ### Volumes
 - `~/backups/comfyui_queue.db:/app/comfyui_queue.db` - Persistent database
@@ -233,6 +233,17 @@ Settings stored in SQLite `settings` table, editable via Settings page:
 | `low_noise_model` | UNET model for second pass |
 | `image_repo_path` | Local image repository directory |
 | `auto_start_queue` | Start queue on backend startup |
+
+## CivitAI LoRA Downloads
+
+When downloading LoRAs from CivitAI:
+- **API Token**: `458068b9eaef12cbb8cd9c409e2a75ec`
+- **Download Path**: `david@3090.zero:~/StabilityMatrix-linux-x64/Data/Packages/ComfyUI/models/loras/wan2.2`
+
+Example download command:
+```bash
+ssh david@3090.zero "curl -L -H 'Authorization: Bearer 458068b9eaef12cbb8cd9c409e2a75ec' -o ~/StabilityMatrix-linux-x64/Data/Packages/ComfyUI/models/loras/wan2.2/LORA_NAME.safetensors 'https://civitai.com/api/download/models/MODEL_VERSION_ID'"
+```
 
 ## 3090 Server Setup
 
