@@ -18,6 +18,7 @@ from video_utils import get_segment_video_path, optimize_video_for_web
 
 from database import (
     get_all_jobs,
+    get_avg_run_time,
     get_job,
     create_job,
     delete_job,
@@ -334,12 +335,21 @@ class QueueStatus(BaseModel):
 
 # ============== Job Endpoints ==============
 
-@router.get("/jobs", response_model=List[JobResponse])
+@router.get("/jobs")
 async def list_jobs(limit: int = 100, offset: int = 0):
-    """Get all jobs with pagination, enriched with segment counts."""
+    """Get all jobs with pagination, enriched with segment counts.
+
+    Returns:
+        Object with jobs list and avg_run_time (average run time of last 5 completed jobs in seconds)
+    """
     jobs = get_all_jobs(limit=limit, offset=offset)
-    # Enrich each job with segment counts
-    return [enrich_job_with_segments(job) for job in jobs]
+    enriched_jobs = [enrich_job_with_segments(job) for job in jobs]
+    avg_time = get_avg_run_time(num_jobs=5)
+
+    return {
+        "jobs": enriched_jobs,
+        "avg_run_time": avg_time  # in seconds, or None if no completed jobs
+    }
 
 
 @router.get("/jobs/{job_id}", response_model=JobResponse)
