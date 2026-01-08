@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Button, CircularProgress, LinearProgress, Box, Typography } from '@mui/material';
+import { Button, CircularProgress, LinearProgress, Box, Typography, Checkbox, FormControlLabel } from '@mui/material';
+import SwitchVideoIcon from '@mui/icons-material/SwitchVideo';
 import API from '../api/client';
 import { formatDate, showToast } from '../utils/helpers';
 import SubmitPromptModal from '../components/SubmitPromptModal';
@@ -247,6 +248,17 @@ export default function JobDetail() {
     } catch (error) {
       console.error('Failed to restore segment:', error);
       const errorMessage = error.response?.data?.detail || error.message || 'Failed to restore segment';
+      showToast(errorMessage, 'error');
+    }
+  }
+
+  async function handleToggleFade(segmentIndex, currentValue) {
+    try {
+      await API.updateSegmentFade(id, segmentIndex, !currentValue);
+      await loadJobDetail();
+    } catch (error) {
+      console.error('Failed to update fade setting:', error);
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to update fade setting';
       showToast(errorMessage, 'error');
     }
   }
@@ -671,17 +683,20 @@ export default function JobDetail() {
             // For display: active segments get sequential numbers (1, 2, 3...)
             // Deleted segments show their original number with strikethrough
             const displayNumber = isDeleted ? seg.segment_index + 1 : ++activeCount;
-            // Can delete any non-deleted segment when job allows it
-            const canDelete = !isDeleted && (job.status === 'awaiting_prompt' || job.status === 'completed');
-            // Can restore deleted segments
-            const canRestore = isDeleted;
+            // Can delete any non-deleted segment when job is not finalized
+            const canDelete = !isDeleted && job.status === 'awaiting_prompt';
+            // Can restore deleted segments when job is not finalized
+            const canRestore = isDeleted && job.status === 'awaiting_prompt';
+
+            // Can toggle fade on completed, non-deleted segments when job is not finalized
+            const canToggleFade = !isDeleted && seg.status === 'completed' && job.status === 'awaiting_prompt';
 
             return (
-              <div
-                key={seg.id}
-                className="segment-item"
-                style={isDeleted ? { opacity: 0.5, backgroundColor: '#f5f5f5' } : {}}
-              >
+              <div key={seg.id}>
+                <div
+                  className="segment-item"
+                  style={isDeleted ? { opacity: 0.5, backgroundColor: '#f5f5f5' } : {}}
+                >
                 <div className="segment-header">
                   <div>
                     <strong style={isDeleted ? { textDecoration: 'line-through', color: '#999' } : {}}>
@@ -894,6 +909,56 @@ export default function JobDetail() {
                 </div>
               </div>
             </div>
+
+                {/* Transition Row - editable for non-finalized */}
+                {canToggleFade && (
+                  <div
+                    style={{
+                      padding: '12px 16px',
+                      border: '1px solid #e0e0e0',
+                      borderRadius: '4px',
+                      marginBottom: '12px',
+                      backgroundColor: '#fafafa',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    <Checkbox
+                      checked={Number(seg.fade_to_black) === 1}
+                      onChange={() => handleToggleFade(seg.segment_index, Number(seg.fade_to_black) === 1)}
+                      size="small"
+                      sx={{ padding: '4px' }}
+                    />
+                    <SwitchVideoIcon sx={{ color: Number(seg.fade_to_black) === 1 ? '#ff9800' : '#999', fontSize: 20 }} />
+                    <span style={{ fontSize: '13px', color: Number(seg.fade_to_black) === 1 ? '#e65100' : '#666' }}>
+                      2 second fade transition
+                    </span>
+                  </div>
+                )}
+                {/* Read-only fade indicator for finalized jobs */}
+                {!canToggleFade && seg.status === 'completed' && !isDeleted && job.status === 'completed' && Number(seg.fade_to_black) === 1 && (
+                  <div
+                    style={{
+                      padding: '12px 16px',
+                      border: '1px solid #e0e0e0',
+                      borderRadius: '4px',
+                      marginBottom: '12px',
+                      backgroundColor: '#fafafa',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    <SwitchVideoIcon sx={{ color: '#ff9800', fontSize: 20 }} />
+                    <span style={{ fontSize: '13px', color: '#e65100' }}>
+                      2 second fade transition
+                    </span>
+                  </div>
+                )}
+              </div>
             );
           });
         })()}

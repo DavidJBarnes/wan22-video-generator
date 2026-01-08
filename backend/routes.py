@@ -37,6 +37,7 @@ from database import (
     delete_segment,
     restore_segment,
     update_segment_note,
+    update_segment_fade_to_black,
     get_completed_segments_count,
     get_all_loras as db_get_all_loras,
     get_lora as db_get_lora,
@@ -451,7 +452,8 @@ async def create_new_job(job: JobCreate):
         faceswap_enabled=params.get("faceswap_enabled", False),
         faceswap_image=params.get("faceswap_image", ""),
         faceswap_faces_order=params.get("faceswap_faces_order", "left-right"),
-        faceswap_faces_index=params.get("faceswap_faces_index", "0")
+        faceswap_faces_index=params.get("faceswap_faces_index", "0"),
+        fade_to_black=params.get("fade_to_black", False)
     )
     
     return get_job(job_id)
@@ -820,7 +822,8 @@ async def update_segment_prompt_endpoint(
     faceswap_enabled: Optional[bool] = Form(False),  # Enable faceswap for this segment
     faceswap_image: Optional[str] = Form(None),  # Face image filename
     faceswap_faces_order: Optional[str] = Form("left-right"),  # Faces order
-    faceswap_faces_index: Optional[str] = Form("0")  # Faces index
+    faceswap_faces_index: Optional[str] = Form("0"),  # Faces index
+    fade_to_black: Optional[bool] = Form(False)  # Apply fade-to-black transition at segment end
 ):
     """Create or update a segment with a prompt and resume job processing (on-demand workflow).
 
@@ -832,6 +835,7 @@ async def update_segment_prompt_endpoint(
         faceswap_image: Filename of the face image to swap in (in ComfyUI input folder).
         faceswap_faces_order: Order to process faces (left-right, right-left, etc.).
         faceswap_faces_index: Which face indices to process (e.g., "0", "0,1").
+        fade_to_black: Apply fade-to-black transition at the end of this segment.
     """
     job = get_job(job_id)
     if not job:
@@ -911,7 +915,8 @@ async def update_segment_prompt_endpoint(
             faceswap_enabled=faceswap_enabled or False,
             faceswap_image=faceswap_image or "",
             faceswap_faces_order=faceswap_faces_order or "left-right",
-            faceswap_faces_index=faceswap_faces_index or "0"
+            faceswap_faces_index=faceswap_faces_index or "0",
+            fade_to_black=fade_to_black or False
         )
     else:
         # Segment exists - update its prompt, LoRA, and faceswap settings
@@ -922,7 +927,8 @@ async def update_segment_prompt_endpoint(
             faceswap_enabled=faceswap_enabled,
             faceswap_image=faceswap_image,
             faceswap_faces_order=faceswap_faces_order,
-            faceswap_faces_index=faceswap_faces_index
+            faceswap_faces_index=faceswap_faces_index,
+            fade_to_black=fade_to_black
         )
 
     # Update auto_finalize in job parameters
@@ -955,11 +961,11 @@ async def delete_segment_endpoint(job_id: int, segment_index: int):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Validate job status - allow deletion when awaiting_prompt or completed (for cleanup)
-    if job.get("status") not in ("awaiting_prompt", "completed"):
+    # Validate job status - only allow deletion on non-finalized jobs
+    if job.get("status") != "awaiting_prompt":
         raise HTTPException(
             status_code=400,
-            detail="Can only delete segments when job is awaiting prompt or completed"
+            detail="Can only delete segments when job is awaiting prompt (not finalized)"
         )
 
     # Validate the segment exists and is not already deleted
@@ -1042,6 +1048,43 @@ async def update_segment_note_endpoint(job_id: int, segment_index: int, note: st
         "status": "success",
         "message": f"Note updated for segment {segment_index}",
         "note": note[:255]
+    }
+
+
+@router.put("/jobs/{job_id}/segments/{segment_index}/fade")
+async def update_segment_fade_endpoint(job_id: int, segment_index: int, fade_to_black: bool = Form(...)):
+    """Update a segment's fade-to-black setting.
+
+    Fade-to-black applies a 2-second fade effect at the end of the segment
+    during video finalization.
+    """
+    # Get job and validate
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Only allow updating fade settings on non-finalized jobs
+    if job.get("status") != "awaiting_prompt":
+        raise HTTPException(
+            status_code=400,
+            detail="Can only update fade settings when job is awaiting prompt (not finalized)"
+        )
+
+    # Validate the segment exists
+    segment = get_segment(job_id, segment_index)
+    if not segment:
+        raise HTTPException(status_code=404, detail="Segment not found")
+
+    # Update the fade setting
+    success = update_segment_fade_to_black(job_id, segment_index, fade_to_black)
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update fade setting")
+
+    return {
+        "status": "success",
+        "message": f"Fade setting updated for segment {segment_index}",
+        "fade_to_black": fade_to_black
     }
 
 
