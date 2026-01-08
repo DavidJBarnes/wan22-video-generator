@@ -688,9 +688,9 @@ export default function JobDetail() {
                       Segment {displayNumber}
                     </strong>
                     {seg.status === 'running' && <CircularProgress size={16} sx={{ ml: 1 }} />}
-                    {seg.execution_time && (
+                    {(seg.completed_at || seg.execution_time) && (
                       <span style={{ marginLeft: '8px', color: '#666', fontSize: '12px' }}>
-                        ({formatExecutionTime(seg.execution_time)})
+                        ({seg.completed_at ? formatDate(seg.completed_at) : ''}{seg.completed_at && seg.execution_time ? ' | ' : ''}{seg.execution_time ? formatExecutionTime(seg.execution_time) : ''})
                       </span>
                     )}
                   </div>
