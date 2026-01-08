@@ -288,7 +288,7 @@ export default function Queue() {
                               </IconButton>
                             </div>
                           </div>
-                        ) : null}
+                        ) : job.id}
                       </TableCell>
                       <TableCell>
                         <img
