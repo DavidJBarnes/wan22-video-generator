@@ -4,7 +4,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "9090:9090"
     volumes:
       - ~/backups/comfyui_queue.db:/app/comfyui_queue.db:z
       - /home/david/projects/RawMaterials:/home/david/projects/RawMaterials:z
@@ -22,7 +22,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - VITE_API_URL=http://backend:8000
+      - VITE_API_URL=http://backend:9090
     depends_on:
       - backend
     restart: unless-stopped
