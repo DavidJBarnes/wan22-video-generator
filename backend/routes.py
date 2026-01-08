@@ -833,7 +833,8 @@ async def update_segment_prompt_endpoint(
     faceswap_image: Optional[str] = Form(None),  # Face image filename
     faceswap_faces_order: Optional[str] = Form("left-right"),  # Faces order
     faceswap_faces_index: Optional[str] = Form("0"),  # Faces index
-    fade_to_black: Optional[bool] = Form(False)  # Apply fade-to-black transition at segment end
+    fade_to_black: Optional[bool] = Form(False),  # Apply fade-to-black transition at segment end
+    custom_start_image: Optional[str] = Form(None)  # Custom start image path from image repo
 ):
     """Create or update a segment with a prompt and resume job processing (on-demand workflow).
 
@@ -846,6 +847,7 @@ async def update_segment_prompt_endpoint(
         faceswap_faces_order: Order to process faces (left-right, right-left, etc.).
         faceswap_faces_index: Which face indices to process (e.g., "0", "0,1").
         fade_to_black: Apply fade-to-black transition at the end of this segment.
+        custom_start_image: Path to custom start image from image repo (overrides default).
     """
     job = get_job(job_id)
     if not job:
@@ -926,7 +928,8 @@ async def update_segment_prompt_endpoint(
             faceswap_image=faceswap_image or "",
             faceswap_faces_order=faceswap_faces_order or "left-right",
             faceswap_faces_index=faceswap_faces_index or "0",
-            fade_to_black=fade_to_black or False
+            fade_to_black=fade_to_black or False,
+            custom_start_image=custom_start_image
         )
     else:
         # Segment exists - update its prompt, LoRA, and faceswap settings
@@ -938,7 +941,8 @@ async def update_segment_prompt_endpoint(
             faceswap_image=faceswap_image,
             faceswap_faces_order=faceswap_faces_order,
             faceswap_faces_index=faceswap_faces_index,
-            fade_to_black=fade_to_black
+            fade_to_black=fade_to_black,
+            custom_start_image=custom_start_image
         )
 
     # Update auto_finalize in job parameters

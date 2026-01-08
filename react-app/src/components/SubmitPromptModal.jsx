@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Button, TextField, FormControlLabel, Checkbox, FormHelperText, CircularProgress, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
+import { Button, TextField, FormControlLabel, Checkbox, FormHelperText, CircularProgress, FormControl, InputLabel, Select, MenuItem, IconButton, Tooltip } from '@mui/material';
+import RestoreIcon from '@mui/icons-material/Restore';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import LoraAutocomplete from './LoraAutocomplete';
+import ImageRepoBrowserModal from './ImageRepoBrowserModal';
 import './CreateJobModal.css';
 
 // Available face swap images (in ComfyUI input folder)
@@ -25,6 +27,7 @@ export default function SubmitPromptModal({
   defaultPrompt = '',
   defaultLoras = [],  // Array of {high_file, high_weight, low_file, low_weight} pairs
   defaultFaceswap = null,  // {enabled, image, facesOrder, facesIndex} from previous segment or job
+  defaultStartImageUrl = null,  // URL of previous segment's end frame (for display)
   onClose,
   onSuccess
 }) {
@@ -44,6 +47,10 @@ export default function SubmitPromptModal({
   const [faceswapImage, setFaceswapImage] = useState(defaultFaceswap?.image || FACESWAP_FACES[0]?.value || '');
   const [faceswapFacesOrder, setFaceswapFacesOrder] = useState(defaultFaceswap?.facesOrder || 'left-right');
   const [faceswapFacesIndex, setFaceswapFacesIndex] = useState(defaultFaceswap?.facesIndex || '0');
+
+  // Custom start image state (only for segments > 0)
+  const [customStartImage, setCustomStartImage] = useState(null);  // Path in image repo
+  const [showImageBrowser, setShowImageBrowser] = useState(false);
 
   useEffect(() => {
     loadLoras();
@@ -172,7 +179,9 @@ export default function SubmitPromptModal({
         prompt.trim(),
         lorasArray,
         autoFinalize,
-        faceswapOptions
+        faceswapOptions,
+        false,  // fadeToBlack - not used here
+        customStartImage  // Custom start image path (or null for default)
       );
 
       showToast('Prompt submitted successfully', 'success');
@@ -189,6 +198,60 @@ export default function SubmitPromptModal({
       <div className="modal-content">
         <button type="button" className="modal-close" onClick={onClose}>×</button>
         <h2>Submit Prompt for Segment {segmentIndex}</h2>
+
+        {/* Start Image Selection (only for segments > 0) */}
+        {segmentIndex > 0 && defaultStartImageUrl && (
+          <div style={{ marginBottom: '16px', padding: '12px', background: '#f5f5f5', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
+            <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '8px', color: '#666' }}>Start Image</div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+              <img
+                src={customStartImage ? API.getRepoImage(customStartImage) : defaultStartImageUrl}
+                alt="Start frame"
+                style={{
+                  width: '120px',
+                  height: '80px',
+                  objectFit: 'cover',
+                  borderRadius: '4px',
+                  border: customStartImage ? '2px solid #1976d2' : '1px solid #ddd'
+                }}
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '12px', color: customStartImage ? '#1976d2' : '#666', marginBottom: '4px' }}>
+                  {customStartImage ? 'Custom image selected' : 'Using previous segment\'s last frame'}
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowImageBrowser(true)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#1976d2',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      padding: 0,
+                      textDecoration: 'underline'
+                    }}
+                  >
+                    {customStartImage ? 'Change image' : 'Choose different image'}
+                  </button>
+                  {customStartImage && (
+                    <Tooltip title="Revert to previous segment's last frame">
+                      <IconButton
+                        size="small"
+                        onClick={() => setCustomStartImage(null)}
+                        sx={{ padding: '2px' }}
+                      >
+                        <RestoreIcon sx={{ fontSize: 18, color: '#666' }} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {defaultPrompt && (
           <div style={{ marginBottom: '16px', padding: '12px', background: '#e3f2fd', borderRadius: '4px', border: '1px solid #90caf9' }}>
@@ -450,6 +513,17 @@ export default function SubmitPromptModal({
           </div>
         </form>
       </div>
+
+      {/* Image Browser Modal for custom start image selection */}
+      {showImageBrowser && (
+        <ImageRepoBrowserModal
+          onSelect={(imagePath) => {
+            setCustomStartImage(imagePath);
+            setShowImageBrowser(false);
+          }}
+          onClose={() => setShowImageBrowser(false)}
+        />
+      )}
     </div>
   );
 }
