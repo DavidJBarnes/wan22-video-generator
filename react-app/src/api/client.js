@@ -215,7 +215,7 @@ class APIClient {
     return `${API_BASE_URL}/jobs/${jobId}/segments/${segmentIndex}/video`;
   }
 
-  async submitSegmentPrompt(jobId, segmentIndex, prompt, loras = [], autoFinalize = false, faceswapOptions = null) {
+  async submitSegmentPrompt(jobId, segmentIndex, prompt, loras = [], autoFinalize = false, faceswapOptions = null, fadeToBlack = false) {
     const formData = new FormData();
     formData.append('prompt', prompt);
 
@@ -238,6 +238,9 @@ class APIClient {
 
     // Auto-finalize flag
     formData.append('auto_finalize', autoFinalize.toString());
+
+    // Fade to black flag
+    formData.append('fade_to_black', fadeToBlack.toString());
 
     // Faceswap options (per-segment)
     if (faceswapOptions) {
@@ -269,6 +272,15 @@ class APIClient {
     const formData = new FormData();
     formData.append('note', note);
     return this.request(`/jobs/${jobId}/segments/${segmentIndex}/note`, {
+      method: 'PUT',
+      body: formData
+    });
+  }
+
+  async updateSegmentFade(jobId, segmentIndex, fadeToBlack) {
+    const formData = new FormData();
+    formData.append('fade_to_black', fadeToBlack.toString());
+    return this.request(`/jobs/${jobId}/segments/${segmentIndex}/fade`, {
       method: 'PUT',
       body: formData
     });

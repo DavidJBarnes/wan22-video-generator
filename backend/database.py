@@ -210,6 +210,12 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Add fade_to_black column for transition effect at segment end
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN fade_to_black INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Add priority column for queue ordering (lower number = higher priority)
         try:
             cursor.execute("ALTER TABLE jobs ADD COLUMN priority INTEGER DEFAULT 0")
@@ -958,7 +964,8 @@ def create_first_segment(
     faceswap_enabled: bool = False,
     faceswap_image: Optional[str] = None,
     faceswap_faces_order: str = "left-right",
-    faceswap_faces_index: str = "0"
+    faceswap_faces_index: str = "0",
+    fade_to_black: bool = False
 ):
     """Create the first segment for a job (on-demand workflow).
 
@@ -975,16 +982,19 @@ def create_first_segment(
         faceswap_image: Filename of the face image to swap in
         faceswap_faces_order: Order to process faces (left-right, right-left, etc.)
         faceswap_faces_index: Which face indices to process (e.g., "0", "0,1")
+        fade_to_black: Whether to apply fade-to-black transition at segment end
     """
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora,
-                                      faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index)
-            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)
+                                      faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index,
+                                      fade_to_black)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (job_id, 0, initial_prompt, start_image_url,
               serialize_loras(high_loras), serialize_loras(low_loras),
-              1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index))
+              1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index,
+              1 if fade_to_black else 0))
 
 
 def create_next_segment(
@@ -997,7 +1007,8 @@ def create_next_segment(
     faceswap_enabled: bool = False,
     faceswap_image: Optional[str] = None,
     faceswap_faces_order: str = "left-right",
-    faceswap_faces_index: str = "0"
+    faceswap_faces_index: str = "0",
+    fade_to_black: bool = False
 ):
     """Create the next segment for a job (on-demand workflow).
 
@@ -1014,16 +1025,19 @@ def create_next_segment(
         faceswap_image: Filename of the face image to swap in
         faceswap_faces_order: Order to process faces (left-right, right-left, etc.)
         faceswap_faces_index: Which face indices to process (e.g., "0", "0,1")
+        fade_to_black: Whether to apply fade-to-black transition at segment end
     """
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora,
-                                      faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index)
-            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)
+                                      faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index,
+                                      fade_to_black)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (job_id, segment_index, prompt, start_image_url,
               serialize_loras(high_loras), serialize_loras(low_loras),
-              1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index))
+              1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index,
+              1 if fade_to_black else 0))
 
 
 def create_segments_for_job(
@@ -1198,7 +1212,8 @@ def update_segment_prompt(
     faceswap_enabled: Optional[bool] = None,
     faceswap_image: Optional[str] = None,
     faceswap_faces_order: Optional[str] = None,
-    faceswap_faces_index: Optional[str] = None
+    faceswap_faces_index: Optional[str] = None,
+    fade_to_black: Optional[bool] = None
 ):
     """Update a segment's prompt and optionally its LoRA and faceswap settings.
 
@@ -1212,6 +1227,7 @@ def update_segment_prompt(
         faceswap_image: Face image filename, or None to not update
         faceswap_faces_order: Faces order, or None to not update
         faceswap_faces_index: Faces index, or None to not update
+        fade_to_black: Whether to apply fade-to-black transition at segment end, or None to not update
     """
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -1242,6 +1258,10 @@ def update_segment_prompt(
         if faceswap_faces_index is not None:
             updates.append("faceswap_faces_index = ?")
             params.append(faceswap_faces_index)
+
+        if fade_to_black is not None:
+            updates.append("fade_to_black = ?")
+            params.append(1 if fade_to_black else 0)
 
         params.extend([job_id, segment_index])
 
@@ -1330,6 +1350,25 @@ def update_segment_note(job_id: int, segment_index: int, note: str) -> bool:
         cursor.execute(
             "UPDATE job_segments SET note = ? WHERE job_id = ? AND segment_index = ?",
             (note, job_id, segment_index)
+        )
+        return cursor.rowcount > 0
+
+
+def update_segment_fade_to_black(job_id: int, segment_index: int, fade_to_black: bool) -> bool:
+    """Update a segment's fade_to_black setting.
+
+    Args:
+        job_id: The job ID
+        segment_index: The segment index
+        fade_to_black: Whether to apply fade-to-black transition at segment end
+
+    Returns True if the segment was updated, False otherwise.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE job_segments SET fade_to_black = ? WHERE job_id = ? AND segment_index = ?",
+            (1 if fade_to_black else 0, job_id, segment_index)
         )
         return cursor.rowcount > 0
 
