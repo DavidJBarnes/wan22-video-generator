@@ -23,6 +23,7 @@ from database import (
     update_segment_status,
     update_segment_start_image,
     get_completed_segments_count,
+    get_last_active_segment_before,
     parse_loras,
     add_job_log
 )
@@ -305,14 +306,26 @@ class QueueManager:
 
             # Check if segment has a start image (required for all segments)
             if segment_index > 0 and not segment.get("start_image_url"):
-                # Get the previous segment's end frame
-                prev_segment = segments[segment_index - 1]
-                if prev_segment.get("end_frame_url"):
-                    # Update this segment's start image
+                # Find the last non-deleted, completed segment to use as start image
+                # This handles cases where earlier segments were soft-deleted
+                prev_segment = get_last_active_segment_before(job_id, segment_index)
+                if prev_segment and prev_segment.get("end_frame_url"):
+                    # Use the previous active segment's end frame
                     update_segment_start_image(job_id, segment_index, prev_segment["end_frame_url"])
                     segment["start_image_url"] = prev_segment["end_frame_url"]
+                elif job.get("input_image"):
+                    # No active previous segment - use the job's original input image
+                    comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
+                    input_image = job["input_image"]
+                    if input_image.startswith("http"):
+                        start_url = input_image
+                    else:
+                        start_url = f"{comfyui_url}/view?filename={input_image}&subfolder=&type=input"
+                    update_segment_start_image(job_id, segment_index, start_url)
+                    segment["start_image_url"] = start_url
+                    print(f"[QueueManager] Segment {segment_index} using original input image (previous segments deleted)")
                 else:
-                    print(f"[QueueManager] Segment {segment_index} missing start image, waiting for previous segment")
+                    print(f"[QueueManager] Segment {segment_index} missing start image, no fallback available")
                     continue
 
             # Process this segment
