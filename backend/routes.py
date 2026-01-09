@@ -344,7 +344,7 @@ async def list_jobs(limit: int = 100, offset: int = 0):
     """
     jobs = get_all_jobs(limit=limit, offset=offset)
     enriched_jobs = [enrich_job_with_segments(job) for job in jobs]
-    avg_time = get_avg_run_time(num_jobs=5)
+    avg_time = get_avg_run_time(num_segments=5)
 
     return {
         "jobs": enriched_jobs,

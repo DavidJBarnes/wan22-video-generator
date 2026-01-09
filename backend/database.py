@@ -434,44 +434,32 @@ def get_all_jobs(limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         return [_row_to_job_dict(row) for row in cursor.fetchall()]
 
 
-def get_avg_run_time(num_jobs: int = 5) -> Optional[float]:
-    """Calculate average total run time from the last N completed jobs.
+def get_avg_run_time(num_segments: int = 5) -> Optional[float]:
+    """Calculate average run time from the last N completed segments.
 
     Args:
-        num_jobs: Number of recent completed jobs to average (default 5)
+        num_segments: Number of recent completed segments to average (default 5)
 
     Returns:
-        Average run time in seconds, or None if no completed jobs
+        Average run time in seconds, or None if no completed segments
     """
     with get_connection() as conn:
         cursor = conn.cursor()
-        # Get the last N completed jobs
-        cursor.execute(
-            "SELECT id FROM jobs WHERE status = 'completed' ORDER BY completed_at DESC LIMIT ?",
-            (num_jobs,)
-        )
-        job_ids = [row[0] for row in cursor.fetchall()]
+        # Get the average of the last N completed segments
+        cursor.execute("""
+            SELECT AVG(execution_time)
+            FROM (
+                SELECT execution_time
+                FROM job_segments
+                WHERE status = 'completed'
+                  AND execution_time IS NOT NULL
+                ORDER BY completed_at DESC
+                LIMIT ?
+            )
+        """, (num_segments,))
 
-        if not job_ids:
-            return None
-
-        # Sum execution_time for all completed segments of these jobs
-        placeholders = ','.join('?' * len(job_ids))
-        cursor.execute(f"""
-            SELECT job_id, SUM(execution_time) as total_time
-            FROM job_segments
-            WHERE job_id IN ({placeholders})
-              AND status = 'completed'
-              AND execution_time IS NOT NULL
-            GROUP BY job_id
-        """, job_ids)
-
-        totals = [row[1] for row in cursor.fetchall() if row[1] is not None]
-
-        if not totals:
-            return None
-
-        return sum(totals) / len(totals)
+        result = cursor.fetchone()
+        return result[0] if result and result[0] is not None else None
 
 
 def get_pending_jobs() -> List[Dict[str, Any]]:
