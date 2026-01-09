@@ -1759,6 +1759,94 @@ async def get_image_from_repo(path: str):
     return FileResponse(str(full_path), media_type=media_type)
 
 
+# Thumbnail cache directory
+THUMBNAIL_CACHE_DIR = Path(__file__).parent / "thumbnail_cache"
+THUMBNAIL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@router.get("/image-repo/thumbnail")
+async def get_image_thumbnail(path: str, size: int = 150):
+    """Serve a thumbnail of an image from the repository.
+
+    Generates and caches thumbnails for faster loading in grid views.
+    Thumbnails are stored in backend/thumbnail_cache/ with hashed filenames.
+
+    Args:
+        path: Relative path to the image in the repository
+        size: Maximum dimension (width or height) of the thumbnail (default: 150)
+    """
+    from fastapi.responses import FileResponse, Response
+    from PIL import Image
+    import hashlib
+    import io
+
+    # Limit size to reasonable bounds
+    size = max(50, min(size, 400))
+
+    repo_root = get_setting("image_repo_path", "")
+
+    if not repo_root:
+        raise HTTPException(status_code=400, detail="Image repository path not configured")
+
+    repo_root_path = Path(repo_root)
+
+    # Build full path with security check
+    full_path = repo_root_path / path
+    full_path = full_path.resolve()
+
+    # Security: Ensure path is within repo root
+    if not str(full_path).startswith(str(repo_root_path.resolve())):
+        raise HTTPException(status_code=403, detail="Access denied: Path is outside repository")
+
+    if not full_path.exists():
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    if not full_path.is_file():
+        raise HTTPException(status_code=400, detail="Path is not a file")
+
+    # Check file extension
+    if full_path.suffix.lower() not in ['.jpg', '.jpeg', '.png']:
+        raise HTTPException(status_code=400, detail="Only JPG and PNG images are supported")
+
+    # Generate cache key from path, size, and file modification time
+    file_mtime = full_path.stat().st_mtime
+    cache_key = f"{path}:{size}:{file_mtime}"
+    cache_hash = hashlib.md5(cache_key.encode()).hexdigest()
+    cache_path = THUMBNAIL_CACHE_DIR / f"{cache_hash}.jpg"
+
+    # Return cached thumbnail if it exists
+    if cache_path.exists():
+        return FileResponse(
+            str(cache_path),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=86400"}  # Cache for 24 hours
+        )
+
+    # Generate thumbnail
+    try:
+        with Image.open(full_path) as img:
+            # Convert to RGB if necessary (for PNG with transparency)
+            if img.mode in ('RGBA', 'P'):
+                img = img.convert('RGB')
+
+            # Use thumbnail() which maintains aspect ratio
+            img.thumbnail((size, size), Image.Resampling.LANCZOS)
+
+            # Save to cache
+            img.save(cache_path, "JPEG", quality=85, optimize=True)
+
+        return FileResponse(
+            str(cache_path),
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=86400"}
+        )
+    except Exception as e:
+        print(f"[Thumbnail] Failed to generate thumbnail for {path}: {e}")
+        # Fall back to serving the original image
+        media_type = "image/jpeg" if full_path.suffix.lower() in ['.jpg', '.jpeg'] else "image/png"
+        return FileResponse(str(full_path), media_type=media_type)
+
+
 @router.post("/image-repo/select")
 async def select_image_from_repo(image_path: str = Form(...)):
     """Upload an image from the repository to ComfyUI.

@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
-import { CircularProgress, Button } from '@mui/material';
+import { CircularProgress, Button, Pagination, Box } from '@mui/material';
 import API from '../api/client';
+import LazyImage from './LazyImage';
 import './CreateJobModal.css';
+
+const IMAGES_PER_PAGE = 24;
 
 export default function ImageRepoBrowserModal({ onSelect, onClose }) {
   const [currentPath, setCurrentPath] = useState('');
@@ -10,10 +13,16 @@ export default function ImageRepoBrowserModal({ onSelect, onClose }) {
   const [breadcrumbs, setBreadcrumbs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [imagePage, setImagePage] = useState(1);
 
   useEffect(() => {
     loadDirectory(currentPath);
+    setImagePage(1); // Reset page when navigating
   }, [currentPath]);
+
+  // Pagination for images
+  const imagePageCount = Math.ceil(images.length / IMAGES_PER_PAGE);
+  const paginatedImages = images.slice((imagePage - 1) * IMAGES_PER_PAGE, imagePage * IMAGES_PER_PAGE);
 
   async function loadDirectory(path) {
     setLoading(true);
@@ -123,8 +132,8 @@ export default function ImageRepoBrowserModal({ onSelect, onClose }) {
                 >
                   <div style={{ fontSize: '32px', marginBottom: '4px' }}>
                     {folder.preview_images?.length > 0 ? (
-                      <img
-                        src={API.getRepoImage(folder.preview_images[0])}
+                      <LazyImage
+                        src={API.getRepoThumbnail(folder.preview_images[0], 100)}
                         alt=""
                         style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '4px' }}
                         onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }}
@@ -139,7 +148,7 @@ export default function ImageRepoBrowserModal({ onSelect, onClose }) {
               ))}
 
               {/* Images - large preview with clear aspect ratio */}
-              {images.map(image => (
+              {paginatedImages.map(image => (
                 <div
                   key={image.path}
                   onClick={() => handleImageClick(image)}
@@ -155,8 +164,8 @@ export default function ImageRepoBrowserModal({ onSelect, onClose }) {
                   onMouseOut={(e) => { e.currentTarget.style.borderColor = '#e0e0e0'; e.currentTarget.style.transform = 'scale(1)'; }}
                 >
                   <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px' }}>
-                    <img
-                      src={API.getRepoImage(image.path)}
+                    <LazyImage
+                      src={API.getRepoThumbnail(image.path, 200)}
                       alt={image.name}
                       style={{ maxWidth: '100%', maxHeight: '172px', objectFit: 'contain', borderRadius: '4px' }}
                       onError={(e) => {
@@ -176,6 +185,22 @@ export default function ImageRepoBrowserModal({ onSelect, onClose }) {
                 </div>
               )}
             </div>
+          )}
+
+          {/* Image pagination */}
+          {!loading && !error && imagePageCount > 1 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mt: 2 }}>
+              <span style={{ color: '#666', fontSize: '12px' }}>
+                {images.length} images
+              </span>
+              <Pagination
+                count={imagePageCount}
+                page={imagePage}
+                onChange={(e, value) => setImagePage(value)}
+                color="primary"
+                size="small"
+              />
+            </Box>
           )}
         </div>
 

@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { FormControl, InputLabel, Select, MenuItem, Pagination, Box, CircularProgress, Button } from '@mui/material';
+import LazyImage from '../components/LazyImage';
 
 const FOLDERS_PER_PAGE = 24;
+const IMAGES_PER_PAGE = 48;
 
 // Fisher-Yates shuffle
 function shuffleArray(array) {
@@ -37,10 +39,12 @@ export default function ImageRepo() {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [folderPage, setFolderPage] = useState(1);
+  const [imagePage, setImagePage] = useState(1);
 
   useEffect(() => {
     loadDirectory(currentPath);
     setFolderPage(1); // Reset page when navigating
+    setImagePage(1);  // Reset image page when navigating
   }, [currentPath]);
 
   useEffect(() => {
@@ -115,8 +119,22 @@ export default function ImageRepo() {
     return folders.slice((folderPage - 1) * FOLDERS_PER_PAGE, folderPage * FOLDERS_PER_PAGE);
   }, [folders, folderPage, isRootLevel]);
 
+  // Pagination for images (applies to all directories)
+  const imagePageCount = Math.ceil(images.length / IMAGES_PER_PAGE);
+  const paginatedImages = useMemo(() => {
+    return images.slice((imagePage - 1) * IMAGES_PER_PAGE, imagePage * IMAGES_PER_PAGE);
+  }, [images, imagePage]);
+
   function handleFolderPageChange(event, value) {
     setFolderPage(value);
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+      mainContent.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
+  function handleImagePageChange(event, value) {
+    setImagePage(value);
     const mainContent = document.querySelector('.main-content');
     if (mainContent) {
       mainContent.scrollTo({ top: 0, behavior: 'smooth' });
@@ -636,9 +654,9 @@ export default function ImageRepo() {
                     {folder.preview_images?.length > 0 ? (
                       <div className={`folder-collage collage-${Math.min(folder.preview_images.length, 3)}`}>
                         {folder.preview_images.slice(0, 3).map((imgPath, i) => (
-                          <img
+                          <LazyImage
                             key={i}
-                            src={API.getRepoImage(imgPath)}
+                            src={API.getRepoThumbnail(imgPath, 100)}
                             alt=""
                             onError={(e) => {
                               e.target.style.display = 'none';
@@ -660,31 +678,35 @@ export default function ImageRepo() {
                 </div>
               ))}
 
-              {images.map((image, index) => (
-                <div
-                  key={image.path}
-                  className="repo-item image"
-                  onClick={() => openImagePreview(image, index)}
-                >
-                  <div className="repo-item-preview">
-                    <img
-                      src={API.getRepoImage(image.path)}
-                      alt={image.name}
-                      onError={(e) => {
-                        e.target.src = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22%3E%3Crect fill=%22%23ddd%22 width=%22200%22 height=%22200%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23999%22%3E🖼️%3C/text%3E%3C/svg%3E';
-                      }}
-                    />
+              {paginatedImages.map((image, index) => {
+                // Calculate actual index in full images array for preview navigation
+                const actualIndex = (imagePage - 1) * IMAGES_PER_PAGE + index;
+                return (
+                  <div
+                    key={image.path}
+                    className="repo-item image"
+                    onClick={() => openImagePreview(image, actualIndex)}
+                  >
+                    <div className="repo-item-preview">
+                      <LazyImage
+                        src={API.getRepoThumbnail(image.path, 200)}
+                        alt={image.name}
+                        onError={(e) => {
+                          e.target.src = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22%3E%3Crect fill=%22%23ddd%22 width=%22200%22 height=%22200%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23999%22%3E🖼️%3C/text%3E%3C/svg%3E';
+                        }}
+                      />
+                    </div>
+                    <div className="repo-item-name">
+                      {image.name}
+                      {image.rating && (
+                        <span style={{ marginLeft: '6px', color: '#f5a623' }}>
+                          {'★'.repeat(image.rating)}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="repo-item-name">
-                    {image.name}
-                    {image.rating && (
-                      <span style={{ marginLeft: '6px', color: '#f5a623' }}>
-                        {'★'.repeat(image.rating)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="image-repo-list">
@@ -700,26 +722,29 @@ export default function ImageRepo() {
                 </div>
               ))}
 
-              {images.map((image, index) => (
-                <div
-                  key={image.path}
-                  className="repo-list-item image"
-                  onClick={() => openImagePreview(image, index)}
-                >
-                  <span className="repo-list-icon">🖼️</span>
-                  <span className="repo-list-name">
-                    {image.name}
-                    {image.rating && (
-                      <span style={{ marginLeft: '8px', color: '#f5a623' }}>
-                        {'★'.repeat(image.rating)}
-                      </span>
-                    )}
-                  </span>
-                  <span className="repo-list-type">
-                    {image.name.split('.').pop().toUpperCase()}
-                  </span>
-                </div>
-              ))}
+              {paginatedImages.map((image, index) => {
+                const actualIndex = (imagePage - 1) * IMAGES_PER_PAGE + index;
+                return (
+                  <div
+                    key={image.path}
+                    className="repo-list-item image"
+                    onClick={() => openImagePreview(image, actualIndex)}
+                  >
+                    <span className="repo-list-icon">🖼️</span>
+                    <span className="repo-list-name">
+                      {image.name}
+                      {image.rating && (
+                        <span style={{ marginLeft: '8px', color: '#f5a623' }}>
+                          {'★'.repeat(image.rating)}
+                        </span>
+                      )}
+                    </span>
+                    <span className="repo-list-type">
+                      {image.name.split('.').pop().toUpperCase()}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -729,6 +754,22 @@ export default function ImageRepo() {
                 count={folderPageCount}
                 page={folderPage}
                 onChange={handleFolderPageChange}
+                color="primary"
+                showFirstButton
+                showLastButton
+              />
+            </Box>
+          )}
+
+          {imagePageCount > 1 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mt: 3, mb: 2 }}>
+              <span style={{ color: '#666', fontSize: '14px' }}>
+                {images.length} images
+              </span>
+              <Pagination
+                count={imagePageCount}
+                page={imagePage}
+                onChange={handleImagePageChange}
                 color="primary"
                 showFirstButton
                 showLastButton
