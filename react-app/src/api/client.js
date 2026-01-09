@@ -328,6 +328,10 @@ class APIClient {
     return `${API_BASE_URL}/image-repo/image?path=${encodeURIComponent(path)}`;
   }
 
+  getRepoThumbnail(path, size = 150) {
+    return `${API_BASE_URL}/image-repo/thumbnail?path=${encodeURIComponent(path)}&size=${size}`;
+  }
+
   async selectImageFromRepo(imagePath) {
     const formData = new FormData();
     formData.append('image_path', imagePath);
