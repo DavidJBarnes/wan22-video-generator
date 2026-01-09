@@ -63,6 +63,7 @@ from config import (
     DEFAULT_WIDTH,
     DEFAULT_HEIGHT,
     DEFAULT_FPS,
+    DEFAULT_FRAME_INTERPOLATION,
     MODELS,
     GENERATION_PARAMS,
     DEFAULT_NEGATIVE_PROMPT
@@ -1111,6 +1112,7 @@ async def get_settings():
     settings.setdefault("default_width", str(DEFAULT_WIDTH))
     settings.setdefault("default_height", str(DEFAULT_HEIGHT))
     settings.setdefault("default_fps", str(DEFAULT_FPS))
+    settings.setdefault("default_frame_interpolation", DEFAULT_FRAME_INTERPOLATION)
     settings.setdefault("default_negative_prompt", DEFAULT_NEGATIVE_PROMPT)
     settings.setdefault("models", MODELS)
     settings.setdefault("generation_params", GENERATION_PARAMS)
