@@ -420,10 +420,10 @@ def build_wan_i2v_workflow(
         print(f"[Workflow] Set output prefix: {safe_prefix}")
 
     # Add RIFE frame interpolation if enabled
-    # "2x" doubles frames while keeping original fps, resulting in 2x duration (10s from 5s)
+    # "2x" doubles frames AND doubles fps, maintaining original duration with smoother motion
     if frame_interpolation == "2x":
         print(f"[Workflow] Adding RIFE 2x frame interpolation")
-        output_fps = fps  # Keep original fps = double duration with interpolated frames
+        output_fps = fps * 2  # Double fps to maintain duration with interpolated frames
 
         # Add RIFE VFI node (node 200)
         workflow["200"] = {
@@ -444,8 +444,8 @@ def build_wan_i2v_workflow(
             # With faceswap: 183 (ReActor) → 200 (RIFE) → 186 (VHS_VideoCombine)
             workflow["200"]["inputs"]["frames"] = ["183", 0]
             workflow["186"]["inputs"]["images"] = ["200", 0]
-            workflow["186"]["inputs"]["frame_rate"] = output_fps  # Keep original fps for 2x duration
-            print(f"[Workflow] RIFE wired: ReActor(183) → RIFE(200) → VHS_VideoCombine(186) @ {output_fps}fps")
+            workflow["186"]["inputs"]["frame_rate"] = output_fps  # Doubled fps for same duration
+            print(f"[Workflow] RIFE wired: ReActor(183) → RIFE(200) → VHS_VideoCombine(186) @ {output_fps}fps (2x interpolated)")
         else:
             # Without faceswap + RIFE: use VHS_VideoCombine instead of CreateVideo+SaveVideo
             # Remove CreateVideo and SaveVideo nodes
@@ -456,7 +456,7 @@ def build_wan_i2v_workflow(
             workflow["186"] = {
                 "class_type": "VHS_VideoCombine",
                 "inputs": {
-                    "frame_rate": output_fps,  # Keep original fps for 2x duration
+                    "frame_rate": output_fps,  # Doubled fps for same duration
                     "loop_count": 0,
                     "filename_prefix": safe_prefix,
                     "format": "video/h264-mp4",
@@ -473,6 +473,6 @@ def build_wan_i2v_workflow(
 
             # Wire: VAEDecode(87) → RIFE(200) → VHS_VideoCombine(186)
             workflow["200"]["inputs"]["frames"] = ["87", 0]
-            print(f"[Workflow] RIFE wired: VAEDecode(87) → RIFE(200) → VHS_VideoCombine(186) @ {output_fps}fps")
+            print(f"[Workflow] RIFE wired: VAEDecode(87) → RIFE(200) → VHS_VideoCombine(186) @ {output_fps}fps (2x interpolated)")
 
     return workflow
