@@ -1544,21 +1544,6 @@ def get_lora(lora_id: int) -> Optional[Dict[str, Any]]:
         return dict(row) if row else None
 
 
-def get_lora_by_base_name(base_name: str) -> Optional[Dict[str, Any]]:
-    """Get a grouped LoRA by its base name."""
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, base_name, high_file, low_file, friendly_name, url,
-                   prompt_text, trigger_keywords, rating, notes, preview_image_url,
-                   default_high_weight, default_low_weight, created_at, updated_at
-            FROM lora_library
-            WHERE base_name = ?
-        """, (base_name,))
-        row = cursor.fetchone()
-        return dict(row) if row else None
-
-
 def get_lora_by_file(filename: str) -> Optional[Dict[str, Any]]:
     """Get a grouped LoRA by either its high or low filename."""
     with get_connection() as conn:

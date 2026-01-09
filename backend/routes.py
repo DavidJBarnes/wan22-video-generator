@@ -8,7 +8,6 @@ import base64
 import json
 import os
 import re
-import shutil
 import subprocess
 import tempfile
 import httpx
@@ -27,14 +26,12 @@ from database import (
     get_all_settings,
     get_setting,
     update_settings,
-    create_segments_for_job,
     create_first_segment,
     create_next_segment,
     get_job_segments as db_get_job_segments,
     update_segment_prompt,
     get_segment,
     get_last_active_segment_before,
-    delete_job_segments,
     delete_segment,
     restore_segment,
     update_segment_note,
