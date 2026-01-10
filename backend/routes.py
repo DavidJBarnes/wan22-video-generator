@@ -32,6 +32,7 @@ from database import (
     update_segment_prompt,
     get_segment,
     get_last_active_segment_before,
+    delete_job_segments,
     delete_segment,
     restore_segment,
     update_segment_note,
