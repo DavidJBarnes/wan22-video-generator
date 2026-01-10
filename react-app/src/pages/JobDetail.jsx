@@ -604,7 +604,7 @@ export default function JobDetail() {
 
         {/* Action Buttons */}
         <div style={{ marginTop: '20px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          {(job.status === 'pending' || job.status === 'awaiting_prompt') && (
+          {(job.status === 'pending' || job.status === 'awaiting_prompt' || job.status === 'failed') && (
             <Button
               variant="contained"
               onClick={() => setShowEditModal(true)}

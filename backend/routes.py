@@ -476,8 +476,8 @@ async def update_job_endpoint(job_id: int, job_data: JobUpdate):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    if job["status"] not in ("pending", "awaiting_prompt"):
-        raise HTTPException(status_code=400, detail="Only pending or awaiting_prompt jobs can be edited")
+    if job["status"] not in ("pending", "awaiting_prompt", "failed"):
+        raise HTTPException(status_code=400, detail="Only pending, awaiting_prompt, or failed jobs can be edited")
 
     # Build full prompt with prompt_identity if prompt is being updated
     full_prompt = build_full_prompt(job_data.prompt) if job_data.prompt is not None else None
