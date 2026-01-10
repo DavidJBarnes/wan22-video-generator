@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Button, Rating, Box, Typography, CircularProgress } from '@mui/material';
+import { Button, Rating, Box, Typography, CircularProgress, FormControl, InputLabel, Select, MenuItem, Chip } from '@mui/material';
 import { Link } from 'react-router-dom';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
@@ -12,6 +12,11 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
   const [relatedJobs, setRelatedJobs] = useState([]);
   const [loadingJobs, setLoadingJobs] = useState(false);
   const imageRef = useRef(null);
+
+  // Tag state
+  const [availableTags, setAvailableTags] = useState([]);
+  const [imageTags, setImageTags] = useState([]);
+  const [loadingTags, setLoadingTags] = useState(false);
 
   // Lock scroll on .main-content when modal is open
   useEffect(() => {
@@ -45,6 +50,65 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
     }
     loadRelatedJobs();
   }, [image.name]);
+
+  // Load available tags once
+  useEffect(() => {
+    async function loadAvailableTags() {
+      try {
+        const data = await API.getImageTags();
+        setAvailableTags(data.tags || []);
+      } catch (error) {
+        console.error('Failed to load available tags:', error);
+      }
+    }
+    loadAvailableTags();
+  }, []);
+
+  // Load image's tags when image changes
+  useEffect(() => {
+    async function loadImageTags() {
+      setLoadingTags(true);
+      try {
+        const data = await API.getTagsForImage(image.path);
+        setImageTags(data.tags || []);
+      } catch (error) {
+        console.error('Failed to load image tags:', error);
+        setImageTags([]);
+      }
+      setLoadingTags(false);
+    }
+    loadImageTags();
+  }, [image.path]);
+
+  async function handleAddTag(tagId) {
+    if (!tagId) return;
+    try {
+      await API.addTagToImage(image.path, tagId);
+      // Refresh image tags
+      const data = await API.getTagsForImage(image.path);
+      setImageTags(data.tags || []);
+    } catch (error) {
+      console.error('Failed to add tag:', error);
+      showToast('Failed to add tag', 'error');
+    }
+  }
+
+  async function handleRemoveTag(tagId) {
+    try {
+      await API.removeTagFromImage(image.path, tagId);
+      // Refresh image tags
+      const data = await API.getTagsForImage(image.path);
+      setImageTags(data.tags || []);
+    } catch (error) {
+      console.error('Failed to remove tag:', error);
+      showToast('Failed to remove tag', 'error');
+    }
+  }
+
+  // Get tags that are not yet applied to this image
+  const unassignedTags = availableTags.filter(
+    tag => !imageTags.some(imgTag => imgTag.id === tag.id)
+  );
 
   // Keyboard navigation and shortcuts
   useEffect(() => {
@@ -206,6 +270,56 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
               onChange={handleRatingChange}
               size="medium"
             />
+          </div>
+
+          {/* Tags */}
+          <div style={{ marginBottom: '20px' }}>
+            <Typography variant="subtitle2" sx={{ fontSize: '12px', color: '#666', mb: 1 }}>
+              Tags
+            </Typography>
+            {loadingTags ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+                <CircularProgress size={20} />
+              </Box>
+            ) : (
+              <>
+                {/* Tag pills */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: imageTags.length > 0 ? '8px' : 0 }}>
+                  {imageTags.map(tag => (
+                    <Chip
+                      key={tag.id}
+                      label={tag.name}
+                      size="small"
+                      onDelete={() => handleRemoveTag(tag.id)}
+                      sx={{ height: '24px' }}
+                    />
+                  ))}
+                </div>
+                {/* Add tag dropdown */}
+                {unassignedTags.length > 0 && (
+                  <FormControl size="small" fullWidth sx={{ mt: imageTags.length > 0 ? 0 : 0 }}>
+                    <InputLabel>Add tag</InputLabel>
+                    <Select
+                      value=""
+                      label="Add tag"
+                      onChange={(e) => handleAddTag(e.target.value)}
+                      sx={{ fontSize: '13px' }}
+                    >
+                      {unassignedTags.map(tag => (
+                        <MenuItem key={tag.id} value={tag.id} sx={{ fontSize: '13px' }}>
+                          {tag.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                )}
+                {availableTags.length === 0 && (
+                  <Typography variant="body2" sx={{ color: '#999', fontStyle: 'italic', fontSize: '12px' }}>
+                    No tags available. Create tags in Settings.
+                  </Typography>
+                )}
+              </>
+            )}
           </div>
 
           {/* Jobs Using This Image */}

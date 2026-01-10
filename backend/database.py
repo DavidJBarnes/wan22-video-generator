@@ -348,6 +348,32 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_job_logs_job_id ON job_logs(job_id)
         """)
 
+        # Image tags table - stores user-defined tags for organizing images
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS image_tags (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+
+        # Image tag associations - many-to-many relationship between images and tags
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS image_tag_associations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                image_path TEXT NOT NULL,
+                tag_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (tag_id) REFERENCES image_tags(id) ON DELETE CASCADE,
+                UNIQUE(image_path, tag_id)
+            )
+        """)
+
+        # Index for fast tag lookup by image path
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_image_tag_assoc_path ON image_tag_associations(image_path)
+        """)
+
         # Insert default settings if not exist
         # Note: comfyui_url should match config.py COMFYUI_SERVER_URL
         default_settings = {
@@ -1940,3 +1966,156 @@ def store_uploaded_image(content_hash: str, comfyui_filename: str, original_file
 def compute_image_hash(image_data: bytes) -> str:
     """Compute SHA256 hash of image data."""
     return hashlib.sha256(image_data).hexdigest()
+
+
+# ============== Image Tag Functions ==============
+
+def get_all_image_tags() -> List[Dict[str, Any]]:
+    """Get all image tags ordered by name."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, name, created_at
+            FROM image_tags
+            ORDER BY name ASC
+        """)
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_image_tag(tag_id: int) -> Optional[Dict[str, Any]]:
+    """Get a specific image tag by ID."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, name, created_at
+            FROM image_tags
+            WHERE id = ?
+        """, (tag_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_image_tag_by_name(name: str) -> Optional[Dict[str, Any]]:
+    """Get a specific image tag by name."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, name, created_at
+            FROM image_tags
+            WHERE name = ?
+        """, (name,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def create_image_tag(name: str) -> int:
+    """Create a new image tag and return its ID.
+
+    Raises sqlite3.IntegrityError if tag name already exists.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO image_tags (name, created_at)
+            VALUES (?, ?)
+        """, (name.strip(), utc_now_iso()))
+        return cursor.lastrowid
+
+
+def update_image_tag(tag_id: int, name: str) -> bool:
+    """Update an image tag's name.
+
+    Returns True if updated, False if tag not found.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE image_tags
+            SET name = ?
+            WHERE id = ?
+        """, (name.strip(), tag_id))
+        return cursor.rowcount > 0
+
+
+def delete_image_tag(tag_id: int) -> bool:
+    """Delete an image tag and all its associations.
+
+    Returns True if deleted, False if tag not found.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        # Associations are deleted automatically via ON DELETE CASCADE
+        cursor.execute("DELETE FROM image_tags WHERE id = ?", (tag_id,))
+        return cursor.rowcount > 0
+
+
+def get_tags_for_image(image_path: str) -> List[Dict[str, Any]]:
+    """Get all tags associated with an image."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT t.id, t.name, t.created_at
+            FROM image_tags t
+            JOIN image_tag_associations a ON t.id = a.tag_id
+            WHERE a.image_path = ?
+            ORDER BY t.name ASC
+        """, (image_path,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def add_tag_to_image(image_path: str, tag_id: int) -> bool:
+    """Add a tag to an image.
+
+    Returns True if added, False if association already exists.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO image_tag_associations (image_path, tag_id, created_at)
+                VALUES (?, ?, ?)
+            """, (image_path, tag_id, utc_now_iso()))
+            return True
+        except sqlite3.IntegrityError:
+            return False  # Association already exists
+
+
+def remove_tag_from_image(image_path: str, tag_id: int) -> bool:
+    """Remove a tag from an image.
+
+    Returns True if removed, False if association didn't exist.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            DELETE FROM image_tag_associations
+            WHERE image_path = ? AND tag_id = ?
+        """, (image_path, tag_id))
+        return cursor.rowcount > 0
+
+
+def get_images_by_tag(tag_id: int) -> List[str]:
+    """Get all image paths associated with a tag."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT image_path
+            FROM image_tag_associations
+            WHERE tag_id = ?
+            ORDER BY image_path ASC
+        """, (tag_id,))
+        return [row['image_path'] for row in cursor.fetchall()]
+
+
+def get_all_image_tags_with_counts() -> List[Dict[str, Any]]:
+    """Get all image tags with usage counts."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT t.id, t.name, t.created_at, COUNT(a.id) as image_count
+            FROM image_tags t
+            LEFT JOIN image_tag_associations a ON t.id = a.tag_id
+            GROUP BY t.id
+            ORDER BY t.name ASC
+        """)
+        return [dict(row) for row in cursor.fetchall()]
