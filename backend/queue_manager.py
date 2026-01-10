@@ -128,7 +128,11 @@ class QueueManager:
             # Start progress tracking for the resumed segment with original start time
             comfyui_url = get_setting("comfyui_url") or COMFYUI_SERVER_URL
             queue_time_str = get_segment_queue_time(job_id, segment_index)
-            original_start = datetime.strptime(queue_time_str, "%Y-%m-%d %H:%M:%S") if queue_time_str else None
+            original_start = None
+            if queue_time_str:
+                # Database stores UTC time, parse and mark as UTC for correct timestamp conversion
+                from datetime import timezone
+                original_start = datetime.strptime(queue_time_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
             progress_tracker.start_tracking(job_id, segment_index, prompt_id, comfyui_url, started_at=original_start)
 
             # Use existing completion wait logic
