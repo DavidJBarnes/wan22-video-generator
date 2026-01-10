@@ -13,7 +13,7 @@ import tempfile
 import httpx
 from pathlib import Path
 
-from video_utils import get_segment_video_path, optimize_video_for_web
+from video_utils import get_segment_video_path, optimize_video_for_web, OUTPUT_DIR
 
 from database import (
     get_all_jobs,
@@ -67,6 +67,21 @@ from config import (
     GENERATION_PARAMS,
     DEFAULT_NEGATIVE_PROMPT
 )
+
+
+# ============== Path Helpers ==============
+
+def translate_docker_path(path: str) -> str:
+    """Translate Docker container paths to native paths.
+
+    Old Docker setup used /app/output/... paths which are now invalid.
+    This translates them to the actual native output directory.
+    """
+    if path and path.startswith('/app/output/'):
+        # Replace /app/output/ with the actual OUTPUT_DIR
+        relative_path = path[len('/app/output/'):]
+        return str(OUTPUT_DIR / relative_path)
+    return path
 
 
 # ============== Prompt Helpers ==============
@@ -718,7 +733,7 @@ async def get_job_video(job_id: int):
     video_path = None
     for path in output_images:
         if path.endswith('.webm') or path.endswith('.mp4'):
-            video_path = path
+            video_path = translate_docker_path(path)
             break
 
     if not video_path:
