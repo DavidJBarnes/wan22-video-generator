@@ -864,7 +864,7 @@ def update_job_parameters(
         params.append(job_id)
 
         cursor.execute(
-            f"UPDATE jobs SET {', '.join(updates)} WHERE id = ? AND status IN ('pending', 'awaiting_prompt')",
+            f"UPDATE jobs SET {', '.join(updates)} WHERE id = ? AND status IN ('pending', 'awaiting_prompt', 'failed')",
             params
         )
 
