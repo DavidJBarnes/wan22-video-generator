@@ -124,6 +124,10 @@ class QueueManager:
             add_job_log(job_id, "INFO", f"Backend restarted - resumed monitoring segment {segment_index}",
                        segment_index=segment_index, details=f"prompt_id={prompt_id}")
 
+            # Start progress tracking for the resumed segment
+            comfyui_url = get_setting("comfyui_url") or COMFYUI_SERVER_URL
+            progress_tracker.start_tracking(job_id, segment_index, prompt_id, comfyui_url)
+
             # Use existing completion wait logic
             success = self._wait_for_segment_completion(job_id, segment_index, prompt_id, client)
 
@@ -142,6 +146,8 @@ class QueueManager:
             update_job_status(job_id, "failed", error_message=f"Error resuming segment {segment_index}: {str(e)}")
             self._notify_update(job_id, "failed")
         finally:
+            # Stop progress tracking
+            progress_tracker.stop_tracking(job_id)
             # Remove from tracking so new work can be submitted
             self._resumed_segments.discard((job_id, segment_index))
 
