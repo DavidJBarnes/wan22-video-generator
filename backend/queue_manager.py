@@ -597,8 +597,8 @@ class QueueManager:
         faceswap_faces_order = segment.get("faceswap_faces_order", "left-right") or "left-right"
         faceswap_faces_index = segment.get("faceswap_faces_index", "0") or "0"
 
-        # Get frame interpolation setting
-        frame_interpolation = params.get("frame_interpolation", "none")
+        # Get frame interpolation setting (default to 2x for smoother video)
+        frame_interpolation = params.get("frame_interpolation", "2x")
 
         # Use the job's seed for all segments (fixed seed per job)
         job_seed = job.get("seed")

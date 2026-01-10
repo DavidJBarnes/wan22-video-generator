@@ -170,6 +170,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
       setWidth(parseInt(s.default_width) || 640);
       setHeight(parseInt(s.default_height) || 640);
       setFps(parseInt(s.default_fps) || 16);
+      setFrameInterpolation(s.default_frame_interpolation || '2x');
 
       // Parse job naming presets
       try {
