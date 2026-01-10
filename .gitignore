@@ -34,4 +34,7 @@ Thumbs.db
 
 # Logs
 *.log
-/backend/output/
+
+# Backend data directories (symlinks to ~/backups/)
+/backend/output
+/backend/lora_previews

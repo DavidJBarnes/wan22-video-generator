@@ -6,7 +6,6 @@ A local web application for generating long-form videos using the Wan2.2 image-t
 
 - **Backend**: FastAPI (Python 3.11), SQLite database, ffmpeg
 - **Frontend**: React 19, Vite, Material UI 7, React Router
-- **Orchestration**: Docker Compose
 - **AI Backend**: ComfyUI with Wan2.2 14B models
 
 ## Project Structure
@@ -22,7 +21,9 @@ wan22-video-generator/
 │   ├── workflow_templates.py # Pre-converted Wan2.2 workflows
 │   ├── video_utils.py       # ffmpeg operations (stitch, extract frames)
 │   ├── config.py            # Default configuration constants
-│   └── output/              # Generated videos and frames
+│   ├── comfyui_queue.db     # SQLite database (symlink to ~/backups/)
+│   ├── output/              # Generated videos (symlink to ~/backups/video_output/)
+│   └── lora_previews/       # LoRA preview images (symlink to ~/backups/)
 ├── react-app/
 │   ├── src/
 │   │   ├── App.jsx          # Router setup
@@ -31,7 +32,8 @@ wan22-video-generator/
 │   │   ├── api/client.js    # API wrapper
 │   │   └── utils/helpers.js # Utilities
 │   └── vite.config.js
-├── docker-compose.yml
+├── start-api.sh             # Start backend in tmux
+├── start-ui.sh              # Start frontend in tmux
 └── CLAUDE.md
 ```
 
@@ -114,28 +116,60 @@ Pre-converted Wan2.2 i2v workflow stored in `workflow_templates.py`. Key nodes:
 - First pass (high noise): steps 0→10, add noise
 - Second pass (low noise): steps 10→10000, use leftover noise
 
-## Docker Setup
+## Running the Application
+
+The application runs natively using tmux sessions for process management.
+
+### Starting Services
 
 ```bash
-# Start services
-docker compose up -d
+# Start backend API server (in tmux session)
+tmux new -s wan-api './start-api.sh'
 
-# Rebuild after code changes
-docker compose up -d --build
-
-# View logs
-docker compose logs -f backend
+# Start frontend UI server (in tmux session)
+tmux new -s wan-ui './start-ui.sh'
 ```
 
-**IMPORTANT**: After making ANY frontend (react-app) or backend code changes, Claude MUST run `docker compose up -d --build` to rebuild and restart the containers. The app runs in Docker, so code changes won't take effect until containers are rebuilt.
+### Managing tmux Sessions
 
-### Volumes
-- `~/backups/comfyui_queue.db:/app/comfyui_queue.db` - Persistent database
-- Host image directories mounted with `:z` flag (SELinux/Fedora)
+```bash
+# List running sessions
+tmux ls
+
+# Attach to a session
+tmux attach -t wan-api
+tmux attach -t wan-ui
+
+# Detach from session: Ctrl+B, then D
+
+# Kill a session
+tmux kill-session -t wan-api
+```
+
+### Restarting After Code Changes
+
+After making code changes, restart the appropriate service:
+
+```bash
+# Restart backend
+tmux kill-session -t wan-api
+tmux new -s wan-api './start-api.sh'
+
+# Restart frontend
+tmux kill-session -t wan-ui
+tmux new -s wan-ui './start-ui.sh'
+```
+
+### Data Storage
+
+Persistent data is stored in `~/backups/` with symlinks in `backend/`:
+- `backend/comfyui_queue.db` → `~/backups/comfyui_queue.db` (SQLite database)
+- `backend/output/` → `~/backups/video_output/` (generated videos)
+- `backend/lora_previews/` → `~/backups/lora_previews/` (LoRA preview images)
 
 ### Ports
 - Frontend: http://localhost:3030
-- Backend: http://localhost:8000
+- Backend: http://localhost:9090
 - ComfyUI: Configured in Settings (default: http://localhost:8188)
 
 ## Git Guidelines
@@ -145,18 +179,19 @@ docker compose logs -f backend
 
 ## Development Notes
 
-### Running Locally (without Docker)
+### Manual Setup (if not using startup scripts)
 
 ```bash
 # Backend
 cd backend
+source venv/bin/activate  # or .venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+uvicorn main:app --host 0.0.0.0 --port 9090
 
 # Frontend
 cd react-app
 npm install
-npm run dev
+npm run dev -- --host 0.0.0.0 --port 3030
 ```
 
 ### Key Files to Modify

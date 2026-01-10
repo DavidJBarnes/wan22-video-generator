@@ -1,7 +1,0 @@
-__pycache__
-*.pyc
-*.pyo
-*.db
-venv
-.env
-output
