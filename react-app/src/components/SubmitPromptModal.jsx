@@ -15,6 +15,7 @@ const FACESWAP_FACES = [
   { value: 'gena.safetensors.png', label: 'Gena' },
   { value: 'Kelly__all.safetensors.png', label: 'Kelly (All)' },
   { value: 'Kelly_young.safetensors.png', label: 'Kelly (Young)' },
+  { value: 'Kelly_teacher1.safetensors.png', label: 'Kelly (teacher1)' },
   { value: 'Kelly_20251124.safetensors.png', label: 'Kelly (2025)' },
   { value: 'Kerry_all.safetensors.png', label: 'Kerry' },
   { value: 'Me.safetensors.png', label: 'Me' },

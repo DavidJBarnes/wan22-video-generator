@@ -38,3 +38,4 @@ Thumbs.db
 # Backend data directories (symlinks to ~/backups/)
 /backend/output
 /backend/lora_previews
+/backend/thumbnail_cache

@@ -336,3 +336,48 @@ RIFE settings (node 200):
 - Model: `rife49.pth` (better quality, lower VRAM than rife47)
 - `clear_cache_after_n_frames: 25` (clears RAM during processing)
 - `ensemble: True` (better quality, uses more memory)
+
+## Testing
+
+Before reporting any task as complete, you must:
+
+1. **Run the code** - Execute the script/application and verify it starts without errors
+2. **Test the specific functionality** - If you wrote a function, call it with realistic inputs. If you built an endpoint, make a test request. If you created a UI component, render it.
+3. **Check edge cases** - Test at least one boundary condition or error path
+4. **Show me the output** - Include the actual terminal output, response, or screenshot in your completion message
+
+Do not say "Done" or "Complete" until you've run the code and confirmed it works. If something fails during testing, fix it before reporting completion.
+
+## ComfyUI Error Handling
+
+When working with ComfyUI API calls:
+
+1. **Always capture the full response** - Don't just check for status 200. Parse and log the complete response body, including any `error`, `node_errors`, or `exception_message` fields.
+
+2. **Check the /history endpoint** - After queueing a job, poll /history/{prompt_id} and examine the `status` object. Failed jobs contain detailed error info here that isn't returned from the initial queue call.
+
+3. **Log node-level errors** - ComfyUI failures are usually node-specific. The response includes which node failed and why. Always extract and display: node ID, node type, exception type, and exception message.
+
+4. **Capture execution errors** - Check for `status.status_str == "error"` and `status.messages` which contains the execution stack trace.
+
+5. **On any failure**, print:
+   - The prompt_id
+   - Which node failed (by ID and class type)
+   - The full exception message
+   - The inputs that were passed to that node
+
+Example error structure to parse:
+```python
+history = response.json()[prompt_id]
+if history.get("status", {}).get("status_str") == "error":
+    for node_id, error in history.get("status", {}).get("messages", []):
+        if error.get("type") == "execution_error":
+            print(f"Node {node_id} ({error.get('node_type')}) failed:")
+            print(f"  {error.get('exception_type')}: {error.get('exception_message')}")
+```
+
+Never report a ComfyUI job as "failed" without capturing and showing me the actual error from the API.
+
+## ssh access
+Access the Comfyui server via ssh at: 3090.zero
+Access the a1111 server via ssh at: 2070.zero
