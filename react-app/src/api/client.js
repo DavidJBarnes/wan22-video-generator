@@ -316,8 +316,12 @@ class APIClient {
 
   // ============== Image Repository ==============
 
-  async browseImageRepo(path = '') {
-    return this.request(`/image-repo/browse?path=${encodeURIComponent(path)}`);
+  async browseImageRepo(path = '', tagId = null) {
+    let url = `/image-repo/browse?path=${encodeURIComponent(path)}`;
+    if (tagId !== null) {
+      url += `&tag_id=${tagId}`;
+    }
+    return this.request(url);
   }
 
   async getAllImages(path = '') {
@@ -371,6 +375,53 @@ class APIClient {
 
   async getJobsForImage(filename) {
     return this.request(`/image-repo/jobs?filename=${encodeURIComponent(filename)}`);
+  }
+
+  // ============== Image Tags ==============
+
+  async getImageTags() {
+    return this.request('/image-tags');
+  }
+
+  async createImageTag(name) {
+    return this.request('/image-tags', {
+      method: 'POST',
+      body: { name }
+    });
+  }
+
+  async updateImageTag(tagId, name) {
+    return this.request(`/image-tags/${tagId}`, {
+      method: 'PUT',
+      body: { name }
+    });
+  }
+
+  async deleteImageTag(tagId) {
+    return this.request(`/image-tags/${tagId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async getTagsForImage(imagePath) {
+    return this.request(`/image-repo/image-tags?image_path=${encodeURIComponent(imagePath)}`);
+  }
+
+  async addTagToImage(imagePath, tagId) {
+    const formData = new FormData();
+    formData.append('image_path', imagePath);
+    formData.append('tag_id', tagId);
+
+    return this.request('/image-repo/image-tags', {
+      method: 'POST',
+      body: formData
+    });
+  }
+
+  async removeTagFromImage(imagePath, tagId) {
+    return this.request(`/image-repo/image-tags?image_path=${encodeURIComponent(imagePath)}&tag_id=${tagId}`, {
+      method: 'DELETE'
+    });
   }
 
   // ============== ComfyUI View Proxy ==============

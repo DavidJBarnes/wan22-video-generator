@@ -33,6 +33,8 @@ export default function ImageRepo() {
   const [viewMode, setViewMode] = useState('grid');
   const [sortOrder, setSortOrder] = useState('name-asc');
   const [ratingFilter, setRatingFilter] = useState('all');
+  const [tagFilter, setTagFilter] = useState('all');
+  const [availableTags, setAvailableTags] = useState([]);
   const [showJobModal, setShowJobModal] = useState(false);
   const [preUploadedImage, setPreUploadedImage] = useState(null);
   const [preUploadedDimensions, setPreUploadedDimensions] = useState(null);
@@ -41,11 +43,24 @@ export default function ImageRepo() {
   const [folderPage, setFolderPage] = useState(1);
   const [imagePage, setImagePage] = useState(1);
 
+  // Load available tags once
+  useEffect(() => {
+    async function loadTags() {
+      try {
+        const data = await API.getImageTags();
+        setAvailableTags(data.tags || []);
+      } catch (error) {
+        console.error('Failed to load tags:', error);
+      }
+    }
+    loadTags();
+  }, []);
+
   useEffect(() => {
     loadDirectory(currentPath);
     setFolderPage(1); // Reset page when navigating
     setImagePage(1);  // Reset image page when navigating
-  }, [currentPath]);
+  }, [currentPath, tagFilter]);
 
   useEffect(() => {
     applyRatingFilter();
@@ -56,7 +71,8 @@ export default function ImageRepo() {
     setError(null);
 
     try {
-      const data = await API.browseImageRepo(path);
+      const tagIdParam = tagFilter === 'all' ? null : parseInt(tagFilter);
+      const data = await API.browseImageRepo(path, tagIdParam);
 
       // Sort items
       const sortedFolders = sortItems(data.folders || []);
@@ -491,6 +507,23 @@ export default function ImageRepo() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <h1 style={{ margin: 0 }}>Image Repository</h1>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {availableTags.length > 0 && (
+              <FormControl size="small" sx={{ minWidth: 120 }}>
+                <InputLabel>Tag</InputLabel>
+                <Select
+                  value={tagFilter}
+                  onChange={(e) => setTagFilter(e.target.value)}
+                  label="Tag"
+                >
+                  <MenuItem value="all">All Tags</MenuItem>
+                  {availableTags.map(tag => (
+                    <MenuItem key={tag.id} value={tag.id.toString()}>
+                      {tag.name} ({tag.image_count || 0})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
             <FormControl size="small" sx={{ minWidth: 140 }}>
               <InputLabel>Rating</InputLabel>
               <Select
