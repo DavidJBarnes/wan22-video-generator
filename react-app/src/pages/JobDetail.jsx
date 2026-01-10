@@ -33,6 +33,7 @@ export default function JobDetail() {
   const [segmentVideoKey, setSegmentVideoKey] = useState(null);
   const [progress, setProgress] = useState(null);
   const [elapsedTime, setElapsedTime] = useState(null);
+  const [finalizing, setFinalizing] = useState(false);
   const autoFinalizeTriggeredRef = useRef(false);
 
   // Format elapsed time as "Xm Ys" or "Xs"
@@ -192,14 +193,23 @@ export default function JobDetail() {
   }
 
   async function handleFinalizeJob() {
-    try {
-      await API.finalizeJob(id);
-      showToast('Job finalization started', 'success');
-      await loadJobDetail();
-    } catch (error) {
-      console.error('Failed to finalize job:', error);
-      showToast('Failed to finalize job', 'error');
-    }
+    setFinalizing(true);
+    showToast('Finalizing video... You can navigate away.', 'info');
+
+    // Run finalization in background - don't await
+    API.finalizeJob(id)
+      .then(() => {
+        showToast('Video finalized successfully!', 'success');
+        // Reload if still on this page
+        loadJobDetail().catch(() => {});
+      })
+      .catch((error) => {
+        console.error('Failed to finalize job:', error);
+        showToast('Failed to finalize job', 'error');
+      })
+      .finally(() => {
+        setFinalizing(false);
+      });
   }
 
   async function handleReopenJob() {
@@ -604,7 +614,7 @@ export default function JobDetail() {
 
         {/* Action Buttons */}
         <div style={{ marginTop: '20px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          {(job.status === 'pending' || job.status === 'awaiting_prompt') && (
+          {(job.status === 'pending' || job.status === 'awaiting_prompt' || job.status === 'failed') && (
             <Button
               variant="contained"
               onClick={() => setShowEditModal(true)}
@@ -1009,9 +1019,17 @@ export default function JobDetail() {
                   <Button
                     variant="contained"
                     onClick={handleFinalizeJob}
+                    disabled={finalizing}
                     sx={{ flex: 1, bgcolor: '#4caf50', '&:hover': { bgcolor: '#388e3c' } }}
                   >
-                    Finalize & Merge
+                    {finalizing ? (
+                      <>
+                        <CircularProgress size={20} color="inherit" sx={{ mr: 1 }} />
+                        Finalizing...
+                      </>
+                    ) : (
+                      'Finalize & Merge'
+                    )}
                   </Button>
                 </>
               )}

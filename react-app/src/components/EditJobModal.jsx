@@ -7,8 +7,12 @@ import './CreateJobModal.css';
 export default function EditJobModal({ job, onClose, onSuccess }) {
   const params = job.parameters || {};
 
-  // Check if job has started (has completed segments)
-  const hasStarted = (job.completed_segments ?? 0) > 0;
+  // Check if job has active completed segments (not deleted)
+  // Allow editing if: no segments completed, all segments deleted, or job failed
+  const completedSegments = job.completed_segments ?? 0;
+  const deletedSegments = job.deleted_segments ?? 0;
+  const activeCompletedSegments = completedSegments - deletedSegments;
+  const hasStarted = activeCompletedSegments > 0 && job.status !== 'failed';
 
   const [name, setName] = useState(job.name || '');
   const [prompt, setPrompt] = useState(job.prompt || '');
@@ -16,6 +20,7 @@ export default function EditJobModal({ job, onClose, onSuccess }) {
   const [height, setHeight] = useState(params.height || 640);
   const [fps, setFps] = useState(params.fps || 16);
   const [segmentDuration, setSegmentDuration] = useState(params.segment_duration || 5);
+  const [frameInterpolation, setFrameInterpolation] = useState(params.frame_interpolation || '2x');
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(e) {
@@ -42,7 +47,8 @@ export default function EditJobModal({ job, onClose, onSuccess }) {
           width,
           height,
           fps,
-          segment_duration: segmentDuration
+          segment_duration: segmentDuration,
+          frame_interpolation: frameInterpolation
         }
       });
 
@@ -115,6 +121,8 @@ export default function EditJobModal({ job, onClose, onSuccess }) {
                   <MenuItem value={3}>3 seconds</MenuItem>
                   <MenuItem value={4}>4 seconds</MenuItem>
                   <MenuItem value={5}>5 seconds</MenuItem>
+                  <MenuItem value={8}>8 seconds</MenuItem>
+                  <MenuItem value={10}>10 seconds</MenuItem>
                 </Select>
               </FormControl>
             </div>
@@ -129,7 +137,22 @@ export default function EditJobModal({ job, onClose, onSuccess }) {
                   <MenuItem value={8}>8 fps</MenuItem>
                   <MenuItem value={12}>12 fps</MenuItem>
                   <MenuItem value={16}>16 fps</MenuItem>
+                  <MenuItem value={20}>20 fps</MenuItem>
                   <MenuItem value={24}>24 fps</MenuItem>
+                  <MenuItem value={32}>32 fps</MenuItem>
+                </Select>
+              </FormControl>
+            </div>
+            <div className="form-group">
+              <FormControl fullWidth variant="outlined" size="small" disabled={hasStarted}>
+                <InputLabel>Frame Interpolation</InputLabel>
+                <Select
+                  value={frameInterpolation}
+                  onChange={(e) => setFrameInterpolation(e.target.value)}
+                  label="Frame Interpolation"
+                >
+                  <MenuItem value="none">None</MenuItem>
+                  <MenuItem value="2x">2x</MenuItem>
                 </Select>
               </FormControl>
             </div>
@@ -137,7 +160,7 @@ export default function EditJobModal({ job, onClose, onSuccess }) {
 
           {hasStarted && (
             <div style={{ fontSize: '12px', color: '#666', marginBottom: '16px' }}>
-              Dimensions, FPS, and segment duration cannot be changed after segments have been generated.
+              Dimensions, FPS, segment duration, and frame interpolation cannot be changed after segments have been generated.
             </div>
           )}
 
