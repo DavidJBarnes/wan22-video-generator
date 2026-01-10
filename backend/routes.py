@@ -427,6 +427,7 @@ async def get_job_progress(job_id: int):
         "current_node_title": None,
         "status": "not_tracking" if job["status"] != "running" else "waiting",
         "started_at": None,
+        "started_at_ts": None,
         "last_update": None,
     }
 
