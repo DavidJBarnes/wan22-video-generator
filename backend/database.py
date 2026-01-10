@@ -1006,6 +1006,29 @@ def get_job_logs(job_id: int, limit: int = 100) -> List[Dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
 
 
+def get_segment_queue_time(job_id: int, segment_index: int) -> Optional[str]:
+    """Get the timestamp when a segment was queued to ComfyUI.
+
+    Args:
+        job_id: The job ID
+        segment_index: The segment index
+
+    Returns:
+        Timestamp string (e.g., "2026-01-10 23:02:17") or None if not found
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT timestamp FROM job_logs
+               WHERE job_id = ? AND segment_index = ? AND message LIKE 'Segment % queued successfully'
+               ORDER BY timestamp DESC
+               LIMIT 1""",
+            (job_id, segment_index)
+        )
+        row = cursor.fetchone()
+        return row["timestamp"] if row else None
+
+
 def clear_job_logs(job_id: int):
     """Delete all log entries for a job."""
     with get_connection() as conn:

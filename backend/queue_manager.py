@@ -26,7 +26,8 @@ from database import (
     get_completed_segments_count,
     get_last_active_segment_before,
     parse_loras,
-    add_job_log
+    add_job_log,
+    get_segment_queue_time
 )
 from comfyui_client import ComfyUIClient
 from progress_tracker import progress_tracker
@@ -124,9 +125,11 @@ class QueueManager:
             add_job_log(job_id, "INFO", f"Backend restarted - resumed monitoring segment {segment_index}",
                        segment_index=segment_index, details=f"prompt_id={prompt_id}")
 
-            # Start progress tracking for the resumed segment
+            # Start progress tracking for the resumed segment with original start time
             comfyui_url = get_setting("comfyui_url") or COMFYUI_SERVER_URL
-            progress_tracker.start_tracking(job_id, segment_index, prompt_id, comfyui_url)
+            queue_time_str = get_segment_queue_time(job_id, segment_index)
+            original_start = datetime.strptime(queue_time_str, "%Y-%m-%d %H:%M:%S") if queue_time_str else None
+            progress_tracker.start_tracking(job_id, segment_index, prompt_id, comfyui_url, started_at=original_start)
 
             # Use existing completion wait logic
             success = self._wait_for_segment_completion(job_id, segment_index, prompt_id, client)

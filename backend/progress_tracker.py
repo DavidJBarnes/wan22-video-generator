@@ -74,8 +74,12 @@ class ProgressTracker:
         """Set callback for progress updates."""
         self._on_progress_update = callback
 
-    def start_tracking(self, job_id: int, segment_index: int, prompt_id: str, comfyui_url: str):
-        """Start tracking progress for a job segment."""
+    def start_tracking(self, job_id: int, segment_index: int, prompt_id: str, comfyui_url: str, started_at: Optional[datetime] = None):
+        """Start tracking progress for a job segment.
+
+        Args:
+            started_at: Optional start time override (for resumed segments). Defaults to now.
+        """
         if not WEBSOCKET_AVAILABLE:
             print(f"[ProgressTracker] WebSocket not available, skipping progress tracking for job {job_id}")
             return
@@ -85,7 +89,7 @@ class ProgressTracker:
                 job_id=job_id,
                 segment_index=segment_index,
                 prompt_id=prompt_id,
-                started_at=datetime.now(),
+                started_at=started_at or datetime.now(),
                 status="waiting"
             )
 
