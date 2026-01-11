@@ -449,7 +449,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               multiline
-              rows={2}
+              rows={4}
               placeholder="Describe the video scene and action..."
               fullWidth
               variant="outlined"
