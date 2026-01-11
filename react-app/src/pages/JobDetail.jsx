@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button, CircularProgress, LinearProgress, Box, Typography, Checkbox, FormControlLabel } from '@mui/material';
 import SwitchVideoIcon from '@mui/icons-material/SwitchVideo';
+import EditIcon from '@mui/icons-material/Edit';
 import API from '../api/client';
 import { useLoras } from '../contexts/LoraContext';
 import { formatDate, showToast } from '../utils/helpers';
@@ -47,6 +48,7 @@ export default function JobDetail() {
   const [segments, setSegments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showPromptModal, setShowPromptModal] = useState(false);
+  const [editingSegment, setEditingSegment] = useState(null);  // Segment being edited
   const [showCloneModal, setShowCloneModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showNotesModal, setShowNotesModal] = useState(false);
@@ -714,6 +716,9 @@ export default function JobDetail() {
             // Can toggle fade on completed, non-deleted segments when job is not finalized
             const canToggleFade = !isDeleted && seg.status === 'completed' && job.status === 'awaiting_prompt';
 
+            // Can edit pending segments when job is not running or completed
+            const canEdit = !isDeleted && seg.status === 'pending' && ['pending', 'awaiting_prompt', 'paused'].includes(job.status);
+
             return (
               <div key={seg.id}>
                 <div
@@ -734,6 +739,18 @@ export default function JobDetail() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <StatusChip status={isDeleted ? 'deleted' : seg.status} />
+                    {canEdit && (
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        size="small"
+                        onClick={() => setEditingSegment(seg)}
+                        startIcon={<EditIcon />}
+                        sx={{ minWidth: 'auto' }}
+                      >
+                        Edit
+                      </Button>
+                    )}
                     {canRestore && (
                       <Button
                         variant="outlined"
@@ -1156,6 +1173,24 @@ export default function JobDetail() {
           onClose={() => setShowPromptModal(false)}
           onSuccess={() => {
             setShowPromptModal(false);
+            loadJobDetail();
+          }}
+        />
+      )}
+
+      {editingSegment && (
+        <SubmitPromptModal
+          jobId={id}
+          segmentIndex={editingSegment.segment_index}
+          defaultPrompt={editingSegment.prompt || ''}
+          defaultLoras={buildDefaultLoras(editingSegment)}
+          defaultFaceswap={buildDefaultFaceswap(editingSegment, job?.parameters)}
+          defaultStartImageUrl={editingSegment.start_image_url || null}
+          defaultCustomStartImage={editingSegment.custom_start_image || null}
+          isEditing={true}
+          onClose={() => setEditingSegment(null)}
+          onSuccess={() => {
+            setEditingSegment(null);
             loadJobDetail();
           }}
         />
