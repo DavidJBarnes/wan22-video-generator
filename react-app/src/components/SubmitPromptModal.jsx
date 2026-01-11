@@ -30,6 +30,8 @@ export default function SubmitPromptModal({
   defaultLoras = [],  // Array of {high_file, high_weight, low_file, low_weight} pairs
   defaultFaceswap = null,  // {enabled, image, facesOrder, facesIndex} from previous segment or job
   defaultStartImageUrl = null,  // URL of previous segment's end frame (for display)
+  defaultCustomStartImage = null,  // Path of custom start image if already set
+  isEditing = false,  // Whether editing an existing segment
   onClose,
   onSuccess
 }) {
@@ -53,7 +55,7 @@ export default function SubmitPromptModal({
   const [faceswapFacesIndex, setFaceswapFacesIndex] = useState(defaultFaceswap?.facesIndex || '0');
 
   // Custom start image state (only for segments > 0)
-  const [customStartImage, setCustomStartImage] = useState(null);  // Path in image repo
+  const [customStartImage, setCustomStartImage] = useState(defaultCustomStartImage);  // Path in image repo
   const [showImageBrowser, setShowImageBrowser] = useState(false);
 
   // When loras are loaded, find matching LoRAs from default values (only once)
@@ -162,13 +164,13 @@ export default function SubmitPromptModal({
         segmentIndex,
         prompt.trim(),
         lorasArray,
-        autoFinalize,
+        isEditing ? false : autoFinalize,  // Don't change auto-finalize when editing
         faceswapOptions,
         false,  // fadeToBlack - not used here
         customStartImage  // Custom start image path (or null for default)
       );
 
-      showToast('Prompt submitted successfully', 'success');
+      showToast(isEditing ? 'Segment updated successfully' : 'Prompt submitted successfully', 'success');
       onSuccess();
     } catch (error) {
       console.error('Failed to submit prompt:', error);
@@ -181,7 +183,7 @@ export default function SubmitPromptModal({
     <div className="modal-overlay">
       <form className="modal-content" onSubmit={handleSubmit}>
         <div className="modal-header">
-          <h2>Submit Prompt for Segment {segmentIndex}</h2>
+          <h2>{isEditing ? `Edit Segment ${segmentIndex + 1}` : `Submit Prompt for Segment ${segmentIndex}`}</h2>
           <button type="button" className="modal-close" onClick={onClose}>×</button>
         </div>
 
@@ -403,21 +405,23 @@ export default function SubmitPromptModal({
             )}
           </div>
 
-          {/* Auto Finalize */}
-          <div className="form-group">
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={autoFinalize}
-                  onChange={(e) => setAutoFinalize(e.target.checked)}
-                />
-              }
-              label="Auto-finalize after this segment"
-            />
-            <FormHelperText sx={{ ml: 4, mt: -1 }}>
-              Automatically merge and finalize video when segment completes
-            </FormHelperText>
-          </div>
+          {/* Auto Finalize - hide when editing existing segment */}
+          {!isEditing && (
+            <div className="form-group">
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={autoFinalize}
+                    onChange={(e) => setAutoFinalize(e.target.checked)}
+                  />
+                }
+                label="Auto-finalize after this segment"
+              />
+              <FormHelperText sx={{ ml: 4, mt: -1 }}>
+                Automatically merge and finalize video when segment completes
+              </FormHelperText>
+            </div>
+          )}
 
         </div>
 
@@ -427,7 +431,7 @@ export default function SubmitPromptModal({
             variant="contained"
             disabled={submitting}
           >
-            {submitting ? <CircularProgress size={20} color="inherit" /> : 'Submit Prompt'}
+            {submitting ? <CircularProgress size={20} color="inherit" /> : (isEditing ? 'Save Changes' : 'Submit Prompt')}
           </Button>
         </div>
       </form>
