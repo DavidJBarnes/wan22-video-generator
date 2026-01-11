@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FormControl,
@@ -18,20 +18,16 @@ import {
   CircularProgress
 } from '@mui/material';
 import API from '../api/client';
+import { useJobs } from '../contexts/JobsContext';
 import { formatDate, getFaceswapName } from '../utils/helpers';
 import StatusChip from '../components/StatusChip';
 import './Dashboard.css';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [comfyStatus, setComfyStatus] = useState({ reachable: false });
-  const [runningJobsCount, setRunningJobsCount] = useState(0);
-  const [pendingJobsCount, setPendingJobsCount] = useState(0);
-  const [awaitingPromptJobsCount, setAwaitingPromptJobsCount] = useState(0);
-  const [avgRunTime, setAvgRunTime] = useState(null);
-  const [allJobs, setAllJobs] = useState([]);
-  const [filteredJobs, setFilteredJobs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Use centralized jobs context instead of local polling
+  const { jobs: allJobs, comfyStatus, loading, stats, avgRunTime } = useJobs();
+
   const [statusFilter, setStatusFilter] = useState(() => {
     const saved = localStorage.getItem('dashboardStatusFilter');
     if (saved) {
@@ -51,42 +47,8 @@ export default function Dashboard() {
 
   const allStatuses = ['pending', 'running', 'awaiting_prompt', 'completed', 'failed', 'paused'];
 
-  useEffect(() => {
-    loadDashboard();
-
-    // Auto-refresh every 3 seconds
-    const interval = setInterval(loadDashboard, 3000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    filterJobs();
-  }, [statusFilter, allJobs]);
-
-  async function loadDashboard() {
-    try {
-      const [comfy, jobsData] = await Promise.all([
-        API.checkComfyStatus(),
-        API.getJobs()
-      ]);
-
-      setComfyStatus(comfy);
-
-      const jobs = jobsData.jobs || jobsData || [];
-      setRunningJobsCount(jobs.filter(j => j.status === 'running').length);
-      setPendingJobsCount(jobs.filter(j => j.status === 'pending').length);
-      setAwaitingPromptJobsCount(jobs.filter(j => j.status === 'awaiting_prompt').length);
-      setAvgRunTime(jobsData.avg_run_time);
-
-      setAllJobs(jobs);
-      setLoading(false);
-    } catch (error) {
-      console.error('Failed to load dashboard:', error);
-      setLoading(false);
-    }
-  }
-
-  function filterJobs() {
+  // Memoize filtered and sorted jobs
+  const filteredJobs = useMemo(() => {
     let filtered = statusFilter.length === 0
       ? allJobs
       : allJobs.filter(job => statusFilter.includes(job.status));
@@ -123,8 +85,8 @@ export default function Dashboard() {
       return dateB - dateA; // Descending (newest first)
     });
 
-    setFilteredJobs(filtered);
-  }
+    return filtered;
+  }, [statusFilter, allJobs]);
 
   function handleStatusFilterChange(event) {
     const value = event.target.value;
@@ -149,7 +111,7 @@ export default function Dashboard() {
     const queuePending = comfyStatus.queue?.queue_pending?.length || 0;
 
     // Show blue (running) if ComfyUI queue has items OR our app has running jobs
-    if (queueRunning > 0 || queuePending > 0 || runningJobsCount > 0) {
+    if (queueRunning > 0 || queuePending > 0 || stats.runningCount > 0) {
       return 'blue';
     }
     return 'green';
@@ -162,7 +124,7 @@ export default function Dashboard() {
     const queuePending = comfyStatus.queue?.queue_pending?.length || 0;
 
     // Show "Running" if ComfyUI queue has items OR our app has running jobs
-    if (queueRunning > 0 || queuePending > 0 || runningJobsCount > 0) {
+    if (queueRunning > 0 || queuePending > 0 || stats.runningCount > 0) {
       return 'Connected - Running...';
     }
     return 'Connected - Idle';
@@ -203,17 +165,17 @@ export default function Dashboard() {
 
         <div className="card">
           <h3>Running Jobs</h3>
-          <div className="value">{runningJobsCount}</div>
+          <div className="value">{stats.runningCount}</div>
         </div>
 
         <div className="card">
           <h3>Pending Jobs</h3>
-          <div className="value">{pendingJobsCount}</div>
+          <div className="value">{stats.pendingCount}</div>
         </div>
 
         <div className="card">
           <h3>Awaiting Prompt</h3>
-          <div className="value">{awaitingPromptJobsCount}</div>
+          <div className="value">{stats.awaitingPromptCount}</div>
         </div>
 
         <div className="card">

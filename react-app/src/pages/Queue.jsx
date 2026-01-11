@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FormControl,
@@ -22,6 +22,7 @@ import {
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import API from '../api/client';
+import { useJobs } from '../contexts/JobsContext';
 import { formatDate, showToast, getFaceswapName } from '../utils/helpers';
 import CreateJobModal from '../components/CreateJobModal';
 import StatusChip from '../components/StatusChip';
@@ -29,9 +30,9 @@ import './Queue.css';
 
 export default function Queue() {
   const navigate = useNavigate();
-  const [jobs, setJobs] = useState([]);
-  const [allJobs, setAllJobs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Use centralized jobs context instead of local polling
+  const { jobs: allJobs, loading, refreshJobs } = useJobs();
+
   const [statusFilter, setStatusFilter] = useState(() => {
     const saved = localStorage.getItem('queueStatusFilter');
     if (saved) {
@@ -52,30 +53,8 @@ export default function Queue() {
 
   const allStatuses = ['pending', 'running', 'awaiting_prompt', 'completed', 'failed', 'paused'];
 
-  useEffect(() => {
-    loadJobs();
-    // Auto-refresh
-    const interval = setInterval(loadJobs, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    filterJobs();
-  }, [statusFilter, allJobs]);
-
-  async function loadJobs() {
-    try {
-      const data = await API.getJobs();
-      const jobsList = data.jobs || data || [];
-      setAllJobs(jobsList);
-      setLoading(false);
-    } catch (error) {
-      console.error('Failed to load jobs:', error);
-      setLoading(false);
-    }
-  }
-
-  function filterJobs() {
+  // Memoize filtered and sorted jobs
+  const jobs = useMemo(() => {
     let filtered = statusFilter.length === 0
       ? allJobs
       : allJobs.filter(job => statusFilter.includes(job.status));
@@ -117,8 +96,8 @@ export default function Queue() {
       return dateB - dateA; // Descending (newest first)
     });
 
-    setJobs(filtered);
-  }
+    return filtered;
+  }, [statusFilter, allJobs]);
 
   function handleChangePage(event, newPage) {
     setPage(newPage);
@@ -154,7 +133,7 @@ export default function Queue() {
     try {
       await API.deleteJob(jobId);
       showToast('Job deleted', 'success');
-      await loadJobs();
+      await refreshJobs();
     } catch (error) {
       console.error('Failed to delete job:', error);
       showToast('Failed to delete job', 'error');
@@ -165,7 +144,7 @@ export default function Queue() {
     event.stopPropagation();
     try {
       await API.moveJobUp(jobId);
-      await loadJobs();
+      await refreshJobs();
     } catch (error) {
       console.error('Failed to move job up:', error);
       showToast('Failed to move job', 'error');
@@ -176,7 +155,7 @@ export default function Queue() {
     event.stopPropagation();
     try {
       await API.moveJobDown(jobId);
-      await loadJobs();
+      await refreshJobs();
     } catch (error) {
       console.error('Failed to move job down:', error);
       showToast('Failed to move job', 'error');
@@ -338,7 +317,7 @@ export default function Queue() {
           onClose={() => setShowModal(false)}
           onSuccess={(newJobId) => {
             setShowModal(false);
-            loadJobs();
+            refreshJobs();
           }}
         />
       )}
