@@ -381,3 +381,6 @@ Never report a ComfyUI job as "failed" without capturing and showing me the actu
 ## ssh access
 Access the Comfyui server via ssh at: 3090.zero
 Access the a1111 server via ssh at: 2070.zero
+
+## git and source control
+Always create a relevant git branch (fix/* or feature/*) before starting work. Name branches descriptively, like feature/video-chaining or fix/queue-persistence. Commit with clear messages and push to remote when a task is complete.

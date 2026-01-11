@@ -53,7 +53,14 @@ def optimize_video_for_web(video_path: str) -> bool:
 
 
 def download_video_from_comfyui(video_url: str, output_path: str) -> bool:
-    """Download a video from ComfyUI to a local path and optimize for web."""
+    """Download a video from ComfyUI to a local path and optimize for web.
+
+    Handles ComfyUI's date-based subfolder organization by trying alternate
+    subfolder paths if the initial download fails with 404.
+    """
+    import urllib.parse
+    from datetime import datetime, timedelta
+
     try:
         with httpx.Client(timeout=60.0) as client:
             response = client.get(video_url)
@@ -68,6 +75,44 @@ def download_video_from_comfyui(video_url: str, output_path: str) -> bool:
                     Path(marker_path).touch()
 
                 return True
+            elif response.status_code == 404:
+                # ComfyUI may have saved to a date-based subfolder without reporting it
+                # Try date-based subfolders: today and yesterday
+                print(f"[VideoUtils] Got 404, trying date-based subfolders...")
+
+                # Parse the original URL to extract filename and base URL
+                parsed = urllib.parse.urlparse(video_url)
+                query_params = urllib.parse.parse_qs(parsed.query)
+                filename = query_params.get("filename", [None])[0]
+                media_type = query_params.get("type", ["output"])[0]
+
+                if filename:
+                    base_url = f"{parsed.scheme}://{parsed.netloc}/view"
+
+                    # Try today's date and yesterday's date as subfolders
+                    dates_to_try = [
+                        datetime.now().strftime("%Y-%m-%d"),
+                        (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"),
+                    ]
+
+                    for date_subfolder in dates_to_try:
+                        alt_url = f"{base_url}?filename={filename}&subfolder={date_subfolder}&type={media_type}"
+                        print(f"[VideoUtils] Trying: {alt_url}")
+                        alt_response = client.get(alt_url)
+
+                        if alt_response.status_code == 200:
+                            with open(output_path, "wb") as f:
+                                f.write(alt_response.content)
+                            print(f"[VideoUtils] Downloaded video from {date_subfolder}/ subfolder to {output_path}")
+
+                            if optimize_video_for_web(output_path):
+                                marker_path = output_path + '.web_optimized'
+                                Path(marker_path).touch()
+
+                            return True
+
+                print(f"[VideoUtils] Failed to download video: 404 (file not found in any subfolder)")
+                return False
             else:
                 print(f"[VideoUtils] Failed to download video: {response.status_code}")
                 return False
