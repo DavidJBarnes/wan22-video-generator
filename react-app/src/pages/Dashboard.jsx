@@ -23,6 +23,7 @@ import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import EditIcon from '@mui/icons-material/Edit';
 import TimerIcon from '@mui/icons-material/Timer';
 import ScheduleIcon from '@mui/icons-material/Schedule';
+import DoneAllIcon from '@mui/icons-material/DoneAll';
 import API from '../api/client';
 import { useJobs } from '../contexts/JobsContext';
 import { formatDate, getFaceswapName } from '../utils/helpers';
@@ -72,6 +73,19 @@ export default function Dashboard() {
     const remaining = Math.max(0, avgRunTime - elapsed);
     return Math.round(remaining);
   }, [runningJob, runningJobProgress?.started_at_ts, avgRunTime]);
+
+  // Calculate total queue completion time (running job remaining + all pending jobs)
+  const totalQueueTime = useMemo(() => {
+    if (!avgRunTime) return null;
+
+    // Time for pending jobs
+    const pendingTime = stats.pendingCount * avgRunTime;
+
+    // Add remaining time for currently running job
+    const runningRemaining = nextJobEta || 0;
+
+    return Math.round(pendingTime + runningRemaining);
+  }, [stats.pendingCount, avgRunTime, nextJobEta]);
 
   const [statusFilter, setStatusFilter] = useState(() => {
     const saved = localStorage.getItem('dashboardStatusFilter');
@@ -191,6 +205,17 @@ export default function Dashboard() {
     return `~${mins}m ${secs}s`;
   }
 
+  function formatTotalQueueTime(seconds) {
+    if (seconds == null) return 'N/A';
+    if (seconds <= 0) return 'Done';
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    if (hours === 0) {
+      return mins === 0 ? '<1m' : `${mins}m`;
+    }
+    return `${hours}h ${mins}m`;
+  }
+
   if (loading) {
     return (
       <div>
@@ -269,6 +294,19 @@ export default function Dashboard() {
             <div className="value">{runningJob ? formatEta(nextJobEta) : 'N/A'}</div>
             {runningJob && (
               <div className="subtitle">{runningJob.name}</div>
+            )}
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-card-header totalqueue">
+            <DoneAllIcon />
+            Total Queue Complete
+          </div>
+          <div className="stat-card-body">
+            <div className="value">{formatTotalQueueTime(totalQueueTime)}</div>
+            {totalQueueTime > 0 && stats.pendingCount > 0 && (
+              <div className="subtitle">{stats.pendingCount} job{stats.pendingCount !== 1 ? 's' : ''} remaining</div>
             )}
           </div>
         </div>

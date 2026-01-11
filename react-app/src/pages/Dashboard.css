@@ -43,6 +43,7 @@
 .stat-card-header.awaiting { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
 .stat-card-header.avgtime { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
 .stat-card-header.eta { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #333; }
+.stat-card-header.totalqueue { background: linear-gradient(135deg, #5f72bd 0%, #9b23ea 100%); }
 
 /* Status indicator */
 .status-indicator {
