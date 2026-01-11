@@ -126,6 +126,18 @@ class APIClient {
     });
   }
 
+  async moveJobToTop(jobId) {
+    return this.request(`/jobs/${jobId}/move-to-top`, {
+      method: 'POST'
+    });
+  }
+
+  async moveJobToBottom(jobId) {
+    return this.request(`/jobs/${jobId}/move-to-bottom`, {
+      method: 'POST'
+    });
+  }
+
   // ============== Settings ==============
 
   async getSettings() {

@@ -49,6 +49,7 @@ from database import (
     get_all_image_ratings,
     move_job_up,
     move_job_down,
+    move_job_to_top,
     move_job_to_bottom,
     hide_lora_file,
     unhide_lora_file,
@@ -665,6 +666,40 @@ async def move_job_down_endpoint(job_id: int):
         return {"status": "unchanged", "id": job_id, "message": "Job is already at the bottom of the queue"}
 
     return {"status": "moved", "id": job_id, "direction": "down"}
+
+
+@router.post("/jobs/{job_id}/move-to-top")
+async def move_job_to_top_endpoint(job_id: int):
+    """Move a pending job to the top of the queue (highest priority)."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Only pending jobs can be reordered")
+
+    moved = move_job_to_top(job_id)
+    if not moved:
+        return {"status": "unchanged", "id": job_id, "message": "Job is already at the top of the queue"}
+
+    return {"status": "moved", "id": job_id, "direction": "top"}
+
+
+@router.post("/jobs/{job_id}/move-to-bottom")
+async def move_job_to_bottom_endpoint(job_id: int):
+    """Move a pending job to the bottom of the queue (lowest priority)."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Only pending jobs can be reordered")
+
+    moved = move_job_to_bottom(job_id)
+    if not moved:
+        return {"status": "unchanged", "id": job_id, "message": "Job is already at the bottom of the queue"}
+
+    return {"status": "moved", "id": job_id, "direction": "bottom"}
 
 
 @router.post("/jobs/{job_id}/retry")

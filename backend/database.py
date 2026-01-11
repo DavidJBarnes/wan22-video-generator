@@ -706,6 +706,27 @@ def move_job_down(job_id: int) -> bool:
         return True
 
 
+def move_job_to_top(job_id: int) -> bool:
+    """Move a job to the top of the queue (set priority to MIN - 1).
+
+    Returns True if the job was moved, False if job not found or not pending.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Verify job exists and is pending
+        cursor.execute("SELECT id FROM jobs WHERE id = ? AND status = 'pending'", (job_id,))
+        if not cursor.fetchone():
+            return False
+
+        # Get min priority and set this job to min - 1
+        cursor.execute("SELECT COALESCE(MIN(priority), 0) - 1 FROM jobs WHERE status = 'pending'")
+        new_priority = cursor.fetchone()[0]
+
+        cursor.execute("UPDATE jobs SET priority = ? WHERE id = ?", (new_priority, job_id))
+        return True
+
+
 def move_job_to_bottom(job_id: int) -> bool:
     """Move a job to the bottom of the queue (set priority to MAX + 1).
 
@@ -715,13 +736,13 @@ def move_job_to_bottom(job_id: int) -> bool:
     with get_connection() as conn:
         cursor = conn.cursor()
 
-        # Verify job exists
-        cursor.execute("SELECT id FROM jobs WHERE id = ?", (job_id,))
+        # Verify job exists and is pending
+        cursor.execute("SELECT id FROM jobs WHERE id = ? AND status = 'pending'", (job_id,))
         if not cursor.fetchone():
             return False
 
         # Get max priority and set this job to max + 1
-        cursor.execute("SELECT COALESCE(MAX(priority), 0) + 1 FROM jobs")
+        cursor.execute("SELECT COALESCE(MAX(priority), 0) + 1 FROM jobs WHERE status = 'pending'")
         next_priority = cursor.fetchone()[0]
 
         cursor.execute("UPDATE jobs SET priority = ? WHERE id = ?", (next_priority, job_id))
