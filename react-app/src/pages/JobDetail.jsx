@@ -837,11 +837,17 @@ export default function JobDetail() {
                   </div>
                   {seg.custom_start_image ? (
                     <img
-                      src={API.getRepoImage(seg.custom_start_image)}
+                      src={seg.custom_start_image.startsWith('comfyui:')
+                        ? API.getComfyUIImage(seg.custom_start_image.slice(8))
+                        : API.getRepoImage(seg.custom_start_image)}
                       alt="Custom start image"
                       className="segment-image start clickable"
                       style={{ border: '2px solid #1976d2' }}
-                      onClick={() => setLightboxImage(API.getRepoImage(seg.custom_start_image))}
+                      onClick={() => setLightboxImage(
+                        seg.custom_start_image.startsWith('comfyui:')
+                          ? API.getComfyUIImage(seg.custom_start_image.slice(8))
+                          : API.getRepoImage(seg.custom_start_image)
+                      )}
                       onError={(e) => e.target.style.display = 'none'}
                     />
                   ) : seg.start_image_url ? (
