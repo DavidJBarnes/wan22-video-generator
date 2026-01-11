@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Button, CircularProgress, LinearProgress, Box, Typography, Checkbox, FormControlLabel } from '@mui/material';
+import { Button, CircularProgress, LinearProgress, Box, Typography, Checkbox, FormControlLabel, IconButton } from '@mui/material';
 import SwitchVideoIcon from '@mui/icons-material/SwitchVideo';
 import EditIcon from '@mui/icons-material/Edit';
+import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp';
+import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown';
 import API from '../api/client';
 import { useLoras } from '../contexts/LoraContext';
 import { formatDate, showToast } from '../utils/helpers';
@@ -278,6 +280,28 @@ export default function JobDetail() {
     } catch (error) {
       console.error('Failed to pause job:', error);
       showToast('Failed to pause job', 'error');
+    }
+  }
+
+  async function handleMoveToTop() {
+    try {
+      await API.moveJobToTop(id);
+      showToast('Job moved to top of queue', 'success');
+      await loadJobDetail();
+    } catch (error) {
+      console.error('Failed to move job to top:', error);
+      showToast('Failed to move job', 'error');
+    }
+  }
+
+  async function handleMoveToBottom() {
+    try {
+      await API.moveJobToBottom(id);
+      showToast('Job moved to bottom of queue', 'success');
+      await loadJobDetail();
+    } catch (error) {
+      console.error('Failed to move job to bottom:', error);
+      showToast('Failed to move job', 'error');
     }
   }
 
@@ -571,6 +595,30 @@ export default function JobDetail() {
               <StatusChip status={job.status} />
             </div>
           </div>
+          {job.status === 'pending' && job.queue_position && (
+            <div className="detail-meta-item">
+              <label>Queue Position</label>
+              <div className="value" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>#{job.queue_position}</span>
+                <IconButton
+                  size="small"
+                  onClick={handleMoveToTop}
+                  title="Move to top of queue"
+                  sx={{ padding: '4px' }}
+                >
+                  <KeyboardDoubleArrowUpIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={handleMoveToBottom}
+                  title="Move to bottom of queue"
+                  sx={{ padding: '4px' }}
+                >
+                  <KeyboardDoubleArrowDownIcon fontSize="small" />
+                </IconButton>
+              </div>
+            </div>
+          )}
           <div className="detail-meta-item">
             <label>Segments</label>
             <div className="value">{completedSegments} segments completed</div>

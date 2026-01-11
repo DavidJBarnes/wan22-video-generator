@@ -300,6 +300,7 @@ class JobResponse(BaseModel):
     completed_segments: Optional[int] = 0
     deleted_segments: Optional[int] = 0
     progress_percent: Optional[int] = 0
+    queue_position: Optional[int] = None
 
 
 class LoraUpdate(BaseModel):
@@ -402,11 +403,29 @@ async def list_jobs(limit: int = 100, offset: int = 0):
 
 @router.get("/jobs/{job_id}", response_model=JobResponse)
 async def get_job_details(job_id: int):
-    """Get a specific job by ID, enriched with segment counts."""
+    """Get a specific job by ID, enriched with segment counts and queue position."""
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return enrich_job_with_segments(job)
+
+    enriched = enrich_job_with_segments(job)
+
+    # Add queue_position for pending jobs
+    if enriched.get("status") == "pending":
+        # Get all pending jobs sorted by priority
+        all_jobs = get_all_jobs()
+        pending_jobs = [j for j in all_jobs if j.get("status") == "pending"]
+        pending_jobs.sort(key=lambda j: (j.get("priority", 0), j.get("created_at", "")))
+        pending_job_ids = [j["id"] for j in pending_jobs]
+
+        if job_id in pending_job_ids:
+            enriched["queue_position"] = pending_job_ids.index(job_id) + 1
+        else:
+            enriched["queue_position"] = None
+    else:
+        enriched["queue_position"] = None
+
+    return enriched
 
 
 @router.get("/jobs/{job_id}/logs")

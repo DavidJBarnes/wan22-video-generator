@@ -64,11 +64,13 @@ export default function EditJobModal({ job, onClose, onSuccess }) {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content">
-        <button type="button" className="modal-close" onClick={onClose}>×</button>
-        <h2>Edit Job Settings</h2>
+      <form className="modal-content" onSubmit={handleSubmit}>
+        <div className="modal-header">
+          <h2>Edit Job Settings</h2>
+          <button type="button" className="modal-close" onClick={onClose}>×</button>
+        </div>
 
-        <form onSubmit={handleSubmit}>
+        <div className="modal-body">
           <div className="form-group">
             <TextField
               label="Job Name"
@@ -175,14 +177,14 @@ export default function EditJobModal({ job, onClose, onSuccess }) {
               variant="outlined"
             />
           </div>
+        </div>
 
-          <div className="modal-actions">
-            <Button type="submit" variant="contained" disabled={saving}>
-              {saving ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </div>
-        </form>
-      </div>
+        <div className="modal-footer">
+          <Button type="submit" variant="contained" disabled={saving}>
+            {saving ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }
