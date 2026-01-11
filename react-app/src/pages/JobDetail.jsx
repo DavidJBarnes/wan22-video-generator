@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Button, CircularProgress, LinearProgress, Box, Typography, Checkbox, FormControlLabel } from '@mui/material';
 import SwitchVideoIcon from '@mui/icons-material/SwitchVideo';
 import API from '../api/client';
+import { useLoras } from '../contexts/LoraContext';
 import { formatDate, showToast } from '../utils/helpers';
 import SubmitPromptModal from '../components/SubmitPromptModal';
 import CreateJobModal from '../components/CreateJobModal';
@@ -27,7 +28,8 @@ export default function JobDetail() {
   const [lightboxImage, setLightboxImage] = useState(null);
   const [logs, setLogs] = useState([]);
   const [logsExpanded, setLogsExpanded] = useState(false);
-  const [loraLibrary, setLoraLibrary] = useState([]);
+  // Use cached LoRA library from context
+  const { loras: loraLibrary } = useLoras();
   const [selectedLoraForEdit, setSelectedLoraForEdit] = useState(null);
   const [segmentVideoIndex, setSegmentVideoIndex] = useState(null);
   const [segmentVideoKey, setSegmentVideoKey] = useState(null);
@@ -137,17 +139,15 @@ export default function JobDetail() {
 
   async function loadJobDetail() {
     try {
-      const [jobData, segmentsData, logsData, loraData] = await Promise.all([
+      const [jobData, segmentsData, logsData] = await Promise.all([
         API.getJob(id),
         API.getSegments(id),
-        API.getJobLogs(id),
-        API.getLoraLibrary()
+        API.getJobLogs(id)
       ]);
 
       setJob(jobData);
       setSegments(segmentsData);
       setLogs(logsData.logs || []);
-      setLoraLibrary(loraData.loras || []);
       setLoading(false);
 
       // Calculate next segment index for prompt submission
