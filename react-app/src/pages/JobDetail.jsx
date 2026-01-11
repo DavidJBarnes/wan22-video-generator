@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button, CircularProgress, LinearProgress, Box, Typography, Checkbox, FormControlLabel } from '@mui/material';
 import SwitchVideoIcon from '@mui/icons-material/SwitchVideo';
@@ -12,6 +12,33 @@ import LoraEditModal from '../components/LoraEditModal';
 import SegmentNotesModal from '../components/SegmentNotesModal';
 import StatusChip from '../components/StatusChip';
 import './JobDetail.css';
+
+// Helper functions moved to module level for memoization
+function parseLoraArray(value) {
+  if (!value) return [];
+  if (typeof value === 'string' && value.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.filter(l => l) : [];
+    } catch (e) {
+      return [value];
+    }
+  }
+  return [value];
+}
+
+function getLoraFile(loraData) {
+  if (!loraData) return null;
+  if (typeof loraData === 'string') return loraData;
+  if (typeof loraData === 'object' && loraData.file) return loraData.file;
+  return null;
+}
+
+function getLoraWeight(loraData) {
+  if (!loraData) return 1;
+  if (typeof loraData === 'object' && loraData.weight !== undefined) return loraData.weight;
+  return 1;
+}
 
 export default function JobDetail() {
   const { id } = useParams();
@@ -37,6 +64,76 @@ export default function JobDetail() {
   const [elapsedTime, setElapsedTime] = useState(null);
   const [finalizing, setFinalizing] = useState(false);
   const autoFinalizeTriggeredRef = useRef(false);
+
+  // Memoize expensive segment calculations - must be before early returns
+  const lastCompletedSegment = useMemo(() =>
+    segments.filter(s => s.status === 'completed' && !s.deleted_at).pop(),
+    [segments]
+  );
+
+  const totalExecutionTime = useMemo(() =>
+    segments
+      .filter(s => s.status === 'completed' && s.execution_time && !s.deleted_at)
+      .reduce((sum, s) => sum + s.execution_time, 0),
+    [segments]
+  );
+
+  // Memoize LoRA lookup function - depends on loraLibrary
+  const getLoraByFilename = useCallback((filename) => {
+    if (!filename) return null;
+    const baseName = filename.split('/').pop();
+    return loraLibrary.find(l =>
+      l.high_file === filename || l.low_file === filename ||
+      (l.high_file && l.high_file.split('/').pop() === baseName) ||
+      (l.low_file && l.low_file.split('/').pop() === baseName)
+    );
+  }, [loraLibrary]);
+
+  // Memoize friendly name lookup
+  const getLoraFriendlyName = useCallback((filename) => {
+    if (!filename) return null;
+    const baseName = filename.split('/').pop();
+    const match = getLoraByFilename(filename);
+    if (match) {
+      return match.friendly_name || match.base_name || baseName.replace('.safetensors', '');
+    }
+    return baseName.replace('.safetensors', '');
+  }, [getLoraByFilename]);
+
+  // Memoize LoRA display formatter
+  const formatLorasDisplay = useCallback((highLora, lowLora) => {
+    const highLoras = parseLoraArray(highLora);
+    const lowLoras = parseLoraArray(lowLora);
+
+    if (highLoras.length === 0 && lowLoras.length === 0) {
+      return { display: 'N/A', count: 0 };
+    }
+
+    const maxLen = Math.max(highLoras.length, lowLoras.length);
+    const pairs = [];
+    for (let i = 0; i < maxLen; i++) {
+      const hFile = getLoraFile(highLoras[i]);
+      const lFile = getLoraFile(lowLoras[i]);
+      const hWeight = getLoraWeight(highLoras[i]);
+      const lWeight = getLoraWeight(lowLoras[i]);
+      const h = hFile ? getLoraFriendlyName(hFile) : null;
+      const l = lFile ? getLoraFriendlyName(lFile) : null;
+      const hLora = hFile ? getLoraByFilename(hFile) : null;
+      const lLora = lFile ? getLoraByFilename(lFile) : null;
+      if (h || l) {
+        pairs.push({
+          high: h,
+          highWeight: hWeight,
+          highLora: hLora,
+          low: l,
+          lowWeight: lWeight,
+          lowLora: lLora,
+          index: i + 1
+        });
+      }
+    }
+    return { pairs, count: pairs.length };
+  }, [getLoraByFilename, getLoraFriendlyName]);
 
   // Format elapsed time as "Xm Ys" or "Xs"
   const formatElapsedTime = (seconds) => {
@@ -302,14 +399,6 @@ export default function JobDetail() {
   const segmentDuration = job.segment_duration ?? params.segment_duration ?? 5;
   const fps = job.fps ?? params.fps ?? 16;
 
-  // Exclude deleted segments when calculating last completed and totals
-  const lastCompletedSegment = segments.filter(s => s.status === 'completed' && !s.deleted_at).pop();
-
-  // Calculate total execution time from all completed (non-deleted) segments
-  const totalExecutionTime = segments
-    .filter(s => s.status === 'completed' && s.execution_time && !s.deleted_at)
-    .reduce((sum, s) => sum + s.execution_time, 0);
-
   // Format time as mm:ss or hh:mm:ss
   function formatExecutionTime(seconds) {
     if (!seconds || seconds <= 0) return null;
@@ -322,59 +411,6 @@ export default function JobDetail() {
       return `${mins}m ${secs}s`;
     }
     return `${secs}s`;
-  }
-
-  // Helper to parse LoRA data from segment (could be JSON arrays or single strings)
-  function parseLoraArray(value) {
-    if (!value) return [];
-    if (typeof value === 'string' && value.startsWith('[')) {
-      try {
-        const parsed = JSON.parse(value);
-        return Array.isArray(parsed) ? parsed.filter(l => l) : [];
-      } catch (e) {
-        return [value];
-      }
-    }
-    return [value];
-  }
-
-  // Helper to extract file from lora data (handles both old string format and new object format)
-  function getLoraFile(loraData) {
-    if (!loraData) return null;
-    if (typeof loraData === 'string') return loraData;
-    if (typeof loraData === 'object' && loraData.file) return loraData.file;
-    return null;
-  }
-
-  function getLoraWeight(loraData) {
-    if (!loraData) return 1;
-    if (typeof loraData === 'object' && loraData.weight !== undefined) return loraData.weight;
-    return 1;
-  }
-
-  // Look up LoRA object from library by filename
-  function getLoraByFilename(filename) {
-    if (!filename) return null;
-    // Extract just the filename if it's a path
-    const baseName = filename.split('/').pop();
-    // Find matching LoRA in library (check both high_file and low_file)
-    return loraLibrary.find(l =>
-      l.high_file === filename || l.low_file === filename ||
-      (l.high_file && l.high_file.split('/').pop() === baseName) ||
-      (l.low_file && l.low_file.split('/').pop() === baseName)
-    );
-  }
-
-  // Look up friendly name from LoRA library by filename
-  function getLoraFriendlyName(filename) {
-    if (!filename) return null;
-    const baseName = filename.split('/').pop();
-    const match = getLoraByFilename(filename);
-    if (match) {
-      return match.friendly_name || match.base_name || baseName.replace('.safetensors', '');
-    }
-    // Fallback to cleaned filename
-    return baseName.replace('.safetensors', '');
   }
 
   // Build defaultLoras array for SubmitPromptModal
@@ -434,43 +470,6 @@ export default function JobDetail() {
       .replace('_20251124', ' (2025)');
     // Capitalize first letter
     return name.charAt(0).toUpperCase() + name.slice(1);
-  }
-
-  // Format LoRAs for display (includes weights, friendly names, and lora objects)
-  function formatLorasDisplay(highLora, lowLora) {
-    const highLoras = parseLoraArray(highLora);
-    const lowLoras = parseLoraArray(lowLora);
-
-    if (highLoras.length === 0 && lowLoras.length === 0) {
-      return { display: 'N/A', count: 0 };
-    }
-
-    const maxLen = Math.max(highLoras.length, lowLoras.length);
-    const pairs = [];
-    for (let i = 0; i < maxLen; i++) {
-      const hFile = getLoraFile(highLoras[i]);
-      const lFile = getLoraFile(lowLoras[i]);
-      const hWeight = getLoraWeight(highLoras[i]);
-      const lWeight = getLoraWeight(lowLoras[i]);
-      // Use friendly name lookup instead of raw filename
-      const h = hFile ? getLoraFriendlyName(hFile) : null;
-      const l = lFile ? getLoraFriendlyName(lFile) : null;
-      // Get the LoRA object for opening the edit modal
-      const hLora = hFile ? getLoraByFilename(hFile) : null;
-      const lLora = lFile ? getLoraByFilename(lFile) : null;
-      if (h || l) {
-        pairs.push({
-          high: h,
-          highWeight: hWeight,
-          highLora: hLora,
-          low: l,
-          lowWeight: lWeight,
-          lowLora: lLora,
-          index: i + 1
-        });
-      }
-    }
-    return { pairs, count: pairs.length };
   }
 
   return (
