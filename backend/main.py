@@ -168,6 +168,8 @@ async def lifespan(app: FastAPI):
         queue_manager.start()
         print("Queue manager auto-started")
 
+    print("API Documentation available at: http://localhost:9090/docs")
+
     yield
 
     # Shutdown

@@ -169,7 +169,9 @@ Persistent data is stored in `~/backups/` with symlinks in `backend/`:
 
 ### Ports
 - Frontend: http://localhost:3030
-- Backend: http://localhost:9090
+- Backend API: http://localhost:9090
+- API Documentation (Swagger): http://localhost:9090/docs
+- API Documentation (ReDoc): http://localhost:9090/redoc
 - ComfyUI: Configured in Settings (default: http://localhost:8188)
 
 ## Git Guidelines
