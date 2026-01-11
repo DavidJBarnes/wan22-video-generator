@@ -71,8 +71,8 @@ export default function ImageRepo() {
     setError(null);
 
     try {
-      const tagIdParam = tagFilter === 'all' ? null : parseInt(tagFilter);
-      const data = await API.browseImageRepo(path, tagIdParam);
+      const tagParam = tagFilter === 'all' ? null : tagFilter;
+      const data = await API.browseImageRepo(path, tagParam);
 
       // Sort items
       const sortedFolders = sortItems(data.folders || []);
@@ -517,7 +517,7 @@ export default function ImageRepo() {
                 >
                   <MenuItem value="all">All Tags</MenuItem>
                   {availableTags.map(tag => (
-                    <MenuItem key={tag.id} value={tag.id.toString()}>
+                    <MenuItem key={tag.name} value={tag.name}>
                       {tag.name} ({tag.image_count || 0})
                     </MenuItem>
                   ))}

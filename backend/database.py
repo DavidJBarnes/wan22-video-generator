@@ -348,31 +348,44 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_job_logs_job_id ON job_logs(job_id)
         """)
 
-        # Image tags table - stores user-defined tags for organizing images
+        # Image tags - simplified schema storing tag names directly
+        # Tags are derived from job_name_prefixes and job_name_descriptions in settings
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS image_tags (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE NOT NULL,
-                created_at TEXT NOT NULL
-            )
-        """)
-
-        # Image tag associations - many-to-many relationship between images and tags
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS image_tag_associations (
+            CREATE TABLE IF NOT EXISTS image_tags_v2 (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 image_path TEXT NOT NULL,
-                tag_id INTEGER NOT NULL,
+                tag_name TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                FOREIGN KEY (tag_id) REFERENCES image_tags(id) ON DELETE CASCADE,
-                UNIQUE(image_path, tag_id)
+                UNIQUE(image_path, tag_name)
             )
         """)
 
         # Index for fast tag lookup by image path
         cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_image_tag_assoc_path ON image_tag_associations(image_path)
+            CREATE INDEX IF NOT EXISTS idx_image_tags_v2_path ON image_tags_v2(image_path)
         """)
+
+        # Index for fast image lookup by tag name
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_image_tags_v2_tag ON image_tags_v2(tag_name)
+        """)
+
+        # Migrate from old schema if needed
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='image_tag_associations'")
+        if cursor.fetchone():
+            # Check if there's data to migrate
+            cursor.execute("SELECT COUNT(*) FROM image_tag_associations")
+            if cursor.fetchone()[0] > 0:
+                # Migrate old associations to new table
+                cursor.execute("""
+                    INSERT OR IGNORE INTO image_tags_v2 (image_path, tag_name, created_at)
+                    SELECT a.image_path, t.name, a.created_at
+                    FROM image_tag_associations a
+                    JOIN image_tags t ON a.tag_id = t.id
+                """)
+            # Drop old tables
+            cursor.execute("DROP TABLE IF EXISTS image_tag_associations")
+            cursor.execute("DROP TABLE IF EXISTS image_tags")
 
         # Insert default settings if not exist
         # Note: comfyui_url should match config.py COMFYUI_SERVER_URL
@@ -1992,102 +2005,24 @@ def compute_image_hash(image_data: bytes) -> str:
 
 
 # ============== Image Tag Functions ==============
-
-def get_all_image_tags() -> List[Dict[str, Any]]:
-    """Get all image tags ordered by name."""
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, name, created_at
-            FROM image_tags
-            ORDER BY name ASC
-        """)
-        return [dict(row) for row in cursor.fetchall()]
-
-
-def get_image_tag(tag_id: int) -> Optional[Dict[str, Any]]:
-    """Get a specific image tag by ID."""
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, name, created_at
-            FROM image_tags
-            WHERE id = ?
-        """, (tag_id,))
-        row = cursor.fetchone()
-        return dict(row) if row else None
-
-
-def get_image_tag_by_name(name: str) -> Optional[Dict[str, Any]]:
-    """Get a specific image tag by name."""
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, name, created_at
-            FROM image_tags
-            WHERE name = ?
-        """, (name,))
-        row = cursor.fetchone()
-        return dict(row) if row else None
-
-
-def create_image_tag(name: str) -> int:
-    """Create a new image tag and return its ID.
-
-    Raises sqlite3.IntegrityError if tag name already exists.
-    """
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO image_tags (name, created_at)
-            VALUES (?, ?)
-        """, (name.strip(), utc_now_iso()))
-        return cursor.lastrowid
-
-
-def update_image_tag(tag_id: int, name: str) -> bool:
-    """Update an image tag's name.
-
-    Returns True if updated, False if tag not found.
-    """
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE image_tags
-            SET name = ?
-            WHERE id = ?
-        """, (name.strip(), tag_id))
-        return cursor.rowcount > 0
-
-
-def delete_image_tag(tag_id: int) -> bool:
-    """Delete an image tag and all its associations.
-
-    Returns True if deleted, False if tag not found.
-    """
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        # Associations are deleted automatically via ON DELETE CASCADE
-        cursor.execute("DELETE FROM image_tags WHERE id = ?", (tag_id,))
-        return cursor.rowcount > 0
-
+# Tags are now derived from job_name_prefixes and job_name_descriptions in settings.
+# The image_tags_v2 table stores image_path -> tag_name associations directly.
 
 def get_tags_for_image(image_path: str) -> List[Dict[str, Any]]:
     """Get all tags associated with an image."""
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT t.id, t.name, t.created_at
-            FROM image_tags t
-            JOIN image_tag_associations a ON t.id = a.tag_id
-            WHERE a.image_path = ?
-            ORDER BY t.name ASC
+            SELECT tag_name as name
+            FROM image_tags_v2
+            WHERE image_path = ?
+            ORDER BY tag_name ASC
         """, (image_path,))
-        return [dict(row) for row in cursor.fetchall()]
+        return [{"name": row["name"]} for row in cursor.fetchall()]
 
 
-def add_tag_to_image(image_path: str, tag_id: int) -> bool:
-    """Add a tag to an image.
+def add_tag_to_image(image_path: str, tag_name: str) -> bool:
+    """Add a tag to an image by name.
 
     Returns True if added, False if association already exists.
     """
@@ -2095,50 +2030,59 @@ def add_tag_to_image(image_path: str, tag_id: int) -> bool:
         cursor = conn.cursor()
         try:
             cursor.execute("""
-                INSERT INTO image_tag_associations (image_path, tag_id, created_at)
+                INSERT INTO image_tags_v2 (image_path, tag_name, created_at)
                 VALUES (?, ?, ?)
-            """, (image_path, tag_id, utc_now_iso()))
+            """, (image_path, tag_name.strip().lower(), utc_now_iso()))
             return True
         except sqlite3.IntegrityError:
             return False  # Association already exists
 
 
-def remove_tag_from_image(image_path: str, tag_id: int) -> bool:
-    """Remove a tag from an image.
+def remove_tag_from_image(image_path: str, tag_name: str) -> bool:
+    """Remove a tag from an image by name.
 
     Returns True if removed, False if association didn't exist.
     """
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            DELETE FROM image_tag_associations
-            WHERE image_path = ? AND tag_id = ?
-        """, (image_path, tag_id))
+            DELETE FROM image_tags_v2
+            WHERE image_path = ? AND tag_name = ?
+        """, (image_path, tag_name.strip().lower()))
         return cursor.rowcount > 0
 
 
-def get_images_by_tag(tag_id: int) -> List[str]:
-    """Get all image paths associated with a tag."""
+def get_images_by_tag(tag_name: str) -> List[str]:
+    """Get all image paths associated with a tag name."""
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT image_path
-            FROM image_tag_associations
-            WHERE tag_id = ?
+            FROM image_tags_v2
+            WHERE tag_name = ?
             ORDER BY image_path ASC
-        """, (tag_id,))
+        """, (tag_name.strip().lower(),))
         return [row['image_path'] for row in cursor.fetchall()]
 
 
-def get_all_image_tags_with_counts() -> List[Dict[str, Any]]:
-    """Get all image tags with usage counts."""
+def get_all_used_tags_with_counts() -> List[Dict[str, Any]]:
+    """Get all tags that are actually used, with their image counts."""
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT t.id, t.name, t.created_at, COUNT(a.id) as image_count
-            FROM image_tags t
-            LEFT JOIN image_tag_associations a ON t.id = a.tag_id
-            GROUP BY t.id
-            ORDER BY t.name ASC
+            SELECT tag_name as name, COUNT(*) as image_count
+            FROM image_tags_v2
+            GROUP BY tag_name
+            ORDER BY tag_name ASC
         """)
         return [dict(row) for row in cursor.fetchall()]
+
+
+def add_tags_to_image(image_path: str, tag_names: List[str]) -> int:
+    """Add multiple tags to an image. Returns count of tags added."""
+    added = 0
+    for tag_name in tag_names:
+        if tag_name and tag_name.strip():
+            if add_tag_to_image(image_path, tag_name):
+                added += 1
+    return added

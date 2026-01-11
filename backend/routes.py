@@ -55,15 +55,12 @@ from database import (
     get_hidden_loras as db_get_hidden_loras,
     get_jobs_by_input_image,
     get_job_logs as db_get_job_logs,
-    get_all_image_tags as db_get_all_image_tags,
-    get_image_tag as db_get_image_tag,
-    create_image_tag as db_create_image_tag,
-    update_image_tag as db_update_image_tag,
-    delete_image_tag as db_delete_image_tag,
     get_tags_for_image as db_get_tags_for_image,
     add_tag_to_image as db_add_tag_to_image,
+    add_tags_to_image as db_add_tags_to_image,
     remove_tag_from_image as db_remove_tag_from_image,
-    get_all_image_tags_with_counts as db_get_all_image_tags_with_counts
+    get_all_used_tags_with_counts as db_get_all_used_tags_with_counts,
+    get_images_by_tag as db_get_images_by_tag
 )
 from comfyui_client import ComfyUIClient
 from queue_manager import queue_manager
@@ -489,7 +486,28 @@ async def create_new_job(job: JobCreate):
         faceswap_faces_index=params.get("faceswap_faces_index", "0"),
         fade_to_black=params.get("fade_to_black", False)
     )
-    
+
+    # Auto-tag the input image with job name parts (prefix and description)
+    # Job names are typically formatted as "prefix-description" (e.g., "kelly-missionary")
+    if job.input_image:
+        # Get the image path from image repo by matching the filename
+        settings = db_get_all_settings()
+        repo_root = settings.get("image_repo_path", "")
+        if repo_root:
+            # Search for the image in the repo by filename
+            import os
+            input_filename = os.path.basename(job.input_image)
+            for root, dirs, files in os.walk(repo_root):
+                if input_filename in files:
+                    full_path = os.path.join(root, input_filename)
+                    rel_path = os.path.relpath(full_path, repo_root).replace("\\", "/")
+                    # Parse job name into tags (split by hyphen)
+                    name_parts = job.name.split("-")
+                    tags_to_add = [part.strip().lower() for part in name_parts if part.strip()]
+                    if tags_to_add:
+                        db_add_tags_to_image(rel_path, tags_to_add)
+                    break
+
     return get_job(job_id)
 
 
@@ -1596,13 +1614,12 @@ async def upload_image_base64(image_data: str = Form(...), filename: str = Form(
 # ============== Image Repository Endpoints ==============
 
 @router.get("/image-repo/browse")
-async def browse_image_repo(path: str = "", tag_id: Optional[int] = None):
+async def browse_image_repo(path: str = "", tag: Optional[str] = None):
     """Browse the image repository directory.
 
     Returns folders and images (jpg, png) in the specified path.
-    Optionally filter images by tag_id.
+    Optionally filter images by tag name.
     """
-    from database import get_images_by_tag as db_get_images_by_tag
 
     repo_root = get_setting("image_repo_path", "")
 
@@ -1689,9 +1706,9 @@ async def browse_image_repo(path: str = "", tag_id: Optional[int] = None):
     for image in images:
         image['rating'] = all_ratings.get(image['path'], None)
 
-    # Filter images by tag if tag_id is provided
-    if tag_id is not None:
-        tagged_paths = set(db_get_images_by_tag(tag_id))
+    # Filter images by tag if tag name is provided
+    if tag:
+        tagged_paths = set(db_get_images_by_tag(tag))
         images = [img for img in images if img['path'] in tagged_paths]
 
     return {
@@ -2041,73 +2058,35 @@ async def get_jobs_for_image(filename: str):
 
 
 # ============== Image Tag Endpoints ==============
-
-class ImageTagCreate(BaseModel):
-    name: str
-
-
-class ImageTagUpdate(BaseModel):
-    name: str
-
+# Tags are derived from job_name_prefixes and job_name_descriptions in settings.
+# No more manual tag CRUD - tags are managed through settings.
 
 @router.get("/image-tags")
 async def get_all_image_tags():
-    """Get all image tags with usage counts."""
-    tags = db_get_all_image_tags_with_counts()
+    """Get all available tags (from prefixes + descriptions) with usage counts."""
+    # Get prefixes and descriptions from settings
+    settings = db_get_all_settings()
+    prefixes = json.loads(settings.get("job_name_prefixes", "[]"))
+    descriptions = json.loads(settings.get("job_name_descriptions", "[]"))
+
+    # Combine and normalize to lowercase
+    available_tags = set()
+    for tag in prefixes + descriptions:
+        if tag and tag.strip():
+            available_tags.add(tag.strip().lower())
+
+    # Get usage counts for each tag
+    used_tags = {t["name"]: t["image_count"] for t in db_get_all_used_tags_with_counts()}
+
+    # Build response with all available tags and their counts
+    tags = []
+    for tag_name in sorted(available_tags):
+        tags.append({
+            "name": tag_name,
+            "image_count": used_tags.get(tag_name, 0)
+        })
+
     return {"tags": tags}
-
-
-@router.post("/image-tags")
-async def create_image_tag(tag_data: ImageTagCreate):
-    """Create a new image tag."""
-    import sqlite3
-
-    name = tag_data.name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Tag name cannot be empty")
-
-    try:
-        tag_id = db_create_image_tag(name)
-        return {"id": tag_id, "name": name, "message": "Tag created successfully"}
-    except sqlite3.IntegrityError:
-        raise HTTPException(status_code=400, detail="Tag with this name already exists")
-
-
-@router.put("/image-tags/{tag_id}")
-async def update_image_tag(tag_id: int, tag_data: ImageTagUpdate):
-    """Update an image tag's name."""
-    import sqlite3
-
-    name = tag_data.name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Tag name cannot be empty")
-
-    # Check if tag exists
-    tag = db_get_image_tag(tag_id)
-    if not tag:
-        raise HTTPException(status_code=404, detail="Tag not found")
-
-    try:
-        success = db_update_image_tag(tag_id, name)
-        if success:
-            return {"id": tag_id, "name": name, "message": "Tag updated successfully"}
-        raise HTTPException(status_code=500, detail="Failed to update tag")
-    except sqlite3.IntegrityError:
-        raise HTTPException(status_code=400, detail="Tag with this name already exists")
-
-
-@router.delete("/image-tags/{tag_id}")
-async def delete_image_tag(tag_id: int):
-    """Delete an image tag and all its associations."""
-    # Check if tag exists
-    tag = db_get_image_tag(tag_id)
-    if not tag:
-        raise HTTPException(status_code=404, detail="Tag not found")
-
-    success = db_delete_image_tag(tag_id)
-    if success:
-        return {"id": tag_id, "message": "Tag deleted successfully"}
-    raise HTTPException(status_code=500, detail="Failed to delete tag")
 
 
 @router.get("/image-repo/image-tags")
@@ -2121,29 +2100,28 @@ async def get_image_tags(image_path: str):
 
 
 @router.post("/image-repo/image-tags")
-async def add_image_tag(image_path: str = Form(...), tag_id: int = Form(...)):
-    """Add a tag to an image."""
+async def add_image_tag(image_path: str = Form(...), tag_name: str = Form(...)):
+    """Add a tag to an image by name."""
     if not image_path:
         raise HTTPException(status_code=400, detail="image_path is required")
+    if not tag_name or not tag_name.strip():
+        raise HTTPException(status_code=400, detail="tag_name is required")
 
-    # Verify the tag exists
-    tag = db_get_image_tag(tag_id)
-    if not tag:
-        raise HTTPException(status_code=404, detail="Tag not found")
-
-    added = db_add_tag_to_image(image_path, tag_id)
+    added = db_add_tag_to_image(image_path, tag_name.strip())
     if added:
-        return {"image_path": image_path, "tag_id": tag_id, "message": "Tag added to image"}
-    return {"image_path": image_path, "tag_id": tag_id, "message": "Tag already associated with image"}
+        return {"image_path": image_path, "tag_name": tag_name, "message": "Tag added to image"}
+    return {"image_path": image_path, "tag_name": tag_name, "message": "Tag already associated with image"}
 
 
 @router.delete("/image-repo/image-tags")
-async def remove_image_tag(image_path: str, tag_id: int):
-    """Remove a tag from an image."""
+async def remove_image_tag(image_path: str, tag_name: str):
+    """Remove a tag from an image by name."""
     if not image_path:
         raise HTTPException(status_code=400, detail="image_path is required")
+    if not tag_name or not tag_name.strip():
+        raise HTTPException(status_code=400, detail="tag_name is required")
 
-    removed = db_remove_tag_from_image(image_path, tag_id)
+    removed = db_remove_tag_from_image(image_path, tag_name.strip())
     if removed:
-        return {"image_path": image_path, "tag_id": tag_id, "message": "Tag removed from image"}
+        return {"image_path": image_path, "tag_name": tag_name, "message": "Tag removed from image"}
     raise HTTPException(status_code=404, detail="Tag association not found")
