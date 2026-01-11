@@ -76,51 +76,51 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content">
-        <button type="button" className="modal-close" onClick={onClose}>×</button>
-        <h2>Edit LoRA Metadata</h2>
-
-        <div style={{ marginBottom: '16px', padding: '12px', background: '#f5f5f5', borderRadius: '4px' }}>
-          <strong style={{ fontSize: '12px', color: '#666' }}>Base Name:</strong>
-          <div style={{ marginTop: '4px', marginBottom: '8px' }}>
-            <code style={{ fontSize: '13px' }}>{cleanBaseName(lora.base_name)}</code>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px' }}>
-            <div>
-              <span style={{ color: '#2e7d32', fontWeight: 500 }}>HIGH:</span>{' '}
-              <code>{lora.high_file ? lora.high_file.split('/').pop() : '—'}</code>
-            </div>
-            <div>
-              <span style={{ color: '#1565c0', fontWeight: 500 }}>LOW:</span>{' '}
-              <code>{lora.low_file ? lora.low_file.split('/').pop() : '—'}</code>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '12px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #ddd' }}>
-            <TextField
-              type="number"
-              label="Default High Weight"
-              size="small"
-              value={defaultHighWeight}
-              onChange={(e) => setDefaultHighWeight(parseFloat(e.target.value) || 0)}
-              inputProps={{ min: 0, max: 2, step: 0.1 }}
-              sx={{ width: '140px' }}
-            />
-            <TextField
-              type="number"
-              label="Default Low Weight"
-              size="small"
-              value={defaultLowWeight}
-              onChange={(e) => setDefaultLowWeight(parseFloat(e.target.value) || 0)}
-              inputProps={{ min: 0, max: 2, step: 0.1 }}
-              sx={{ width: '140px' }}
-            />
-          </div>
-          <Typography variant="caption" display="block" sx={{ mt: 1, color: '#666' }}>
-            Default weights to populate when this LoRA is selected in Create Job
-          </Typography>
+      <form className="modal-content" onSubmit={handleSubmit}>
+        {/* Header */}
+        <div className="modal-header">
+          <h2>Edit LoRA: {cleanBaseName(lora.base_name)}</h2>
+          <button type="button" className="modal-close" onClick={onClose}>×</button>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        {/* Body */}
+        <div className="modal-body">
+          <div style={{ marginBottom: '16px', padding: '12px', background: '#f5f5f5', borderRadius: '4px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px' }}>
+              <div>
+                <span style={{ color: '#2e7d32', fontWeight: 500 }}>HIGH:</span>{' '}
+                <code>{lora.high_file ? lora.high_file.split('/').pop() : '—'}</code>
+              </div>
+              <div>
+                <span style={{ color: '#1565c0', fontWeight: 500 }}>LOW:</span>{' '}
+                <code>{lora.low_file ? lora.low_file.split('/').pop() : '—'}</code>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #ddd' }}>
+              <TextField
+                type="number"
+                label="Default High Weight"
+                size="small"
+                value={defaultHighWeight}
+                onChange={(e) => setDefaultHighWeight(parseFloat(e.target.value) || 0)}
+                inputProps={{ min: 0, max: 2, step: 0.1 }}
+                sx={{ width: '140px' }}
+              />
+              <TextField
+                type="number"
+                label="Default Low Weight"
+                size="small"
+                value={defaultLowWeight}
+                onChange={(e) => setDefaultLowWeight(parseFloat(e.target.value) || 0)}
+                inputProps={{ min: 0, max: 2, step: 0.1 }}
+                sx={{ width: '140px' }}
+              />
+            </div>
+            <Typography variant="caption" display="block" sx={{ mt: 1, color: '#666' }}>
+              Default weights to populate when this LoRA is selected in Create Job
+            </Typography>
+          </div>
+
           <div className="form-group">
             <TextField
               label="Friendly Name"
@@ -266,18 +266,19 @@ export default function LoraEditModal({ lora, onClose, onSave }) {
               helperText="Keep track of what works well with this LoRA"
             />
           </div>
+        </div>
 
-          <div className="modal-actions">
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={saving}
-            >
-              {saving ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </div>
-        </form>
-      </div>
+        {/* Footer */}
+        <div className="modal-footer">
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={saving}
+          >
+            {saving ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }
