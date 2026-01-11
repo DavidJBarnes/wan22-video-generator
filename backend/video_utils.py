@@ -219,9 +219,7 @@ def apply_fade_effects(input_path: str, output_path: str, fade_in: bool = False,
             "-y",
             "-i", input_path,
             "-vf", filter_string,
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "18",
+            "-c:v", "libopenh264",
             "-pix_fmt", "yuv420p",
             output_path
         ]
