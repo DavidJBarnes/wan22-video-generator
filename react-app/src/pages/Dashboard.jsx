@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FormControl,
@@ -27,6 +27,45 @@ export default function Dashboard() {
   const navigate = useNavigate();
   // Use centralized jobs context instead of local polling
   const { jobs: allJobs, comfyStatus, loading, stats, avgRunTime } = useJobs();
+
+  const [runningJobProgress, setRunningJobProgress] = useState(null);
+
+  // Find the currently running job
+  const runningJob = useMemo(() =>
+    allJobs.find(job => job.status === 'running'),
+    [allJobs]
+  );
+
+  // Poll progress for running job
+  useEffect(() => {
+    if (!runningJob) {
+      setRunningJobProgress(null);
+      return;
+    }
+
+    const fetchProgress = async () => {
+      try {
+        const progress = await API.getJobProgress(runningJob.id);
+        setRunningJobProgress(progress);
+      } catch (error) {
+        console.error('Failed to fetch progress:', error);
+      }
+    };
+
+    fetchProgress();
+    const interval = setInterval(fetchProgress, 2000);
+    return () => clearInterval(interval);
+  }, [runningJob?.id]);
+
+  // Calculate ETA for next job completion
+  const nextJobEta = useMemo(() => {
+    if (!runningJob || !runningJobProgress?.started_at_ts || !avgRunTime) {
+      return null;
+    }
+    const elapsed = (Date.now() / 1000) - runningJobProgress.started_at_ts;
+    const remaining = Math.max(0, avgRunTime - elapsed);
+    return Math.round(remaining);
+  }, [runningJob, runningJobProgress?.started_at_ts, avgRunTime]);
 
   const [statusFilter, setStatusFilter] = useState(() => {
     const saved = localStorage.getItem('dashboardStatusFilter');
@@ -137,6 +176,15 @@ export default function Dashboard() {
     return `${mins}m ${secs}s`;
   }
 
+  function formatEta(seconds) {
+    if (seconds == null) return 'N/A';
+    if (seconds <= 0) return '<1m';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins === 0) return `${secs}s`;
+    return `~${mins}m ${secs}s`;
+  }
+
   if (loading) {
     return (
       <div>
@@ -181,6 +229,16 @@ export default function Dashboard() {
         <div className="card">
           <h3>Avg Run Time</h3>
           <div className="value">{formatRunTime(avgRunTime)}</div>
+        </div>
+
+        <div className="card">
+          <h3>Next Job Complete</h3>
+          <div className="value">{runningJob ? formatEta(nextJobEta) : 'N/A'}</div>
+          {runningJob && (
+            <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+              {runningJob.name}
+            </div>
+          )}
         </div>
       </div>
 
