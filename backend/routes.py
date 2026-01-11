@@ -491,7 +491,7 @@ async def create_new_job(job: JobCreate):
     # Job names are typically formatted as "prefix-description" (e.g., "kelly-missionary")
     if job.input_image:
         # Get the image path from image repo by matching the filename
-        settings = db_get_all_settings()
+        settings = get_all_settings()
         repo_root = settings.get("image_repo_path", "")
         if repo_root:
             # Search for the image in the repo by filename
@@ -2065,7 +2065,7 @@ async def get_jobs_for_image(filename: str):
 async def get_all_image_tags():
     """Get all available tags (from prefixes + descriptions) with usage counts."""
     # Get prefixes and descriptions from settings
-    settings = db_get_all_settings()
+    settings = get_all_settings()
     prefixes = json.loads(settings.get("job_name_prefixes", "[]"))
     descriptions = json.loads(settings.get("job_name_descriptions", "[]"))
 
