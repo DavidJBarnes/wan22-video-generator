@@ -3,6 +3,7 @@ import { Button, TextField, FormControlLabel, Checkbox, FormHelperText, Circular
 import RestoreIcon from '@mui/icons-material/Restore';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
+import { useLoras } from '../contexts/LoraContext';
 import LoraAutocomplete from './LoraAutocomplete';
 import ImageRepoBrowserModal from './ImageRepoBrowserModal';
 import './CreateJobModal.css';
@@ -38,7 +39,8 @@ export default function SubmitPromptModal({
     { lora: null, highWeight: 1, lowWeight: 1 },
     { lora: null, highWeight: 1, lowWeight: 1 }
   ]);
-  const [loras, setLoras] = useState([]);
+  // Use cached LoRAs from context instead of fetching on every mount
+  const { loras } = useLoras();
   const [submitting, setSubmitting] = useState(false);
   const [autoFinalize, setAutoFinalize] = useState(false);
   const defaultsAppliedRef = useRef(false);
@@ -52,27 +54,6 @@ export default function SubmitPromptModal({
   // Custom start image state (only for segments > 0)
   const [customStartImage, setCustomStartImage] = useState(null);  // Path in image repo
   const [showImageBrowser, setShowImageBrowser] = useState(false);
-
-  useEffect(() => {
-    loadLoras();
-  }, []);
-
-  async function loadLoras() {
-    try {
-      // Load from cached library instead of querying ComfyUI directly
-      const data = await API.getLoraLibrary();
-      const loraList = data.loras || [];
-      // Sort by friendly name or base name
-      loraList.sort((a, b) => {
-        const nameA = a.friendly_name || a.base_name;
-        const nameB = b.friendly_name || b.base_name;
-        return nameA.localeCompare(nameB);
-      });
-      setLoras(loraList);
-    } catch (error) {
-      console.error('Failed to load LoRAs:', error);
-    }
-  }
 
   // When loras are loaded, find matching LoRAs from default values (only once)
   useEffect(() => {
