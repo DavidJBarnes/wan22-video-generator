@@ -28,14 +28,9 @@ export default function Settings() {
   const [newDescription, setNewDescription] = useState('');
   const [promptIdentity, setPromptIdentity] = useState('');
   const [slideshowDelay, setSlideshowDelay] = useState(5);
-  const [imageTags, setImageTags] = useState([]);
-  const [newTagName, setNewTagName] = useState('');
-  const [loadingTags, setLoadingTags] = useState(false);
-
   useEffect(() => {
     loadSettings();
     loadHiddenLoras();
-    loadImageTags();
   }, []);
 
   async function loadSettings() {
@@ -119,44 +114,6 @@ export default function Settings() {
 
   function handleRemoveDescription(desc) {
     setNameDescriptions(nameDescriptions.filter(d => d !== desc));
-  }
-
-  async function loadImageTags() {
-    setLoadingTags(true);
-    try {
-      const data = await API.getImageTags();
-      setImageTags(data.tags || []);
-    } catch (error) {
-      console.error('Failed to load image tags:', error);
-    } finally {
-      setLoadingTags(false);
-    }
-  }
-
-  async function handleAddTag() {
-    const trimmed = newTagName.trim();
-    if (!trimmed) return;
-
-    try {
-      await API.createImageTag(trimmed);
-      setNewTagName('');
-      await loadImageTags();
-      showToast('Tag created successfully', 'success');
-    } catch (error) {
-      console.error('Failed to create tag:', error);
-      showToast(error.message || 'Failed to create tag', 'error');
-    }
-  }
-
-  async function handleDeleteTag(tagId) {
-    try {
-      await API.deleteImageTag(tagId);
-      await loadImageTags();
-      showToast('Tag deleted successfully', 'success');
-    } catch (error) {
-      console.error('Failed to delete tag:', error);
-      showToast(error.message || 'Failed to delete tag', 'error');
-    }
   }
 
   async function handleSave(e) {
@@ -310,49 +267,8 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Image Tags */}
-        <div className="card settings-section">
-          <h2>Image Tags</h2>
-          <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
-            Create tags to organize and filter images in the Image Repository.
-          </p>
-          <div className="form-group">
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-              <TextField
-                size="small"
-                value={newTagName}
-                onChange={(e) => setNewTagName(e.target.value)}
-                placeholder="Add tag..."
-                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
-                sx={{ flex: 1 }}
-              />
-              <Button variant="outlined" size="small" onClick={handleAddTag}>
-                Add
-              </Button>
-            </div>
-            {loadingTags ? (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
-                <CircularProgress size={24} />
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                {imageTags.map((tag) => (
-                  <Chip
-                    key={tag.id}
-                    label={`${tag.name} (${tag.image_count || 0})`}
-                    onDelete={() => handleDeleteTag(tag.id)}
-                    size="small"
-                  />
-                ))}
-                {imageTags.length === 0 && (
-                  <span style={{ color: '#999', fontStyle: 'italic', fontSize: '13px' }}>No tags created</span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
         {/* Job Naming Presets */}
+        {/* Note: Image tags are now derived from prefixes and descriptions below */}
         <div className="card settings-section">
           <h2>Job Naming Presets</h2>
           <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>

@@ -80,10 +80,10 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
     loadImageTags();
   }, [image.path]);
 
-  async function handleAddTag(tagId) {
-    if (!tagId) return;
+  async function handleAddTag(tagName) {
+    if (!tagName) return;
     try {
-      await API.addTagToImage(image.path, tagId);
+      await API.addTagToImage(image.path, tagName);
       // Refresh image tags
       const data = await API.getTagsForImage(image.path);
       setImageTags(data.tags || []);
@@ -93,9 +93,9 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
     }
   }
 
-  async function handleRemoveTag(tagId) {
+  async function handleRemoveTag(tagName) {
     try {
-      await API.removeTagFromImage(image.path, tagId);
+      await API.removeTagFromImage(image.path, tagName);
       // Refresh image tags
       const data = await API.getTagsForImage(image.path);
       setImageTags(data.tags || []);
@@ -107,7 +107,7 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
 
   // Get tags that are not yet applied to this image
   const unassignedTags = availableTags.filter(
-    tag => !imageTags.some(imgTag => imgTag.id === tag.id)
+    tag => !imageTags.some(imgTag => imgTag.name === tag.name)
   );
 
   // Keyboard navigation and shortcuts
@@ -263,10 +263,10 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: imageTags.length > 0 ? '8px' : 0 }}>
                     {imageTags.map(tag => (
                       <Chip
-                        key={tag.id}
+                        key={tag.name}
                         label={tag.name}
                         size="small"
-                        onDelete={() => handleRemoveTag(tag.id)}
+                        onDelete={() => handleRemoveTag(tag.name)}
                         sx={{ height: '24px' }}
                       />
                     ))}
@@ -282,7 +282,7 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
                         sx={{ fontSize: '13px' }}
                       >
                         {unassignedTags.map(tag => (
-                          <MenuItem key={tag.id} value={tag.id} sx={{ fontSize: '13px' }}>
+                          <MenuItem key={tag.name} value={tag.name} sx={{ fontSize: '13px' }}>
                             {tag.name}
                           </MenuItem>
                         ))}
@@ -291,7 +291,7 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
                   )}
                   {availableTags.length === 0 && (
                     <Typography variant="body2" sx={{ color: '#999', fontStyle: 'italic', fontSize: '12px' }}>
-                      No tags available. Create tags in Settings.
+                      No tags available. Add prefixes/descriptions in Settings.
                     </Typography>
                   )}
                 </>

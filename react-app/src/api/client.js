@@ -316,10 +316,10 @@ class APIClient {
 
   // ============== Image Repository ==============
 
-  async browseImageRepo(path = '', tagId = null) {
+  async browseImageRepo(path = '', tag = null) {
     let url = `/image-repo/browse?path=${encodeURIComponent(path)}`;
-    if (tagId !== null) {
-      url += `&tag_id=${tagId}`;
+    if (tag) {
+      url += `&tag=${encodeURIComponent(tag)}`;
     }
     return this.request(url);
   }
@@ -378,39 +378,21 @@ class APIClient {
   }
 
   // ============== Image Tags ==============
+  // Tags are derived from job_name_prefixes and job_name_descriptions in settings
 
   async getImageTags() {
+    // Returns available tags (from settings) with usage counts
     return this.request('/image-tags');
-  }
-
-  async createImageTag(name) {
-    return this.request('/image-tags', {
-      method: 'POST',
-      body: { name }
-    });
-  }
-
-  async updateImageTag(tagId, name) {
-    return this.request(`/image-tags/${tagId}`, {
-      method: 'PUT',
-      body: { name }
-    });
-  }
-
-  async deleteImageTag(tagId) {
-    return this.request(`/image-tags/${tagId}`, {
-      method: 'DELETE'
-    });
   }
 
   async getTagsForImage(imagePath) {
     return this.request(`/image-repo/image-tags?image_path=${encodeURIComponent(imagePath)}`);
   }
 
-  async addTagToImage(imagePath, tagId) {
+  async addTagToImage(imagePath, tagName) {
     const formData = new FormData();
     formData.append('image_path', imagePath);
-    formData.append('tag_id', tagId);
+    formData.append('tag_name', tagName);
 
     return this.request('/image-repo/image-tags', {
       method: 'POST',
@@ -418,8 +400,8 @@ class APIClient {
     });
   }
 
-  async removeTagFromImage(imagePath, tagId) {
-    return this.request(`/image-repo/image-tags?image_path=${encodeURIComponent(imagePath)}&tag_id=${tagId}`, {
+  async removeTagFromImage(imagePath, tagName) {
+    return this.request(`/image-repo/image-tags?image_path=${encodeURIComponent(imagePath)}&tag_name=${encodeURIComponent(tagName)}`, {
       method: 'DELETE'
     });
   }
