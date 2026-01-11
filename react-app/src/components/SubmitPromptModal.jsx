@@ -320,11 +320,9 @@ export default function SubmitPromptModal({
                               style={{
                                 width: '50px',
                                 height: '50px',
-                                objectFit: 'cover',
                                 borderRadius: '4px',
                                 cursor: 'pointer',
-                                border: customStartImage === img.value ? '2px solid #1976d2' : '1px solid #ccc',
-                                transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                                border: customStartImage === img.value ? '2px solid #1976d2' : '1px solid #ccc'
                               }}
                               className="image-thumbnail-hover"
                               onError={(e) => { e.target.style.display = 'none'; }}

@@ -164,7 +164,8 @@
   border-radius: 4px;
   border: 1px solid #ddd;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, object-fit 0.2s ease;
+  object-fit: cover;
 }
 
 .image-thumbnail-hover:hover {
