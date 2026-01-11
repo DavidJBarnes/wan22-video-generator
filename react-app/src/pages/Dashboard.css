@@ -1,3 +1,49 @@
+/* Dashboard stat cards */
+.stat-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.stat-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.stat-card-header svg {
+  font-size: 20px;
+}
+
+.stat-card-body {
+  padding: 16px;
+}
+
+.stat-card-body .value {
+  font-size: 32px;
+  font-weight: bold;
+  color: #333;
+}
+
+.stat-card-body .subtitle {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+}
+
+/* Card header colors */
+.stat-card-header.comfyui { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+.stat-card-header.running { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+.stat-card-header.pending { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+.stat-card-header.awaiting { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+.stat-card-header.avgtime { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+.stat-card-header.eta { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #333; }
+
 /* Status indicator */
 .status-indicator {
   display: flex;

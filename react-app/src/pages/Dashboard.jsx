@@ -17,6 +17,12 @@ import {
   Paper,
   CircularProgress
 } from '@mui/material';
+import MemoryIcon from '@mui/icons-material/Memory';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import EditIcon from '@mui/icons-material/Edit';
+import TimerIcon from '@mui/icons-material/Timer';
+import ScheduleIcon from '@mui/icons-material/Schedule';
 import API from '../api/client';
 import { useJobs } from '../contexts/JobsContext';
 import { formatDate, getFaceswapName } from '../utils/helpers';
@@ -201,44 +207,70 @@ export default function Dashboard() {
       <h1>Dashboard</h1>
 
       <div className="card-grid">
-        <div className="card">
-          <div className="status-indicator">
-            <div className={`status-dot ${getComfyStatusClass()}`}></div>
-            <div>
-              <h3>ComfyUI Status</h3>
-              <div>{getComfyStatusText()}</div>
+        <div className="stat-card">
+          <div className="stat-card-header comfyui">
+            <MemoryIcon />
+            ComfyUI Status
+          </div>
+          <div className="stat-card-body">
+            <div className="status-indicator">
+              <div className={`status-dot ${getComfyStatusClass()}`}></div>
+              <div className="value" style={{ fontSize: '18px' }}>{getComfyStatusText()}</div>
             </div>
           </div>
         </div>
 
-        <div className="card">
-          <h3>Running Jobs</h3>
-          <div className="value">{stats.runningCount}</div>
+        <div className="stat-card">
+          <div className="stat-card-header running">
+            <PlayArrowIcon />
+            Running Jobs
+          </div>
+          <div className="stat-card-body">
+            <div className="value">{stats.runningCount}</div>
+          </div>
         </div>
 
-        <div className="card">
-          <h3>Pending Jobs</h3>
-          <div className="value">{stats.pendingCount}</div>
+        <div className="stat-card">
+          <div className="stat-card-header pending">
+            <HourglassEmptyIcon />
+            Pending Jobs
+          </div>
+          <div className="stat-card-body">
+            <div className="value">{stats.pendingCount}</div>
+          </div>
         </div>
 
-        <div className="card">
-          <h3>Awaiting Prompt</h3>
-          <div className="value">{stats.awaitingPromptCount}</div>
+        <div className="stat-card">
+          <div className="stat-card-header awaiting">
+            <EditIcon />
+            Awaiting Prompt
+          </div>
+          <div className="stat-card-body">
+            <div className="value">{stats.awaitingPromptCount}</div>
+          </div>
         </div>
 
-        <div className="card">
-          <h3>Avg Run Time</h3>
-          <div className="value">{formatRunTime(avgRunTime)}</div>
+        <div className="stat-card">
+          <div className="stat-card-header avgtime">
+            <TimerIcon />
+            Avg Run Time
+          </div>
+          <div className="stat-card-body">
+            <div className="value">{formatRunTime(avgRunTime)}</div>
+          </div>
         </div>
 
-        <div className="card">
-          <h3>Next Job Complete</h3>
-          <div className="value">{runningJob ? formatEta(nextJobEta) : 'N/A'}</div>
-          {runningJob && (
-            <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-              {runningJob.name}
-            </div>
-          )}
+        <div className="stat-card">
+          <div className="stat-card-header eta">
+            <ScheduleIcon />
+            Next Job Complete
+          </div>
+          <div className="stat-card-body">
+            <div className="value">{runningJob ? formatEta(nextJobEta) : 'N/A'}</div>
+            {runningJob && (
+              <div className="subtitle">{runningJob.name}</div>
+            )}
+          </div>
         </div>
       </div>
 
