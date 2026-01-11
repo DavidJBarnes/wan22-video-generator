@@ -347,140 +347,103 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
         </div>
 
         <div className="modal-body">
-          {(namePrefixes.length > 0 || nameDescriptions.length > 0) && (
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+          {/* Row 1: Job Name with optional prefix/description */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            {namePrefixes.length > 0 && (
               <Autocomplete
                 size="small"
                 options={namePrefixes}
                 value={selectedPrefix}
                 onChange={(e, newValue) => setSelectedPrefix(newValue)}
                 freeSolo
-                sx={{ flex: 1 }}
+                sx={{ width: '120px' }}
                 renderInput={(params) => (
-                  <TextField {...params} label="Prefix" placeholder="Select or type..." variant="outlined" />
+                  <TextField {...params} label="Prefix" variant="outlined" />
                 )}
               />
+            )}
+            {nameDescriptions.length > 0 && (
               <Autocomplete
                 size="small"
                 options={nameDescriptions}
                 value={selectedDescription}
                 onChange={(e, newValue) => setSelectedDescription(newValue)}
                 freeSolo
-                sx={{ flex: 2 }}
+                sx={{ width: '180px' }}
                 renderInput={(params) => (
-                  <TextField {...params} label="Description" placeholder="Select or type..." variant="outlined" />
+                  <TextField {...params} label="Description" variant="outlined" />
                 )}
               />
-            </div>
-          )}
-          <div className="form-group">
+            )}
             <TextField
               label="Job Name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="My Video Job"
-              fullWidth
               variant="outlined"
               size="small"
+              sx={{ flex: 1 }}
             />
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-            <div style={{ flex: 1 }}>
-              <TextField
-                label="Width"
-                type="number"
-                value={width}
-                onChange={(e) => setWidth(parseInt(e.target.value))}
-                fullWidth
-                variant="outlined"
-                size="small"
-              />
-            </div>
+          {/* Row 2: Dimensions + Duration + FPS + Interpolation */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center' }}>
+            <TextField
+              label="Width"
+              type="number"
+              value={width}
+              onChange={(e) => setWidth(parseInt(e.target.value))}
+              variant="outlined"
+              size="small"
+              sx={{ width: '90px' }}
+            />
             <button
               type="button"
-              onClick={() => {
-                const temp = width;
-                setWidth(height);
-                setHeight(temp);
-              }}
-              style={{
-                background: 'none',
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                padding: '2px 5px',
-                fontSize: '12px',
-                color: '#666',
-                lineHeight: 1
-              }}
+              onClick={() => { setWidth(height); setHeight(width); }}
+              style={{ background: 'none', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer', padding: '2px 5px', fontSize: '12px', color: '#666' }}
               title="Swap width and height"
-            >
-              ↔
-            </button>
-            <div style={{ flex: 1 }}>
-              <TextField
-                label="Height"
-                type="number"
-                value={height}
-                onChange={(e) => setHeight(parseInt(e.target.value))}
-                fullWidth
-                variant="outlined"
-                size="small"
-              />
-            </div>
+            >↔</button>
+            <TextField
+              label="Height"
+              type="number"
+              value={height}
+              onChange={(e) => setHeight(parseInt(e.target.value))}
+              variant="outlined"
+              size="small"
+              sx={{ width: '90px' }}
+            />
+            <FormControl variant="outlined" size="small" sx={{ width: '130px' }}>
+              <InputLabel>Duration</InputLabel>
+              <Select value={segmentDuration} onChange={(e) => setSegmentDuration(parseInt(e.target.value))} label="Duration">
+                <MenuItem value={3}>3 sec</MenuItem>
+                <MenuItem value={4}>4 sec</MenuItem>
+                <MenuItem value={5}>5 sec</MenuItem>
+                <MenuItem value={8}>8 sec</MenuItem>
+                <MenuItem value={10}>10 sec</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl variant="outlined" size="small" sx={{ width: '100px' }}>
+              <InputLabel>FPS</InputLabel>
+              <Select value={fps} onChange={(e) => setFps(parseInt(e.target.value))} label="FPS">
+                <MenuItem value={8}>8</MenuItem>
+                <MenuItem value={12}>12</MenuItem>
+                <MenuItem value={16}>16</MenuItem>
+                <MenuItem value={20}>20</MenuItem>
+                <MenuItem value={24}>24</MenuItem>
+                <MenuItem value={32}>32</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl variant="outlined" size="small" sx={{ width: '120px' }}>
+              <InputLabel>Interpolation</InputLabel>
+              <Select value={frameInterpolation} onChange={(e) => setFrameInterpolation(e.target.value)} label="Interpolation">
+                <MenuItem value="none">None</MenuItem>
+                <MenuItem value="2x">2x</MenuItem>
+              </Select>
+            </FormControl>
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <FormControl fullWidth variant="outlined" size="small">
-                <InputLabel>Segment Duration</InputLabel>
-                <Select
-                  value={segmentDuration}
-                  onChange={(e) => setSegmentDuration(parseInt(e.target.value))}
-                  label="Segment Duration"
-                >
-                  <MenuItem value={3}>3 seconds</MenuItem>
-                  <MenuItem value={4}>4 seconds</MenuItem>
-                  <MenuItem value={5}>5 seconds</MenuItem>
-                  <MenuItem value={8}>8 seconds</MenuItem>
-                  <MenuItem value={10}>10 seconds</MenuItem>
-                </Select>
-              </FormControl>
-            </div>
-            <div className="form-group">
-              <FormControl fullWidth variant="outlined" size="small">
-                <InputLabel>FPS</InputLabel>
-                <Select
-                  value={fps}
-                  onChange={(e) => setFps(parseInt(e.target.value))}
-                  label="FPS"
-                >
-                  <MenuItem value={8}>8 fps</MenuItem>
-                  <MenuItem value={12}>12 fps</MenuItem>
-                  <MenuItem value={16}>16 fps</MenuItem>
-                  <MenuItem value={20}>20 fps</MenuItem>
-                  <MenuItem value={24}>24 fps</MenuItem>
-                  <MenuItem value={32}>32 fps</MenuItem>
-                </Select>
-              </FormControl>
-            </div>
-            <div className="form-group">
-              <FormControl fullWidth variant="outlined" size="small">
-                <InputLabel>Frame Interpolation</InputLabel>
-                <Select
-                  value={frameInterpolation}
-                  onChange={(e) => setFrameInterpolation(e.target.value)}
-                  label="Frame Interpolation"
-                >
-                  <MenuItem value="none">None</MenuItem>
-                  <MenuItem value="2x">2x</MenuItem>
-                </Select>
-              </FormControl>
-            </div>
-          </div>
-
-          <div className="form-group">
+          {/* Row 3: Prompt */}
+          <div style={{ marginBottom: '12px' }}>
             <TextField
               label="Prompt"
               value={prompt}
@@ -490,43 +453,29 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
               placeholder="Describe the video scene and action..."
               fullWidth
               variant="outlined"
+              size="small"
             />
-            <button
-              type="button"
-              onClick={() => setPrompt('')}
-              disabled={!prompt.trim()}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: prompt.trim() ? '#1976d2' : '#ccc',
-                cursor: prompt.trim() ? 'pointer' : 'default',
-                fontSize: '12px',
-                padding: '4px 0',
-                textDecoration: 'underline'
-              }}
-            >
-              Clear prompt
-            </button>
+            {prompt.trim() && (
+              <button
+                type="button"
+                onClick={() => setPrompt('')}
+                style={{ background: 'none', border: 'none', color: '#1976d2', cursor: 'pointer', fontSize: '11px', padding: '2px 0', textDecoration: 'underline' }}
+              >Clear</button>
+            )}
           </div>
 
-          <div className="form-group">
-            <label>Start Image</label>
+          {/* Row 4: Start Image (compact) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 500, color: '#666' }}>Start Image:</span>
             {!preUploadedImageUrl && !imagePreview && (
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageChange}
-              />
+              <input type="file" accept="image/*" onChange={handleImageChange} style={{ fontSize: '13px' }} />
             )}
             {imagePreview && (
-              <div className="image-preview">
-                <img src={imagePreview} alt="Preview" />
-                {preUploadedImageUrl && (
-                  <small>Image from repository: {preUploadedImageUrl}</small>
-                )}
-                {!preUploadedImageUrl && imageFile && (
-                  <small>{imageFile.name}</small>
-                )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <img src={imagePreview} alt="Preview" style={{ height: '40px', borderRadius: '4px', border: '1px solid #ddd' }} />
+                <span style={{ fontSize: '12px', color: '#666' }}>
+                  {preUploadedImageUrl ? preUploadedImageUrl : imageFile?.name}
+                </span>
               </div>
             )}
           </div>
@@ -599,83 +548,43 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
             ))}
           </div>
 
-          {/* Face Swap */}
-          <div className="form-group" style={{
-            marginTop: '16px',
-            padding: '12px',
-            background: '#f5f5f5',
-            borderRadius: '8px',
-            border: '1px solid #e0e0e0'
-          }}>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={faceswapEnabled}
-                  onChange={(e) => setFaceswapEnabled(e.target.checked)}
-                />
-              }
-              label={<span style={{ fontWeight: 500 }}>Enable Face Swap (ReActor)</span>}
-            />
-            {faceswapEnabled && (
-              <>
-                <FormControl fullWidth variant="outlined" size="small" sx={{ mt: 1 }}>
-                  <InputLabel>Face</InputLabel>
-                  <Select
-                    value={faceswapImage}
-                    onChange={(e) => setFaceswapImage(e.target.value)}
-                    label="Face"
-                  >
-                    {FACESWAP_FACES.map((face) => (
-                      <MenuItem key={face.value} value={face.value}>
-                        {face.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                  <FormControl variant="outlined" size="small" sx={{ flex: 1 }}>
-                    <InputLabel>Faces Order</InputLabel>
-                    <Select
-                      value={faceswapFacesOrder}
-                      onChange={(e) => setFaceswapFacesOrder(e.target.value)}
-                      label="Faces Order"
-                    >
-                      <MenuItem value="left-right">Left to Right</MenuItem>
-                      <MenuItem value="right-left">Right to Left</MenuItem>
-                      <MenuItem value="top-bottom">Top to Bottom</MenuItem>
-                      <MenuItem value="bottom-top">Bottom to Top</MenuItem>
-                      <MenuItem value="small-large">Small to Large</MenuItem>
-                      <MenuItem value="large-small">Large to Small</MenuItem>
+          {/* Options row: Face Swap + Auto Finalize */}
+          <div style={{ display: 'flex', gap: '16px', padding: '10px 12px', background: '#f9f9f9', borderRadius: '6px', border: '1px solid #e0e0e0', marginBottom: '8px', alignItems: 'flex-start' }}>
+            {/* Face Swap */}
+            <div style={{ flex: 1 }}>
+              <FormControlLabel
+                control={<Checkbox checked={faceswapEnabled} onChange={(e) => setFaceswapEnabled(e.target.checked)} size="small" />}
+                label={<span style={{ fontSize: '13px', fontWeight: 500 }}>Face Swap</span>}
+                sx={{ mb: faceswapEnabled ? 1 : 0 }}
+              />
+              {faceswapEnabled && (
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <FormControl variant="outlined" size="small" sx={{ width: '140px' }}>
+                    <InputLabel>Face</InputLabel>
+                    <Select value={faceswapImage} onChange={(e) => setFaceswapImage(e.target.value)} label="Face">
+                      {FACESWAP_FACES.map((face) => (
+                        <MenuItem key={face.value} value={face.value}>{face.label}</MenuItem>
+                      ))}
                     </Select>
                   </FormControl>
-                  <TextField
-                    label="Faces Index"
-                    value={faceswapFacesIndex}
-                    onChange={(e) => setFaceswapFacesIndex(e.target.value)}
-                    variant="outlined"
-                    size="small"
-                    sx={{ width: '120px' }}
-                    helperText="e.g. 0 or 0,1"
-                  />
+                  <FormControl variant="outlined" size="small" sx={{ width: '130px' }}>
+                    <InputLabel>Order</InputLabel>
+                    <Select value={faceswapFacesOrder} onChange={(e) => setFaceswapFacesOrder(e.target.value)} label="Order">
+                      <MenuItem value="left-right">Left-Right</MenuItem>
+                      <MenuItem value="right-left">Right-Left</MenuItem>
+                      <MenuItem value="small-large">Small-Large</MenuItem>
+                      <MenuItem value="large-small">Large-Small</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <TextField label="Index" value={faceswapFacesIndex} onChange={(e) => setFaceswapFacesIndex(e.target.value)} variant="outlined" size="small" sx={{ width: '70px' }} />
                 </div>
-              </>
-            )}
-          </div>
-
-          {/* Auto Finalize */}
-          <div className="form-group">
+              )}
+            </div>
+            {/* Auto Finalize */}
             <FormControlLabel
-              control={
-                <Checkbox
-                  checked={autoFinalize}
-                  onChange={(e) => setAutoFinalize(e.target.checked)}
-                />
-              }
-              label="Auto-finalize after first segment"
+              control={<Checkbox checked={autoFinalize} onChange={(e) => setAutoFinalize(e.target.checked)} size="small" />}
+              label={<span style={{ fontSize: '13px' }}>Auto-finalize</span>}
             />
-            <FormHelperText sx={{ ml: 4, mt: -1 }}>
-              Automatically merge and finalize video when segment completes
-            </FormHelperText>
           </div>
 
         </div>
