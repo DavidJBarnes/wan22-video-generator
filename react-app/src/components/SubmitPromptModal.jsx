@@ -34,8 +34,9 @@ export default function SubmitPromptModal({
   onSuccess
 }) {
   const [prompt, setPrompt] = useState(defaultPrompt);
-  // Two LoRA slots, each with lora object and weights
+  // Three LoRA slots, each with lora object and weights
   const [selectedLoras, setSelectedLoras] = useState([
+    { lora: null, highWeight: 1, lowWeight: 1 },
     { lora: null, highWeight: 1, lowWeight: 1 },
     { lora: null, highWeight: 1, lowWeight: 1 }
   ]);
@@ -67,10 +68,11 @@ export default function SubmitPromptModal({
     if (defaultLoras && defaultLoras.length > 0) {
       const newSelectedLoras = [
         { lora: null, highWeight: 1, lowWeight: 1 },
+        { lora: null, highWeight: 1, lowWeight: 1 },
         { lora: null, highWeight: 1, lowWeight: 1 }
       ];
 
-      defaultLoras.slice(0, 2).forEach((defaultLora, idx) => {
+      defaultLoras.slice(0, 3).forEach((defaultLora, idx) => {
         if (defaultLora && (defaultLora.high_file || defaultLora.low_file)) {
           const matchingLora = loras.find(l =>
             l.high_file === defaultLora.high_file || l.low_file === defaultLora.high_file ||
@@ -86,7 +88,7 @@ export default function SubmitPromptModal({
         }
       });
 
-      if (newSelectedLoras[0].lora || newSelectedLoras[1].lora) {
+      if (newSelectedLoras[0].lora || newSelectedLoras[1].lora || newSelectedLoras[2].lora) {
         setSelectedLoras(newSelectedLoras);
       }
     }
@@ -177,11 +179,14 @@ export default function SubmitPromptModal({
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content">
-        <button type="button" className="modal-close" onClick={onClose}>×</button>
-        <h2>Submit Prompt for Segment {segmentIndex}</h2>
+      <form className="modal-content" onSubmit={handleSubmit}>
+        <div className="modal-header">
+          <h2>Submit Prompt for Segment {segmentIndex}</h2>
+          <button type="button" className="modal-close" onClick={onClose}>×</button>
+        </div>
 
-        {/* Start Image Selection (only for segments > 0) */}
+        <div className="modal-body">
+          {/* Start Image Selection (only for segments > 0) */}
         {segmentIndex > 0 && defaultStartImageUrl && (
           <div style={{ marginBottom: '16px', padding: '12px', background: '#f5f5f5', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
             <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '8px', color: '#666' }}>Start Image</div>
@@ -235,22 +240,14 @@ export default function SubmitPromptModal({
           </div>
         )}
 
-        {defaultPrompt && (
-          <div style={{ marginBottom: '16px', padding: '12px', background: '#e3f2fd', borderRadius: '4px', border: '1px solid #90caf9' }}>
-            <span style={{ fontSize: '13px', color: '#1976d2' }}>
-              Values pre-filled from previous segment. Modify as needed.
-            </span>
-          </div>
-        )}
 
-        <form onSubmit={handleSubmit}>
           <div className="form-group">
             <TextField
               label="Prompt"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               multiline
-              rows={4}
+              rows={2}
               placeholder="Describe what happens in this segment..."
               autoFocus
               fullWidth
@@ -274,135 +271,73 @@ export default function SubmitPromptModal({
             </button>
           </div>
 
-          {/* LoRA 1 */}
-          <div className="form-group">
-            <label style={{ marginBottom: '8px', display: 'block' }}>LoRA 1 (optional)</label>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-              <div style={{ flex: 1 }}>
+          {/* LoRAs - 3 columns */}
+          <div className="lora-grid">
+            {[0, 1, 2].map((idx) => (
+              <div key={idx} className="lora-slot">
+                <div className="lora-slot-header">LoRA {idx + 1} (optional)</div>
                 <LoraAutocomplete
                   label=""
-                  value={selectedLoras[0].lora}
+                  value={selectedLoras[idx].lora}
                   onChange={(lora) => {
-                    setSelectedLoras(prev => [
-                      {
-                        lora,
-                        highWeight: lora?.default_high_weight ?? 1,
-                        lowWeight: lora?.default_low_weight ?? 1
-                      },
-                      prev[1]
-                    ]);
-                    populatePromptFromLora(lora);
-                  }}
-                  loras={loras}
-                />
-                <button
-                  type="button"
-                  onClick={() => appendLoraPrompt(selectedLoras[0].lora)}
-                  disabled={!selectedLoras[0].lora || !getLoraPromptText(selectedLoras[0].lora)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: selectedLoras[0].lora && getLoraPromptText(selectedLoras[0].lora) ? '#1976d2' : '#ccc',
-                    cursor: selectedLoras[0].lora && getLoraPromptText(selectedLoras[0].lora) ? 'pointer' : 'default',
-                    fontSize: '12px',
-                    padding: '4px 0',
-                    textDecoration: 'underline'
-                  }}
-                >
-                  + Add prompt
-                </button>
-              </div>
-              <TextField
-                type="number"
-                label="High"
-                size="small"
-                value={selectedLoras[0].highWeight}
-                onChange={(e) => setSelectedLoras(prev => [
-                  { ...prev[0], highWeight: parseFloat(e.target.value) || 0 },
-                  prev[1]
-                ])}
-                inputProps={{ min: 0, max: 2, step: 0.1 }}
-                sx={{ width: '80px' }}
-                disabled={!selectedLoras[0].lora}
-              />
-              <TextField
-                type="number"
-                label="Low"
-                size="small"
-                value={selectedLoras[0].lowWeight}
-                onChange={(e) => setSelectedLoras(prev => [
-                  { ...prev[0], lowWeight: parseFloat(e.target.value) || 0 },
-                  prev[1]
-                ])}
-                inputProps={{ min: 0, max: 2, step: 0.1 }}
-                sx={{ width: '80px' }}
-                disabled={!selectedLoras[0].lora}
-              />
-            </div>
-          </div>
-
-          {/* LoRA 2 */}
-          <div className="form-group">
-            <label style={{ marginBottom: '8px', display: 'block' }}>LoRA 2 (optional)</label>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-              <div style={{ flex: 1 }}>
-                <LoraAutocomplete
-                  label=""
-                  value={selectedLoras[1].lora}
-                  onChange={(lora) => setSelectedLoras(prev => [
-                    prev[0],
-                    {
+                    const newLoras = [...selectedLoras];
+                    newLoras[idx] = {
                       lora,
                       highWeight: lora?.default_high_weight ?? 1,
                       lowWeight: lora?.default_low_weight ?? 1
-                    }
-                  ])}
+                    };
+                    setSelectedLoras(newLoras);
+                    if (idx === 0) populatePromptFromLora(lora);
+                  }}
                   loras={loras}
                 />
-                <button
-                  type="button"
-                  onClick={() => appendLoraPrompt(selectedLoras[1].lora)}
-                  disabled={!selectedLoras[1].lora || !getLoraPromptText(selectedLoras[1].lora)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: selectedLoras[1].lora && getLoraPromptText(selectedLoras[1].lora) ? '#1976d2' : '#ccc',
-                    cursor: selectedLoras[1].lora && getLoraPromptText(selectedLoras[1].lora) ? 'pointer' : 'default',
-                    fontSize: '12px',
-                    padding: '4px 0',
-                    textDecoration: 'underline'
-                  }}
-                >
-                  + Add prompt
-                </button>
+                <div className="lora-weights">
+                  <TextField
+                    type="number"
+                    label="High"
+                    size="small"
+                    value={selectedLoras[idx].highWeight}
+                    onChange={(e) => {
+                      const newLoras = [...selectedLoras];
+                      newLoras[idx] = { ...newLoras[idx], highWeight: parseFloat(e.target.value) || 0 };
+                      setSelectedLoras(newLoras);
+                    }}
+                    inputProps={{ min: 0, max: 2, step: 0.1 }}
+                    disabled={!selectedLoras[idx].lora}
+                  />
+                  <TextField
+                    type="number"
+                    label="Low"
+                    size="small"
+                    value={selectedLoras[idx].lowWeight}
+                    onChange={(e) => {
+                      const newLoras = [...selectedLoras];
+                      newLoras[idx] = { ...newLoras[idx], lowWeight: parseFloat(e.target.value) || 0 };
+                      setSelectedLoras(newLoras);
+                    }}
+                    inputProps={{ min: 0, max: 2, step: 0.1 }}
+                    disabled={!selectedLoras[idx].lora}
+                  />
+                </div>
+                {selectedLoras[idx].lora && getLoraPromptText(selectedLoras[idx].lora) && (
+                  <button
+                    type="button"
+                    onClick={() => appendLoraPrompt(selectedLoras[idx].lora)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#1976d2',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      padding: '4px 0 0 0',
+                      textDecoration: 'underline'
+                    }}
+                  >
+                    + Add prompt
+                  </button>
+                )}
               </div>
-              <TextField
-                type="number"
-                label="High"
-                size="small"
-                value={selectedLoras[1].highWeight}
-                onChange={(e) => setSelectedLoras(prev => [
-                  prev[0],
-                  { ...prev[1], highWeight: parseFloat(e.target.value) || 0 }
-                ])}
-                inputProps={{ min: 0, max: 2, step: 0.1 }}
-                sx={{ width: '80px' }}
-                disabled={!selectedLoras[1].lora}
-              />
-              <TextField
-                type="number"
-                label="Low"
-                size="small"
-                value={selectedLoras[1].lowWeight}
-                onChange={(e) => setSelectedLoras(prev => [
-                  prev[0],
-                  { ...prev[1], lowWeight: parseFloat(e.target.value) || 0 }
-                ])}
-                inputProps={{ min: 0, max: 2, step: 0.1 }}
-                sx={{ width: '80px' }}
-                disabled={!selectedLoras[1].lora}
-              />
-            </div>
+            ))}
           </div>
 
           {/* Face Swap */}
@@ -484,17 +419,18 @@ export default function SubmitPromptModal({
             </FormHelperText>
           </div>
 
-          <div className="modal-actions">
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={submitting}
-            >
-              {submitting ? <CircularProgress size={20} color="inherit" /> : 'Submit Prompt'}
-            </Button>
-          </div>
-        </form>
-      </div>
+        </div>
+
+        <div className="modal-footer">
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={submitting}
+          >
+            {submitting ? <CircularProgress size={20} color="inherit" /> : 'Submit Prompt'}
+          </Button>
+        </div>
+      </form>
 
       {/* Image Browser Modal for custom start image selection */}
       {showImageBrowser && (

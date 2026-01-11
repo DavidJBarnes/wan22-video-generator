@@ -269,7 +269,7 @@ class JobCreate(BaseModel):
     workflow_type: Optional[str] = "txt2img"
     parameters: Optional[Dict[str, Any]] = None
     input_image: Optional[str] = None  # Base64 encoded or ComfyUI filename
-    loras: Optional[List[LoraSelection]] = None  # 0-2 LoRA pairs
+    loras: Optional[List[LoraSelection]] = None  # 0-3 LoRA pairs
 
 
 class JobUpdate(BaseModel):
@@ -456,11 +456,11 @@ async def create_new_job(job: JobCreate):
         else:
             start_image_url = f"{comfyui_url}/view?filename={job.input_image}&subfolder=&type=input"
 
-    # Extract LoRA selections from loras list (0-2 pairs) with weights
+    # Extract LoRA selections from loras list (0-3 pairs) with weights
     high_loras = []
     low_loras = []
     if job.loras:
-        for lora in job.loras[:2]:  # Max 2 pairs
+        for lora in job.loras[:3]:  # Max 3 pairs
             if lora.high_file or lora.low_file:
                 if lora.high_file:
                     high_loras.append({
@@ -887,7 +887,7 @@ async def update_segment_prompt_endpoint(
     if loras:
         try:
             lora_list = json.loads(loras)
-            for lora in lora_list[:2]:  # Max 2 pairs
+            for lora in lora_list[:3]:  # Max 3 pairs
                 if lora.get("high_file") or lora.get("low_file"):
                     # Store as objects with file and weight
                     if lora.get("high_file"):

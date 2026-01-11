@@ -180,10 +180,10 @@ WAN_I2V_API_WORKFLOW = {
 }
 
 
-# LoRA node IDs for dynamic creation (high pass: 118, 120; low pass: 119, 121)
+# LoRA node IDs for dynamic creation (high pass: 118, 120, 122; low pass: 119, 121, 123)
 LORA_NODE_IDS = {
-    "high": ["118", "120"],  # First LoRA high, Second LoRA high
-    "low": ["119", "121"],   # First LoRA low, Second LoRA low
+    "high": ["118", "120", "122"],  # First, Second, Third LoRA high
+    "low": ["119", "121", "123"],   # First, Second, Third LoRA low
 }
 
 
@@ -228,7 +228,7 @@ def build_wan_i2v_workflow(
         high_noise_model: UNET model for high noise pass
         low_noise_model: UNET model for low noise pass
         seed: Random seed (auto-generated if not provided)
-        loras: Optional list of LoRA pairs (max 2). Each dict has:
+        loras: Optional list of LoRA pairs (max 3). Each dict has:
                - high_file: LoRA filename for high noise pass
                - low_file: LoRA filename for low noise pass
                If empty/None, no user LoRAs are applied (only lightx2v acceleration)
@@ -278,8 +278,8 @@ def build_wan_i2v_workflow(
     workflow["86"]["inputs"]["noise_seed"] = seed
     print(f"[Workflow] Set seed: {seed}")
 
-    # Add user-selected LoRA nodes dynamically (0-2 pairs)
-    # Chain: UNET -> LoRA1 -> LoRA2 -> lightx2v
+    # Add user-selected LoRA nodes dynamically (0-3 pairs)
+    # Chain: UNET -> LoRA1 -> LoRA2 -> LoRA3 -> lightx2v
     # If no LoRAs: UNET -> lightx2v (already wired in template)
     # Each lora dict can have: high_file, high_weight, low_file, low_weight
     loras = loras or []
@@ -292,7 +292,7 @@ def build_wan_i2v_workflow(
         last_high_node = "95"  # UNET high
         last_low_node = "96"   # UNET low
 
-        for i, lora in enumerate(loras[:2]):  # Max 2 pairs
+        for i, lora in enumerate(loras[:3]):  # Max 3 pairs
             high_file = lora.get("high_file")
             high_weight = float(lora.get("high_weight", 1.0))
             low_file = lora.get("low_file")

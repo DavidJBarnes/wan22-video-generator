@@ -34,8 +34,9 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   const [segmentDuration, setSegmentDuration] = useState(5);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
-  // Two LoRA slots, each with lora object and weights
+  // Three LoRA slots, each with lora object and weights
   const [selectedLoras, setSelectedLoras] = useState([
+    { lora: null, highWeight: 1, lowWeight: 1 },
     { lora: null, highWeight: 1, lowWeight: 1 },
     { lora: null, highWeight: 1, lowWeight: 1 }
   ]);
@@ -135,10 +136,11 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
       // Find matching LoRAs for each slot with weights
       const newSelectedLoras = [
         { lora: null, highWeight: 1, lowWeight: 1 },
+        { lora: null, highWeight: 1, lowWeight: 1 },
         { lora: null, highWeight: 1, lowWeight: 1 }
       ];
 
-      for (let idx = 0; idx < 2; idx++) {
+      for (let idx = 0; idx < 3; idx++) {
         const highData = highLoraData[idx];
         const lowData = lowLoraData[idx];
 
@@ -159,7 +161,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
         }
       }
 
-      if (newSelectedLoras[0].lora || newSelectedLoras[1].lora) {
+      if (newSelectedLoras[0].lora || newSelectedLoras[1].lora || newSelectedLoras[2].lora) {
         setSelectedLoras(newSelectedLoras);
       }
     }
@@ -338,11 +340,13 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content">
-        <button type="button" className="modal-close" onClick={onClose}>×</button>
-        <h2>{cloneData ? 'Clone Job' : 'Create New Video Job'}</h2>
+      <form className="modal-content" onSubmit={handleSubmit}>
+        <div className="modal-header">
+          <h2>{cloneData ? 'Clone Job' : 'Create New Video Job'}</h2>
+          <button type="button" className="modal-close" onClick={onClose}>×</button>
+        </div>
 
-        <form onSubmit={handleSubmit}>
+        <div className="modal-body">
           {(namePrefixes.length > 0 || nameDescriptions.length > 0) && (
             <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
               <Autocomplete
@@ -482,7 +486,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               multiline
-              height={"100px"}
+              rows={2}
               placeholder="Describe the video scene and action..."
               fullWidth
               variant="outlined"
@@ -527,132 +531,72 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
             )}
           </div>
 
-          {/* LoRA 1 */}
-          <div className="form-group">
-            <label style={{ marginBottom: '8px', display: 'block' }}>LoRA 1 (optional)</label>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-              <div style={{ flex: 1 }}>
+          {/* LoRAs - 3 columns */}
+          <div className="lora-grid">
+            {[0, 1, 2].map((idx) => (
+              <div key={idx} className="lora-slot">
+                <div className="lora-slot-header">LoRA {idx + 1} (optional)</div>
                 <LoraAutocomplete
                   label=""
-                  value={selectedLoras[0].lora}
-                  onChange={(lora) => setSelectedLoras([
-                    {
+                  value={selectedLoras[idx].lora}
+                  onChange={(lora) => {
+                    const newLoras = [...selectedLoras];
+                    newLoras[idx] = {
                       lora,
                       highWeight: lora?.default_high_weight ?? 1,
                       lowWeight: lora?.default_low_weight ?? 1
-                    },
-                    selectedLoras[1]
-                  ])}
+                    };
+                    setSelectedLoras(newLoras);
+                  }}
                   loras={loras}
                 />
-                <button
-                  type="button"
-                  onClick={() => appendLoraPrompt(selectedLoras[0].lora)}
-                  disabled={!selectedLoras[0].lora || !getLoraPromptText(selectedLoras[0].lora)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: selectedLoras[0].lora && getLoraPromptText(selectedLoras[0].lora) ? '#1976d2' : '#ccc',
-                    cursor: selectedLoras[0].lora && getLoraPromptText(selectedLoras[0].lora) ? 'pointer' : 'default',
-                    fontSize: '12px',
-                    padding: '4px 0',
-                    textDecoration: 'underline'
-                  }}
-                >
-                  + Add prompt
-                </button>
+                <div className="lora-weights">
+                  <TextField
+                    type="number"
+                    label="High"
+                    size="small"
+                    value={selectedLoras[idx].highWeight}
+                    onChange={(e) => {
+                      const newLoras = [...selectedLoras];
+                      newLoras[idx] = { ...newLoras[idx], highWeight: parseFloat(e.target.value) || 0 };
+                      setSelectedLoras(newLoras);
+                    }}
+                    inputProps={{ min: 0, max: 2, step: 0.1 }}
+                    disabled={!selectedLoras[idx].lora}
+                  />
+                  <TextField
+                    type="number"
+                    label="Low"
+                    size="small"
+                    value={selectedLoras[idx].lowWeight}
+                    onChange={(e) => {
+                      const newLoras = [...selectedLoras];
+                      newLoras[idx] = { ...newLoras[idx], lowWeight: parseFloat(e.target.value) || 0 };
+                      setSelectedLoras(newLoras);
+                    }}
+                    inputProps={{ min: 0, max: 2, step: 0.1 }}
+                    disabled={!selectedLoras[idx].lora}
+                  />
+                </div>
+                {selectedLoras[idx].lora && getLoraPromptText(selectedLoras[idx].lora) && (
+                  <button
+                    type="button"
+                    onClick={() => appendLoraPrompt(selectedLoras[idx].lora)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#1976d2',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      padding: '4px 0 0 0',
+                      textDecoration: 'underline'
+                    }}
+                  >
+                    + Add prompt
+                  </button>
+                )}
               </div>
-              <TextField
-                type="number"
-                label="High"
-                size="small"
-                value={selectedLoras[0].highWeight}
-                onChange={(e) => setSelectedLoras([
-                  { ...selectedLoras[0], highWeight: parseFloat(e.target.value) || 0 },
-                  selectedLoras[1]
-                ])}
-                inputProps={{ min: 0, max: 2, step: 0.1 }}
-                sx={{ width: '80px' }}
-                disabled={!selectedLoras[0].lora}
-              />
-              <TextField
-                type="number"
-                label="Low"
-                size="small"
-                value={selectedLoras[0].lowWeight}
-                onChange={(e) => setSelectedLoras([
-                  { ...selectedLoras[0], lowWeight: parseFloat(e.target.value) || 0 },
-                  selectedLoras[1]
-                ])}
-                inputProps={{ min: 0, max: 2, step: 0.1 }}
-                sx={{ width: '80px' }}
-                disabled={!selectedLoras[0].lora}
-              />
-            </div>
-          </div>
-
-          {/* LoRA 2 */}
-          <div className="form-group">
-            <label style={{ marginBottom: '8px', display: 'block' }}>LoRA 2 (optional)</label>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-              <div style={{ flex: 1 }}>
-                <LoraAutocomplete
-                  label=""
-                  value={selectedLoras[1].lora}
-                  onChange={(lora) => setSelectedLoras([
-                    selectedLoras[0],
-                    {
-                      lora,
-                      highWeight: lora?.default_high_weight ?? 1,
-                      lowWeight: lora?.default_low_weight ?? 1
-                    }
-                  ])}
-                  loras={loras}
-                />
-                <button
-                  type="button"
-                  onClick={() => appendLoraPrompt(selectedLoras[1].lora)}
-                  disabled={!selectedLoras[1].lora || !getLoraPromptText(selectedLoras[1].lora)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: selectedLoras[1].lora && getLoraPromptText(selectedLoras[1].lora) ? '#1976d2' : '#ccc',
-                    cursor: selectedLoras[1].lora && getLoraPromptText(selectedLoras[1].lora) ? 'pointer' : 'default',
-                    fontSize: '12px',
-                    padding: '4px 0',
-                    textDecoration: 'underline'
-                  }}
-                >
-                  + Add prompt
-                </button>
-              </div>
-              <TextField
-                type="number"
-                label="High"
-                size="small"
-                value={selectedLoras[1].highWeight}
-                onChange={(e) => setSelectedLoras([
-                  selectedLoras[0],
-                  { ...selectedLoras[1], highWeight: parseFloat(e.target.value) || 0 }
-                ])}
-                inputProps={{ min: 0, max: 2, step: 0.1 }}
-                sx={{ width: '80px' }}
-                disabled={!selectedLoras[1].lora}
-              />
-              <TextField
-                type="number"
-                label="Low"
-                size="small"
-                value={selectedLoras[1].lowWeight}
-                onChange={(e) => setSelectedLoras([
-                  selectedLoras[0],
-                  { ...selectedLoras[1], lowWeight: parseFloat(e.target.value) || 0 }
-                ])}
-                inputProps={{ min: 0, max: 2, step: 0.1 }}
-                sx={{ width: '80px' }}
-                disabled={!selectedLoras[1].lora}
-              />
-            </div>
+            ))}
           </div>
 
           {/* Face Swap */}
@@ -734,13 +678,14 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
             </FormHelperText>
           </div>
 
-          <div className="modal-actions">
-            <Button type="submit" variant="contained" disabled={uploading}>
-              {uploading ? <CircularProgress size={20} color="inherit" /> : 'Create Job'}
-            </Button>
-          </div>
-        </form>
-      </div>
+        </div>
+
+        <div className="modal-footer">
+          <Button type="submit" variant="contained" disabled={uploading}>
+            {uploading ? <CircularProgress size={20} color="inherit" /> : 'Create Job'}
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }
