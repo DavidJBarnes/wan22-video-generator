@@ -117,6 +117,18 @@ export default function Queue() {
     return position >= 0 ? position + 1 : null;
   }
 
+  // Format seconds as "Xm" or "Xh Ym"
+  function formatWaitTime(seconds) {
+    if (seconds == null || seconds <= 0) return null;
+    seconds = Math.round(seconds);
+    if (seconds < 60) return '<1m';
+    const mins = Math.floor(seconds / 60);
+    if (mins < 60) return `~${mins}m`;
+    const hours = Math.floor(mins / 60);
+    const remainingMins = mins % 60;
+    return `~${hours}h ${remainingMins}m`;
+  }
+
   function handleStatusFilterChange(event) {
     const value = event.target.value;
     // MUI Select returns an array for multiple selection
@@ -247,7 +259,14 @@ export default function Queue() {
                       <TableCell sx={{ padding: '4px 8px' }}>
                         {position ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ fontWeight: 'bold', minWidth: '20px' }}>{position}</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '50px' }}>
+                              <span style={{ fontWeight: 'bold' }}>#{position}</span>
+                              {job.estimated_wait_seconds && (
+                                <span style={{ fontSize: '11px', color: '#666' }}>
+                                  {formatWaitTime(job.estimated_wait_seconds)}
+                                </span>
+                              )}
+                            </div>
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                               <IconButton
                                 size="small"

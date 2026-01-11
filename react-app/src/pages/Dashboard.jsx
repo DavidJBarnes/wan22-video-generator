@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FormControl,
@@ -17,6 +17,12 @@ import {
   Paper,
   CircularProgress
 } from '@mui/material';
+import MemoryIcon from '@mui/icons-material/Memory';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import EditIcon from '@mui/icons-material/Edit';
+import TimerIcon from '@mui/icons-material/Timer';
+import ScheduleIcon from '@mui/icons-material/Schedule';
 import API from '../api/client';
 import { useJobs } from '../contexts/JobsContext';
 import { formatDate, getFaceswapName } from '../utils/helpers';
@@ -27,6 +33,45 @@ export default function Dashboard() {
   const navigate = useNavigate();
   // Use centralized jobs context instead of local polling
   const { jobs: allJobs, comfyStatus, loading, stats, avgRunTime } = useJobs();
+
+  const [runningJobProgress, setRunningJobProgress] = useState(null);
+
+  // Find the currently running job
+  const runningJob = useMemo(() =>
+    allJobs.find(job => job.status === 'running'),
+    [allJobs]
+  );
+
+  // Poll progress for running job
+  useEffect(() => {
+    if (!runningJob) {
+      setRunningJobProgress(null);
+      return;
+    }
+
+    const fetchProgress = async () => {
+      try {
+        const progress = await API.getJobProgress(runningJob.id);
+        setRunningJobProgress(progress);
+      } catch (error) {
+        console.error('Failed to fetch progress:', error);
+      }
+    };
+
+    fetchProgress();
+    const interval = setInterval(fetchProgress, 2000);
+    return () => clearInterval(interval);
+  }, [runningJob?.id]);
+
+  // Calculate ETA for next job completion
+  const nextJobEta = useMemo(() => {
+    if (!runningJob || !runningJobProgress?.started_at_ts || !avgRunTime) {
+      return null;
+    }
+    const elapsed = (Date.now() / 1000) - runningJobProgress.started_at_ts;
+    const remaining = Math.max(0, avgRunTime - elapsed);
+    return Math.round(remaining);
+  }, [runningJob, runningJobProgress?.started_at_ts, avgRunTime]);
 
   const [statusFilter, setStatusFilter] = useState(() => {
     const saved = localStorage.getItem('dashboardStatusFilter');
@@ -137,6 +182,15 @@ export default function Dashboard() {
     return `${mins}m ${secs}s`;
   }
 
+  function formatEta(seconds) {
+    if (seconds == null) return 'N/A';
+    if (seconds <= 0) return '<1m';
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins === 0) return `${secs}s`;
+    return `~${mins}m ${secs}s`;
+  }
+
   if (loading) {
     return (
       <div>
@@ -153,34 +207,70 @@ export default function Dashboard() {
       <h1>Dashboard</h1>
 
       <div className="card-grid">
-        <div className="card">
-          <div className="status-indicator">
-            <div className={`status-dot ${getComfyStatusClass()}`}></div>
-            <div>
-              <h3>ComfyUI Status</h3>
-              <div>{getComfyStatusText()}</div>
+        <div className="stat-card">
+          <div className="stat-card-header comfyui">
+            <MemoryIcon />
+            ComfyUI Status
+          </div>
+          <div className="stat-card-body">
+            <div className="status-indicator">
+              <div className={`status-dot ${getComfyStatusClass()}`}></div>
+              <div className="value" style={{ fontSize: '18px' }}>{getComfyStatusText()}</div>
             </div>
           </div>
         </div>
 
-        <div className="card">
-          <h3>Running Jobs</h3>
-          <div className="value">{stats.runningCount}</div>
+        <div className="stat-card">
+          <div className="stat-card-header running">
+            <PlayArrowIcon />
+            Running Jobs
+          </div>
+          <div className="stat-card-body">
+            <div className="value">{stats.runningCount}</div>
+          </div>
         </div>
 
-        <div className="card">
-          <h3>Pending Jobs</h3>
-          <div className="value">{stats.pendingCount}</div>
+        <div className="stat-card">
+          <div className="stat-card-header pending">
+            <HourglassEmptyIcon />
+            Pending Jobs
+          </div>
+          <div className="stat-card-body">
+            <div className="value">{stats.pendingCount}</div>
+          </div>
         </div>
 
-        <div className="card">
-          <h3>Awaiting Prompt</h3>
-          <div className="value">{stats.awaitingPromptCount}</div>
+        <div className="stat-card">
+          <div className="stat-card-header awaiting">
+            <EditIcon />
+            Awaiting Prompt
+          </div>
+          <div className="stat-card-body">
+            <div className="value">{stats.awaitingPromptCount}</div>
+          </div>
         </div>
 
-        <div className="card">
-          <h3>Avg Run Time</h3>
-          <div className="value">{formatRunTime(avgRunTime)}</div>
+        <div className="stat-card">
+          <div className="stat-card-header avgtime">
+            <TimerIcon />
+            Avg Run Time
+          </div>
+          <div className="stat-card-body">
+            <div className="value">{formatRunTime(avgRunTime)}</div>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-card-header eta">
+            <ScheduleIcon />
+            Next Job Complete
+          </div>
+          <div className="stat-card-body">
+            <div className="value">{runningJob ? formatEta(nextJobEta) : 'N/A'}</div>
+            {runningJob && (
+              <div className="subtitle">{runningJob.name}</div>
+            )}
+          </div>
         </div>
       </div>
 
