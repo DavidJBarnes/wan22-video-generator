@@ -21,6 +21,8 @@ import {
 } from '@mui/material';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp';
+import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown';
 import API from '../api/client';
 import { useJobs } from '../contexts/JobsContext';
 import { formatDate, showToast, getFaceswapName } from '../utils/helpers';
@@ -174,6 +176,28 @@ export default function Queue() {
     }
   }
 
+  async function handleMoveToTop(jobId, event) {
+    event.stopPropagation();
+    try {
+      await API.moveJobToTop(jobId);
+      await refreshJobs();
+    } catch (error) {
+      console.error('Failed to move job to top:', error);
+      showToast('Failed to move job', 'error');
+    }
+  }
+
+  async function handleMoveToBottom(jobId, event) {
+    event.stopPropagation();
+    try {
+      await API.moveJobToBottom(jobId);
+      await refreshJobs();
+    } catch (error) {
+      console.error('Failed to move job to bottom:', error);
+      showToast('Failed to move job', 'error');
+    }
+  }
+
   if (loading) {
     return (
       <div>
@@ -270,9 +294,19 @@ export default function Queue() {
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                               <IconButton
                                 size="small"
+                                onClick={(e) => handleMoveToTop(job.id, e)}
+                                disabled={isFirstPending}
+                                sx={{ padding: '1px' }}
+                                title="Move to top"
+                              >
+                                <KeyboardDoubleArrowUpIcon fontSize="small" />
+                              </IconButton>
+                              <IconButton
+                                size="small"
                                 onClick={(e) => handleMoveUp(job.id, e)}
                                 disabled={isFirstPending}
-                                sx={{ padding: '2px' }}
+                                sx={{ padding: '1px' }}
+                                title="Move up"
                               >
                                 <KeyboardArrowUpIcon fontSize="small" />
                               </IconButton>
@@ -280,9 +314,19 @@ export default function Queue() {
                                 size="small"
                                 onClick={(e) => handleMoveDown(job.id, e)}
                                 disabled={isLastPending}
-                                sx={{ padding: '2px' }}
+                                sx={{ padding: '1px' }}
+                                title="Move down"
                               >
                                 <KeyboardArrowDownIcon fontSize="small" />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                onClick={(e) => handleMoveToBottom(job.id, e)}
+                                disabled={isLastPending}
+                                sx={{ padding: '1px' }}
+                                title="Move to bottom"
+                              >
+                                <KeyboardDoubleArrowDownIcon fontSize="small" />
                               </IconButton>
                             </div>
                           </div>
