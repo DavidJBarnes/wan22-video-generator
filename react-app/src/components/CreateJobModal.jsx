@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Button, TextField, Select, MenuItem, FormControl, InputLabel, FormHelperText, Autocomplete, FormControlLabel, Checkbox, CircularProgress } from '@mui/material';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
+import { useLoras } from '../contexts/LoraContext';
 import LoraAutocomplete from './LoraAutocomplete';
 import './CreateJobModal.css';
 
@@ -21,6 +22,9 @@ const FACESWAP_FACES = [
 ];
 
 export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl = null, preUploadedDimensions = null, cloneData = null }) {
+  // Use cached LoRAs from context instead of fetching on every mount
+  const { loras } = useLoras();
+
   const [settings, setSettings] = useState({});
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
@@ -35,7 +39,6 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
     { lora: null, highWeight: 1, lowWeight: 1 },
     { lora: null, highWeight: 1, lowWeight: 1 }
   ]);
-  const [loras, setLoras] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [namePrefixes, setNamePrefixes] = useState([]);
   const [nameDescriptions, setNameDescriptions] = useState([]);
@@ -52,7 +55,6 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
     async function initialize() {
       // Load settings first, then override with specific dimensions if provided
       await loadSettings();
-      loadLoras();
 
       if (preUploadedImageUrl) {
         setImagePreview(API.getComfyUIImage(preUploadedImageUrl));
@@ -186,23 +188,6 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
       } catch { setNameDescriptions([]); }
     } catch (error) {
       console.error('Failed to load settings:', error);
-    }
-  }
-
-  async function loadLoras() {
-    try {
-      // Load from cached library instead of querying ComfyUI directly
-      const data = await API.getLoraLibrary();
-      const loraList = data.loras || [];
-      // Sort by friendly name or base name
-      loraList.sort((a, b) => {
-        const nameA = a.friendly_name || a.base_name;
-        const nameB = b.friendly_name || b.base_name;
-        return nameA.localeCompare(nameB);
-      });
-      setLoras(loraList);
-    } catch (error) {
-      console.error('Failed to load LoRAs:', error);
     }
   }
 

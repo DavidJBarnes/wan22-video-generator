@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { LoraProvider } from './contexts/LoraContext';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Queue from './pages/Queue';
@@ -10,19 +11,21 @@ import Settings from './pages/Settings';
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="queue" element={<Queue />} />
-          <Route path="videos" element={<Videos />} />
-          <Route path="job/:id" element={<JobDetail />} />
-          <Route path="images" element={<ImageRepo />} />
-          <Route path="loras" element={<LoraLibrary />} />
-          <Route path="settings" element={<Settings />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <LoraProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Dashboard />} />
+            <Route path="queue" element={<Queue />} />
+            <Route path="videos" element={<Videos />} />
+            <Route path="job/:id" element={<JobDetail />} />
+            <Route path="images" element={<ImageRepo />} />
+            <Route path="loras" element={<LoraLibrary />} />
+            <Route path="settings" element={<Settings />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </LoraProvider>
   );
 }
 
