@@ -177,6 +177,15 @@ Persistent data is stored in `~/backups/` with symlinks in `backend/`:
 - **Never commit binary files** such as videos (.mp4, .webm), images (.jpg, .png), or other media assets
 - **No personal names or explicit material** in code or commits - use generic placeholders (e.g., "Face 1", "face_01.png")
 
+## Repository Rules
+
+**NEVER commit image files to the repository.** This includes any binary image formats such as .png, .jpg, .jpeg, .gif, .webp, .bmp, .ico, .svg, etc. If images are generated or downloaded during development, they should be:
+- Added to .gitignore
+- Stored in a designated local-only directory
+- Deleted after use if temporary
+
+Always check `git status` before committing to ensure no image files are staged.
+
 ## Development Notes
 
 ### Manual Setup (if not using startup scripts)
