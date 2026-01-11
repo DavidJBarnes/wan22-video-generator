@@ -472,7 +472,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
             )}
             {imagePreview && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <img src={imagePreview} alt="Preview" style={{ height: '40px', borderRadius: '4px', border: '1px solid #ddd' }} />
+                <img src={imagePreview} alt="Preview" className="image-thumbnail-hover" />
                 <span style={{ fontSize: '12px', color: '#666' }}>
                   {preUploadedImageUrl ? preUploadedImageUrl : imageFile?.name}
                 </span>
