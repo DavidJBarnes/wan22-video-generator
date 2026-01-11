@@ -196,193 +196,193 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content" style={{ maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto', display: 'flex', gap: '24px' }}>
-        <button type="button" className="modal-close" onClick={onClose}>×</button>
+      <div className="modal-content" style={{ maxWidth: '90vw' }}>
+        {/* Header */}
+        <div className="modal-header">
+          <h2 style={{ fontSize: '14px', fontFamily: 'monospace', opacity: 0.9 }}>{image.path}</h2>
+          <button type="button" className="modal-close" onClick={onClose}>×</button>
+        </div>
 
-        {/* Left Side - Image Preview */}
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          {/* Image Preview */}
-          <div style={{ flex: 1, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <img
-              ref={imageRef}
-              src={API.getRepoImage(image.path)}
-              alt={image.name}
-              style={{
-                maxWidth: '100%',
-                maxHeight: '60vh',
-                objectFit: 'contain',
-                borderRadius: '4px',
-                border: '1px solid #ddd'
-              }}
-              onError={(e) => {
-                e.target.src = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22400%22%3E%3Crect fill=%22%23ddd%22 width=%22400%22 height=%22400%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2224%22%3EImage not found%3C/text%3E%3C/svg%3E';
-              }}
-            />
+        {/* Body */}
+        <div className="modal-body" style={{ display: 'flex', gap: '24px', padding: '16px 24px' }}>
+          {/* Left Side - Image Preview */}
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            {/* Image Preview */}
+            <div style={{ flex: 1, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <img
+                ref={imageRef}
+                src={API.getRepoImage(image.path)}
+                alt={image.name}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '55vh',
+                  objectFit: 'contain',
+                  borderRadius: '4px',
+                  border: '1px solid #ddd'
+                }}
+                onError={(e) => {
+                  e.target.src = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22400%22%3E%3Crect fill=%22%23ddd%22 width=%22400%22 height=%22400%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2224%22%3EImage not found%3C/text%3E%3C/svg%3E';
+                }}
+              />
+            </div>
           </div>
 
-          {/* Navigation Buttons */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={() => onNavigate(currentIndex - 1)}
-              disabled={!hasPrev || deleting || creatingJob}
-            >
-              ← Prev
-            </Button>
-            <Typography sx={{ color: '#666', fontSize: '14px', alignSelf: 'center' }}>
-              {currentIndex + 1} / {images.length}
-            </Typography>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={() => onNavigate(currentIndex + 1)}
-              disabled={!hasNext || deleting || creatingJob}
-            >
-              Next →
-            </Button>
+          {/* Right Side Panel */}
+          <div style={{
+            width: '220px',
+            flexShrink: 0,
+            borderLeft: '1px solid #e0e0e0',
+            paddingLeft: '24px',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            {/* Rating */}
+            <div style={{ marginBottom: '16px' }}>
+              <Typography variant="subtitle2" sx={{ fontSize: '12px', color: '#666', mb: 1 }}>
+                Rating
+              </Typography>
+              <Rating
+                value={rating}
+                onChange={handleRatingChange}
+                size="medium"
+              />
+            </div>
+
+            {/* Tags */}
+            <div style={{ marginBottom: '16px' }}>
+              <Typography variant="subtitle2" sx={{ fontSize: '12px', color: '#666', mb: 1 }}>
+                Tags
+              </Typography>
+              {loadingTags ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+                  <CircularProgress size={20} />
+                </Box>
+              ) : (
+                <>
+                  {/* Tag pills */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: imageTags.length > 0 ? '8px' : 0 }}>
+                    {imageTags.map(tag => (
+                      <Chip
+                        key={tag.id}
+                        label={tag.name}
+                        size="small"
+                        onDelete={() => handleRemoveTag(tag.id)}
+                        sx={{ height: '24px' }}
+                      />
+                    ))}
+                  </div>
+                  {/* Add tag dropdown */}
+                  {unassignedTags.length > 0 && (
+                    <FormControl size="small" fullWidth sx={{ mt: imageTags.length > 0 ? 0 : 0 }}>
+                      <InputLabel>Add tag</InputLabel>
+                      <Select
+                        value=""
+                        label="Add tag"
+                        onChange={(e) => handleAddTag(e.target.value)}
+                        sx={{ fontSize: '13px' }}
+                      >
+                        {unassignedTags.map(tag => (
+                          <MenuItem key={tag.id} value={tag.id} sx={{ fontSize: '13px' }}>
+                            {tag.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  )}
+                  {availableTags.length === 0 && (
+                    <Typography variant="body2" sx={{ color: '#999', fontStyle: 'italic', fontSize: '12px' }}>
+                      No tags available. Create tags in Settings.
+                    </Typography>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Jobs Using This Image */}
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', marginBottom: '16px' }}>
+              <Typography variant="subtitle2" sx={{ fontSize: '12px', color: '#666', mb: 1 }}>
+                Jobs Using This Image
+              </Typography>
+              {loadingJobs ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                  <CircularProgress size={24} />
+                </Box>
+              ) : relatedJobs.length === 0 ? (
+                <Typography variant="body2" sx={{ color: '#999', fontStyle: 'italic', fontSize: '13px' }}>
+                  No jobs found
+                </Typography>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', maxHeight: '120px' }}>
+                  {relatedJobs.map(job => (
+                    <Link
+                      key={job.id}
+                      to={`/job/${job.id}`}
+                      onClick={onClose}
+                      style={{
+                        textDecoration: 'none',
+                        color: '#1976d2',
+                        fontSize: '13px',
+                        padding: '6px 8px',
+                        borderRadius: '4px',
+                        background: '#f5f5f5',
+                        display: 'block',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}
+                      title={job.name}
+                    >
+                      {job.name}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <Button
+                variant="contained"
+                fullWidth
+                onClick={handleCreateJob}
+                disabled={deleting || creatingJob}
+              >
+                {creatingJob ? <CircularProgress size={20} color="inherit" /> : 'New Job'}
+              </Button>
+              <Button
+                variant="outlined"
+                color="error"
+                fullWidth
+                onClick={handleDelete}
+                disabled={deleting || creatingJob}
+              >
+                {deleting ? 'Deleting...' : 'Delete Image'}
+              </Button>
+            </div>
           </div>
         </div>
 
-        {/* Right Side Panel */}
-        <div style={{
-          width: '240px',
-          flexShrink: 0,
-          borderLeft: '1px solid #e0e0e0',
-          paddingLeft: '24px',
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
-          {/* Image Path */}
-          <div style={{ marginBottom: '16px' }}>
-            <Typography variant="body2" sx={{ fontSize: '12px', color: '#666', fontFamily: 'monospace', wordBreak: 'break-all' }}>
-              {image.path}
-            </Typography>
-          </div>
-
-          {/* Rating */}
-          <div style={{ marginBottom: '20px' }}>
-            <Typography variant="subtitle2" sx={{ fontSize: '12px', color: '#666', mb: 1 }}>
-              Rating
-            </Typography>
-            <Rating
-              value={rating}
-              onChange={handleRatingChange}
-              size="medium"
-            />
-          </div>
-
-          {/* Tags */}
-          <div style={{ marginBottom: '20px' }}>
-            <Typography variant="subtitle2" sx={{ fontSize: '12px', color: '#666', mb: 1 }}>
-              Tags
-            </Typography>
-            {loadingTags ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
-                <CircularProgress size={20} />
-              </Box>
-            ) : (
-              <>
-                {/* Tag pills */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: imageTags.length > 0 ? '8px' : 0 }}>
-                  {imageTags.map(tag => (
-                    <Chip
-                      key={tag.id}
-                      label={tag.name}
-                      size="small"
-                      onDelete={() => handleRemoveTag(tag.id)}
-                      sx={{ height: '24px' }}
-                    />
-                  ))}
-                </div>
-                {/* Add tag dropdown */}
-                {unassignedTags.length > 0 && (
-                  <FormControl size="small" fullWidth sx={{ mt: imageTags.length > 0 ? 0 : 0 }}>
-                    <InputLabel>Add tag</InputLabel>
-                    <Select
-                      value=""
-                      label="Add tag"
-                      onChange={(e) => handleAddTag(e.target.value)}
-                      sx={{ fontSize: '13px' }}
-                    >
-                      {unassignedTags.map(tag => (
-                        <MenuItem key={tag.id} value={tag.id} sx={{ fontSize: '13px' }}>
-                          {tag.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                )}
-                {availableTags.length === 0 && (
-                  <Typography variant="body2" sx={{ color: '#999', fontStyle: 'italic', fontSize: '12px' }}>
-                    No tags available. Create tags in Settings.
-                  </Typography>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Jobs Using This Image */}
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', marginBottom: '20px' }}>
-            <Typography variant="subtitle2" sx={{ fontSize: '12px', color: '#666', mb: 1 }}>
-              Jobs Using This Image
-            </Typography>
-            {loadingJobs ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-                <CircularProgress size={24} />
-              </Box>
-            ) : relatedJobs.length === 0 ? (
-              <Typography variant="body2" sx={{ color: '#999', fontStyle: 'italic', fontSize: '13px' }}>
-                No jobs found
-              </Typography>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', maxHeight: '150px' }}>
-                {relatedJobs.map(job => (
-                  <Link
-                    key={job.id}
-                    to={`/job/${job.id}`}
-                    onClick={onClose}
-                    style={{
-                      textDecoration: 'none',
-                      color: '#1976d2',
-                      fontSize: '13px',
-                      padding: '6px 8px',
-                      borderRadius: '4px',
-                      background: '#f5f5f5',
-                      display: 'block',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}
-                    title={job.name}
-                  >
-                    {job.name}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Action Buttons */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <Button
-              variant="contained"
-              fullWidth
-              onClick={handleCreateJob}
-              disabled={deleting || creatingJob}
-            >
-              {creatingJob ? <CircularProgress size={20} color="inherit" /> : 'New Job'}
-            </Button>
-            <Button
-              variant="outlined"
-              color="error"
-              fullWidth
-              onClick={handleDelete}
-              disabled={deleting || creatingJob}
-            >
-              {deleting ? 'Deleting...' : 'Delete Image'}
-            </Button>
-          </div>
+        {/* Footer with Navigation */}
+        <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => onNavigate(currentIndex - 1)}
+            disabled={!hasPrev || deleting || creatingJob}
+          >
+            ← Prev
+          </Button>
+          <Typography sx={{ color: '#666', fontSize: '14px', alignSelf: 'center' }}>
+            {currentIndex + 1} / {images.length}
+          </Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => onNavigate(currentIndex + 1)}
+            disabled={!hasNext || deleting || creatingJob}
+          >
+            Next →
+          </Button>
         </div>
       </div>
     </div>
