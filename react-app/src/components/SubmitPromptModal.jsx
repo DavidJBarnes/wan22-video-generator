@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Button, TextField, FormControlLabel, Checkbox, FormHelperText, CircularProgress, FormControl, InputLabel, Select, MenuItem, IconButton, Tooltip } from '@mui/material';
 import RestoreIcon from '@mui/icons-material/Restore';
 import API from '../api/client';
@@ -32,6 +32,8 @@ export default function SubmitPromptModal({
   defaultStartImageUrl = null,  // URL of previous segment's end frame (for display)
   defaultCustomStartImage = null,  // Path of custom start image if already set
   isEditing = false,  // Whether editing an existing segment
+  jobInputImage = null,  // Job's initial input image filename
+  segments = [],  // All segments for building historical image gallery
   onClose,
   onSuccess
 }) {
@@ -57,6 +59,62 @@ export default function SubmitPromptModal({
   // Custom start image state (only for segments > 0)
   const [customStartImage, setCustomStartImage] = useState(defaultCustomStartImage);  // Path in image repo
   const [showImageBrowser, setShowImageBrowser] = useState(false);
+
+  // Helper to extract filename from ComfyUI view URL
+  function extractComfyUIFilename(url) {
+    if (!url || !url.includes('filename=')) return null;
+    try {
+      const urlObj = new URL(url);
+      return urlObj.searchParams.get('filename');
+    } catch {
+      // Fallback regex extraction
+      const match = url.match(/filename=([^&]+)/);
+      return match ? decodeURIComponent(match[1]) : null;
+    }
+  }
+
+  // Build historical images gallery from job input + segment start/end frames
+  const historicalImages = useMemo(() => {
+    const images = [];
+    const seenFilenames = new Set();
+
+    // Add job's initial input image first
+    if (jobInputImage) {
+      const url = API.getComfyUIImage(jobInputImage);
+      // Use comfyui: prefix to indicate it's already in ComfyUI
+      images.push({ url, label: 'Initial', value: `comfyui:${jobInputImage}` });
+      seenFilenames.add(jobInputImage);
+    }
+
+    // Add start and end frames from completed segments (excluding deleted)
+    segments
+      .filter(seg => seg.status === 'completed' && !seg.deleted_at)
+      .sort((a, b) => a.segment_index - b.segment_index)
+      .forEach(seg => {
+        // Add start frame
+        const startFilename = extractComfyUIFilename(seg.start_image_url);
+        if (startFilename && !seenFilenames.has(startFilename)) {
+          images.push({
+            url: seg.start_image_url,
+            label: `S${seg.segment_index}`,
+            value: `comfyui:${startFilename}`
+          });
+          seenFilenames.add(startFilename);
+        }
+        // Add end frame
+        const endFilename = extractComfyUIFilename(seg.end_frame_url);
+        if (endFilename && !seenFilenames.has(endFilename)) {
+          images.push({
+            url: seg.end_frame_url,
+            label: `S${seg.segment_index} End`,
+            value: `comfyui:${endFilename}`
+          });
+          seenFilenames.add(endFilename);
+        }
+      });
+
+    return images;
+  }, [jobInputImage, segments]);
 
   // When loras are loaded, find matching LoRAs from default values (only once)
   useEffect(() => {
@@ -189,27 +247,49 @@ export default function SubmitPromptModal({
 
         <div className="modal-body">
           {/* Start Image Selection (only for segments > 0) */}
-        {segmentIndex > 0 && defaultStartImageUrl && (
-          <div style={{ marginBottom: '16px', padding: '12px', background: '#f5f5f5', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
-            <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '8px', color: '#666' }}>Start Image</div>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-              <img
-                src={customStartImage ? API.getRepoImage(customStartImage) : defaultStartImageUrl}
-                alt="Start frame"
-                style={{
-                  width: '120px',
-                  height: '80px',
-                  objectFit: 'cover',
-                  borderRadius: '4px',
-                  border: customStartImage ? '2px solid #1976d2' : '1px solid #ddd'
-                }}
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '12px', color: customStartImage ? '#1976d2' : '#666', marginBottom: '4px' }}>
-                  {customStartImage ? 'Custom image selected' : 'Using previous segment\'s last frame'}
+          {segmentIndex > 0 && defaultStartImageUrl && (
+            <div style={{ marginBottom: '16px', padding: '12px', background: '#f5f5f5', borderRadius: '8px', border: '1px solid #e0e0e0' }}>
+              <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '8px', color: '#666' }}>Start Image</div>
+              <div style={{ display: 'flex', alignItems: 'stretch', gap: '0' }}>
+                {/* Left side: Current start image preview */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingRight: '16px' }}>
+                  <img
+                    src={customStartImage
+                      ? (customStartImage.startsWith('comfyui:')
+                          ? API.getComfyUIImage(customStartImage.slice(8))
+                          : API.getRepoImage(customStartImage))
+                      : defaultStartImageUrl}
+                    alt="Start frame"
+                    style={{
+                      width: '100px',
+                      height: '100px',
+                      objectFit: 'cover',
+                      borderRadius: '4px',
+                      border: customStartImage ? '2px solid #1976d2' : '1px solid #ddd'
+                    }}
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                  <div style={{ fontSize: '11px', color: customStartImage ? '#1976d2' : '#666', marginTop: '4px', textAlign: 'center' }}>
+                    {customStartImage ? 'Custom' : 'Default'}
+                  </div>
+                  {customStartImage && (
+                    <Tooltip title="Revert to default">
+                      <IconButton
+                        size="small"
+                        onClick={() => setCustomStartImage(null)}
+                        sx={{ padding: '2px', marginTop: '2px' }}
+                      >
+                        <RestoreIcon sx={{ fontSize: 16, color: '#666' }} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                 </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+
+                {/* Vertical divider */}
+                <div style={{ width: '1px', background: '#ddd', margin: '0 16px' }} />
+
+                {/* Right side: Browse + Quick select */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <button
                     type="button"
                     onClick={() => setShowImageBrowser(true)}
@@ -220,27 +300,44 @@ export default function SubmitPromptModal({
                       cursor: 'pointer',
                       fontSize: '12px',
                       padding: 0,
-                      textDecoration: 'underline'
+                      textDecoration: 'underline',
+                      textAlign: 'left'
                     }}
                   >
-                    {customStartImage ? 'Change image' : 'Choose different image'}
+                    Browse image repository...
                   </button>
-                  {customStartImage && (
-                    <Tooltip title="Revert to previous segment's last frame">
-                      <IconButton
-                        size="small"
-                        onClick={() => setCustomStartImage(null)}
-                        sx={{ padding: '2px' }}
-                      >
-                        <RestoreIcon sx={{ fontSize: 18, color: '#666' }} />
-                      </IconButton>
-                    </Tooltip>
+
+                  {historicalImages.length > 0 && (
+                    <>
+                      <div style={{ fontSize: '11px', color: '#888' }}>Or select from this job:</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {historicalImages.map((img, idx) => (
+                          <Tooltip key={idx} title={img.label}>
+                            <img
+                              src={img.url}
+                              alt={img.label}
+                              onClick={() => setCustomStartImage(img.value)}
+                              style={{
+                                width: '50px',
+                                height: '50px',
+                                objectFit: 'cover',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                border: customStartImage === img.value ? '2px solid #1976d2' : '1px solid #ccc',
+                                transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                              }}
+                              className="image-thumbnail-hover"
+                              onError={(e) => { e.target.style.display = 'none'; }}
+                            />
+                          </Tooltip>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
 
           <div className="form-group">

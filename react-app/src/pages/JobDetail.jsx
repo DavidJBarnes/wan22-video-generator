@@ -837,11 +837,17 @@ export default function JobDetail() {
                   </div>
                   {seg.custom_start_image ? (
                     <img
-                      src={API.getRepoImage(seg.custom_start_image)}
+                      src={seg.custom_start_image.startsWith('comfyui:')
+                        ? API.getComfyUIImage(seg.custom_start_image.slice(8))
+                        : API.getRepoImage(seg.custom_start_image)}
                       alt="Custom start image"
                       className="segment-image start clickable"
                       style={{ border: '2px solid #1976d2' }}
-                      onClick={() => setLightboxImage(API.getRepoImage(seg.custom_start_image))}
+                      onClick={() => setLightboxImage(
+                        seg.custom_start_image.startsWith('comfyui:')
+                          ? API.getComfyUIImage(seg.custom_start_image.slice(8))
+                          : API.getRepoImage(seg.custom_start_image)
+                      )}
                       onError={(e) => e.target.style.display = 'none'}
                     />
                   ) : seg.start_image_url ? (
@@ -1218,6 +1224,8 @@ export default function JobDetail() {
           defaultLoras={buildDefaultLoras(lastCompletedSegment)}
           defaultFaceswap={buildDefaultFaceswap(lastCompletedSegment, job?.parameters)}
           defaultStartImageUrl={lastCompletedSegment?.end_frame_url || null}
+          jobInputImage={job?.input_image}
+          segments={segments}
           onClose={() => setShowPromptModal(false)}
           onSuccess={() => {
             setShowPromptModal(false);
@@ -1236,6 +1244,8 @@ export default function JobDetail() {
           defaultStartImageUrl={editingSegment.start_image_url || null}
           defaultCustomStartImage={editingSegment.custom_start_image || null}
           isEditing={true}
+          jobInputImage={job?.input_image}
+          segments={segments}
           onClose={() => setEditingSegment(null)}
           onSuccess={() => {
             setEditingSegment(null);

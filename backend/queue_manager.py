@@ -467,13 +467,19 @@ class QueueManager:
         # Check for custom start image first (overrides default behavior)
         custom_start_image = segment.get("custom_start_image")
         if custom_start_image and segment_index > 0:
-            # Upload custom image from image repo to ComfyUI
-            input_image = self._upload_custom_start_image(custom_start_image, client)
-            if not input_image:
-                print(f"[QueueManager] Failed to upload custom start image for segment {segment_index}")
-                update_segment_status(job_id, segment_index, "failed", error_message="Failed to upload custom start image")
-                return False
-            print(f"[QueueManager] Segment {segment_index} using CUSTOM start image: {input_image}")
+            # Check if it's a ComfyUI filename (prefixed with "comfyui:")
+            if custom_start_image.startswith("comfyui:"):
+                # Use the ComfyUI filename directly (already in ComfyUI input folder)
+                input_image = custom_start_image[8:]  # Strip "comfyui:" prefix
+                print(f"[QueueManager] Segment {segment_index} using ComfyUI image directly: {input_image}")
+            else:
+                # Upload custom image from image repo to ComfyUI
+                input_image = self._upload_custom_start_image(custom_start_image, client)
+                if not input_image:
+                    print(f"[QueueManager] Failed to upload custom start image for segment {segment_index}")
+                    update_segment_status(job_id, segment_index, "failed", error_message="Failed to upload custom start image")
+                    return False
+                print(f"[QueueManager] Segment {segment_index} using CUSTOM start image: {input_image}")
         elif segment_index == 0:
             # First segment uses the job's input image
             input_image = job.get("input_image")
