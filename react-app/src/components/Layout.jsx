@@ -1,5 +1,11 @@
 import { useState, useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import QueueIcon from '@mui/icons-material/Queue';
+import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
+import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary';
+import BrushIcon from '@mui/icons-material/Brush';
+import SettingsIcon from '@mui/icons-material/Settings';
 import API from '../api/client';
 import './Layout.css';
 
@@ -49,22 +55,22 @@ export default function Layout() {
       <div className="sidebar">
         <div className="sidebar-header">Wan2.2 Video Gen</div>
         <NavLink to="/" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <span>📊</span> Dashboard
+          <DashboardIcon /> Dashboard
         </NavLink>
         <NavLink to="/queue" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <span>📋</span> Job Queue
+          <QueueIcon /> Job Queue
         </NavLink>
         <NavLink to="/videos" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <span>🎬</span> Videos
+          <VideoLibraryIcon /> Videos
         </NavLink>
         <NavLink to="/images" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <span>🖼️</span> Image Repo
+          <PhotoLibraryIcon /> Image Repo
         </NavLink>
         <NavLink to="/loras" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <span>🎨</span> LoRA Library
+          <BrushIcon /> LoRA Library
         </NavLink>
         <NavLink to="/settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-          <span>⚙️</span> Settings
+          <SettingsIcon /> Settings
         </NavLink>
       </div>
 
