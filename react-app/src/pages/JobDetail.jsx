@@ -1218,6 +1218,8 @@ export default function JobDetail() {
           defaultLoras={buildDefaultLoras(lastCompletedSegment)}
           defaultFaceswap={buildDefaultFaceswap(lastCompletedSegment, job?.parameters)}
           defaultStartImageUrl={lastCompletedSegment?.end_frame_url || null}
+          jobInputImage={job?.input_image}
+          segments={segments}
           onClose={() => setShowPromptModal(false)}
           onSuccess={() => {
             setShowPromptModal(false);
@@ -1236,6 +1238,8 @@ export default function JobDetail() {
           defaultStartImageUrl={editingSegment.start_image_url || null}
           defaultCustomStartImage={editingSegment.custom_start_image || null}
           isEditing={true}
+          jobInputImage={job?.input_image}
+          segments={segments}
           onClose={() => setEditingSegment(null)}
           onSuccess={() => {
             setEditingSegment(null);
