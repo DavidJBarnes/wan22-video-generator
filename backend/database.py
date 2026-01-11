@@ -370,7 +370,7 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_image_tags_v2_tag ON image_tags_v2(tag_name)
         """)
 
-        # Migrate from old schema if needed
+        # Migrate from old schema if needed and always drop old tables
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='image_tag_associations'")
         if cursor.fetchone():
             # Check if there's data to migrate
@@ -383,9 +383,9 @@ def init_db():
                     FROM image_tag_associations a
                     JOIN image_tags t ON a.tag_id = t.id
                 """)
-            # Drop old tables
-            cursor.execute("DROP TABLE IF EXISTS image_tag_associations")
-            cursor.execute("DROP TABLE IF EXISTS image_tags")
+        # Always drop old tables (they are no longer used)
+        cursor.execute("DROP TABLE IF EXISTS image_tag_associations")
+        cursor.execute("DROP TABLE IF EXISTS image_tags")
 
         # Insert default settings if not exist
         # Note: comfyui_url should match config.py COMFYUI_SERVER_URL
