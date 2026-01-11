@@ -135,8 +135,10 @@ export default function JobDetail() {
     return { pairs, count: pairs.length };
   }, [getLoraByFilename, getLoraFriendlyName]);
 
-  // Format elapsed time as "Xm Ys" or "Xs"
-  const formatElapsedTime = (seconds) => {
+  // Format time as "Xm Ys" or "Xs"
+  const formatTime = (seconds) => {
+    if (seconds == null || seconds < 0) return null;
+    seconds = Math.round(seconds);
     if (seconds < 60) {
       return `${seconds}s`;
     }
@@ -144,6 +146,16 @@ export default function JobDetail() {
     const secs = seconds % 60;
     return `${mins}m ${secs}s`;
   };
+
+  // Legacy alias for formatTime
+  const formatElapsedTime = formatTime;
+
+  // Calculate ETA based on elapsed time and average run time
+  const etaSeconds = useMemo(() => {
+    if (elapsedTime == null || !progress?.avg_run_time) return null;
+    const eta = progress.avg_run_time - elapsedTime;
+    return Math.max(0, eta);
+  }, [elapsedTime, progress?.avg_run_time]);
 
   // Poll for progress when job is running
   useEffect(() => {
@@ -525,7 +537,8 @@ export default function JobDetail() {
                     </Typography>
                     {elapsedTime !== null && (
                       <Typography variant="body2" sx={{ textAlign: 'center', mt: 1, fontFamily: 'monospace', color: 'text.secondary' }}>
-                        Running for {formatElapsedTime(elapsedTime)}
+                        {formatElapsedTime(elapsedTime)} elapsed
+                        {etaSeconds !== null && etaSeconds > 0 && ` · ~${formatTime(etaSeconds)} remaining`}
                       </Typography>
                     )}
                   </>
@@ -534,7 +547,8 @@ export default function JobDetail() {
                     <LinearProgress sx={{ height: 10, borderRadius: 5 }} />
                     {elapsedTime !== null && (
                       <Typography variant="body2" sx={{ textAlign: 'center', mt: 1, fontFamily: 'monospace', color: 'text.secondary' }}>
-                        Running for {formatElapsedTime(elapsedTime)}
+                        {formatElapsedTime(elapsedTime)} elapsed
+                        {etaSeconds !== null && etaSeconds > 0 && ` · ~${formatTime(etaSeconds)} remaining`}
                       </Typography>
                     )}
                   </>
@@ -909,7 +923,8 @@ export default function JobDetail() {
                           </Typography>
                           {elapsedTime !== null && (
                             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, textAlign: 'center', fontFamily: 'monospace' }}>
-                              Running for {formatElapsedTime(elapsedTime)}
+                              {formatElapsedTime(elapsedTime)}
+                              {etaSeconds !== null && etaSeconds > 0 && ` · ~${formatTime(etaSeconds)} left`}
                             </Typography>
                           )}
                         </Box>
@@ -918,7 +933,8 @@ export default function JobDetail() {
                           <CircularProgress size={24} />
                           {elapsedTime !== null && (
                             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, fontFamily: 'monospace' }}>
-                              Running for {formatElapsedTime(elapsedTime)}
+                              {formatElapsedTime(elapsedTime)}
+                              {etaSeconds !== null && etaSeconds > 0 && ` · ~${formatTime(etaSeconds)} left`}
                             </Typography>
                           )}
                         </Box>

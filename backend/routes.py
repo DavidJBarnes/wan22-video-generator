@@ -357,14 +357,41 @@ class QueueStatus(BaseModel):
 
 @router.get("/jobs")
 async def list_jobs(limit: int = 100, offset: int = 0):
-    """Get all jobs with pagination, enriched with segment counts.
+    """Get all jobs with pagination, enriched with segment counts and queue info.
 
     Returns:
-        Object with jobs list and avg_run_time (average run time of last 5 completed jobs in seconds)
+        Object with jobs list, avg_run_time, and queue position info.
+        Each job includes:
+        - queue_position: Position in queue (1-based) for pending jobs, null otherwise
+        - estimated_wait_seconds: Estimated wait time based on queue position × avg_run_time
     """
     jobs = get_all_jobs(limit=limit, offset=offset)
     enriched_jobs = [enrich_job_with_segments(job) for job in jobs]
     avg_time = get_avg_run_time(num_segments=5)
+
+    # Calculate queue positions for pending jobs
+    # Get current running job to determine queue start
+    running_job_id = queue_manager.current_job_id
+
+    # Build ordered list of pending job IDs by priority
+    pending_jobs = [j for j in enriched_jobs if j.get("status") == "pending"]
+    pending_jobs.sort(key=lambda j: (j.get("priority", 0), j.get("created_at", "")))
+    pending_job_ids = [j["id"] for j in pending_jobs]
+
+    # Assign queue positions and estimated wait times
+    for job in enriched_jobs:
+        if job.get("status") == "pending" and job["id"] in pending_job_ids:
+            position = pending_job_ids.index(job["id"]) + 1
+            job["queue_position"] = position
+            # Estimate wait: position × avg_run_time
+            # Position 1 waits for running job to finish, position 2 waits for that + another, etc.
+            if avg_time:
+                job["estimated_wait_seconds"] = position * avg_time
+            else:
+                job["estimated_wait_seconds"] = None
+        else:
+            job["queue_position"] = None
+            job["estimated_wait_seconds"] = None
 
     return {
         "jobs": enriched_jobs,
@@ -401,15 +428,21 @@ async def get_job_progress(job_id: int):
     - percent: Progress percentage (0-100)
     - status: waiting, running, completed, or error
     - current_node: Currently executing node ID
+    - elapsed_seconds: Time elapsed since segment started
+    - eta_seconds: Estimated time remaining based on recent average
     """
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    # Get average run time for ETA calculation
+    avg_time = get_avg_run_time(num_segments=5)
+
     # Get progress from tracker
-    progress = progress_tracker.get_progress(job_id)
+    progress = progress_tracker.get_progress(job_id, avg_run_time=avg_time)
 
     if progress:
+        progress["avg_run_time"] = avg_time
         return progress
 
     # No progress being tracked - return default based on job status
@@ -426,6 +459,9 @@ async def get_job_progress(job_id: int):
         "started_at": None,
         "started_at_ts": None,
         "last_update": None,
+        "elapsed_seconds": None,
+        "eta_seconds": None,
+        "avg_run_time": avg_time,
     }
 
 

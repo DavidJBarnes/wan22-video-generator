@@ -39,8 +39,26 @@ class ProgressState:
             return 0
         return min(100, int((self.current_step / self.total_steps) * 100))
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for API response."""
+    @property
+    def elapsed_seconds(self) -> Optional[float]:
+        """Calculate elapsed time in seconds since start."""
+        if self.started_at is None:
+            return None
+        return (datetime.now() - self.started_at).total_seconds()
+
+    def to_dict(self, avg_run_time: Optional[float] = None) -> Dict[str, Any]:
+        """Convert to dictionary for API response.
+
+        Args:
+            avg_run_time: Average run time in seconds for ETA calculation
+        """
+        elapsed = self.elapsed_seconds
+        eta_seconds = None
+
+        # Calculate ETA based on average run time
+        if avg_run_time and elapsed is not None:
+            eta_seconds = max(0, avg_run_time - elapsed)
+
         return {
             "job_id": self.job_id,
             "segment_index": self.segment_index,
@@ -55,6 +73,9 @@ class ProgressState:
             "started_at_ts": self.started_at.timestamp() if self.started_at else None,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "last_update": self.last_update.isoformat() if self.last_update else None,
+            # Timing estimates
+            "elapsed_seconds": elapsed,
+            "eta_seconds": eta_seconds,
         }
 
 
@@ -107,17 +128,26 @@ class ProgressTracker:
             if not self._progress:
                 self._disconnect_websocket()
 
-    def get_progress(self, job_id: int) -> Optional[Dict[str, Any]]:
-        """Get current progress for a job."""
+    def get_progress(self, job_id: int, avg_run_time: Optional[float] = None) -> Optional[Dict[str, Any]]:
+        """Get current progress for a job.
+
+        Args:
+            job_id: The job ID to get progress for
+            avg_run_time: Average run time in seconds for ETA calculation
+        """
         with self._lock:
             if job_id in self._progress:
-                return self._progress[job_id].to_dict()
+                return self._progress[job_id].to_dict(avg_run_time=avg_run_time)
         return None
 
-    def get_all_progress(self) -> Dict[int, Dict[str, Any]]:
-        """Get progress for all tracked jobs."""
+    def get_all_progress(self, avg_run_time: Optional[float] = None) -> Dict[int, Dict[str, Any]]:
+        """Get progress for all tracked jobs.
+
+        Args:
+            avg_run_time: Average run time in seconds for ETA calculation
+        """
         with self._lock:
-            return {jid: p.to_dict() for jid, p in self._progress.items()}
+            return {jid: p.to_dict(avg_run_time=avg_run_time) for jid, p in self._progress.items()}
 
     def _connect_websocket(self, comfyui_url: str):
         """Connect to ComfyUI WebSocket."""
