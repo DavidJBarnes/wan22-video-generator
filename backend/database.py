@@ -122,6 +122,103 @@ def get_connection():
         conn.close()
 
 
+def _migrate_retroactive_image_tags(cursor):
+    """Migration: Parse existing jobs and tag their input images.
+
+    For each job, parse the job name (split by hyphen) and add matching tags
+    to the job's input image. Only adds tags that exist in the current
+    job_name_prefixes and job_name_descriptions settings.
+    """
+    import os
+
+    # Get available tags from settings
+    cursor.execute("SELECT value FROM settings WHERE key = 'job_name_prefixes'")
+    prefixes_row = cursor.fetchone()
+    cursor.execute("SELECT value FROM settings WHERE key = 'job_name_descriptions'")
+    descriptions_row = cursor.fetchone()
+
+    prefixes = json.loads(prefixes_row[0]) if prefixes_row else []
+    descriptions = json.loads(descriptions_row[0]) if descriptions_row else []
+
+    # Build set of valid tags (lowercase for matching)
+    valid_tags = set()
+    for tag in prefixes + descriptions:
+        if tag and tag.strip():
+            valid_tags.add(tag.strip().lower())
+
+    if not valid_tags:
+        return  # No tags configured, nothing to do
+
+    # Get image_repo_path for resolving relative paths
+    cursor.execute("SELECT value FROM settings WHERE key = 'image_repo_path'")
+    repo_path_row = cursor.fetchone()
+    repo_path = repo_path_row[0] if repo_path_row else ""
+
+    # Get all jobs with their names and input images
+    cursor.execute("SELECT name, input_image FROM jobs WHERE input_image IS NOT NULL AND input_image != ''")
+    jobs = cursor.fetchall()
+
+    tagged_count = 0
+    for job_name, input_image in jobs:
+        if not job_name or not input_image:
+            continue
+
+        # Parse job name into potential tags (split by hyphen)
+        name_parts = job_name.split("-")
+        tags_to_add = []
+        for part in name_parts:
+            part_clean = part.strip().lower()
+            if part_clean and part_clean in valid_tags:
+                tags_to_add.append(part_clean)
+
+        if not tags_to_add:
+            continue
+
+        # Determine image path - could be a filename or relative path
+        # input_image from ComfyUI is typically just a filename
+        # We need to find the actual path in the image repo
+        image_path = None
+
+        # First check if it's already a relative path from repo
+        if repo_path and not os.path.isabs(input_image):
+            # It might be a ComfyUI filename - we need to search for it
+            # For now, try common patterns
+            potential_paths = [
+                input_image,  # Already relative
+                os.path.basename(input_image),  # Just filename
+            ]
+
+            # Try to find a matching image in image_tags_v2 or image_ratings
+            for potential in potential_paths:
+                cursor.execute(
+                    "SELECT image_path FROM image_ratings WHERE image_path LIKE ?",
+                    (f'%{os.path.basename(potential)}',)
+                )
+                match = cursor.fetchone()
+                if match:
+                    image_path = match[0]
+                    break
+
+        if not image_path:
+            # Use the input_image as-is (might be a relative path already)
+            image_path = input_image
+
+        # Add tags to this image
+        now = utc_now_iso()
+        for tag_name in tags_to_add:
+            try:
+                cursor.execute(
+                    "INSERT OR IGNORE INTO image_tags_v2 (image_path, tag_name, created_at) VALUES (?, ?, ?)",
+                    (image_path, tag_name, now)
+                )
+                if cursor.rowcount > 0:
+                    tagged_count += 1
+            except Exception:
+                pass  # Ignore errors for individual tags
+
+    print(f"[Migration] Tagged {tagged_count} image-tag associations from existing jobs")
+
+
 def init_db():
     """Initialize database tables."""
     with get_connection() as conn:
@@ -386,6 +483,13 @@ def init_db():
         # Always drop old tables (they are no longer used)
         cursor.execute("DROP TABLE IF EXISTS image_tag_associations")
         cursor.execute("DROP TABLE IF EXISTS image_tags")
+
+        # Migration: Retroactively tag images from existing jobs
+        # Check if we've already run this migration (use a marker in settings)
+        cursor.execute("SELECT value FROM settings WHERE key = 'migration_retroactive_tags_done'")
+        if not cursor.fetchone():
+            _migrate_retroactive_image_tags(cursor)
+            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('migration_retroactive_tags_done', 'true')")
 
         # Insert default settings if not exist
         # Note: comfyui_url should match config.py COMFYUI_SERVER_URL
