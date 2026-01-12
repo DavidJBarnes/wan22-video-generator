@@ -564,6 +564,14 @@ export default function JobDetail() {
                 Download Video
               </Button>
               <Button
+                variant="contained"
+                href={API.getJobVideoUpscaled(id)}
+                download={`${job.name}_upscaled_2x.mp4`}
+                sx={{ bgcolor: '#7b1fa2', '&:hover': { bgcolor: '#6a1b9a' } }}
+              >
+                Download Upscaled
+              </Button>
+              <Button
                 variant="outlined"
                 onClick={handleUpscaleVideo}
                 disabled={upscaling}

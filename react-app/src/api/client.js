@@ -235,6 +235,10 @@ class APIClient {
     return `${API_BASE_URL}/jobs/${jobId}/video`;
   }
 
+  getJobVideoUpscaled(jobId) {
+    return `${API_BASE_URL}/jobs/${jobId}/video/upscaled`;
+  }
+
   getSegmentVideo(jobId, segmentIndex) {
     return `${API_BASE_URL}/jobs/${jobId}/segments/${segmentIndex}/video`;
   }
