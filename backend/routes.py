@@ -118,7 +118,8 @@ def build_full_prompt(user_prompt: str) -> str:
 # ============== CivitAI Preview Fetching ==============
 
 # Directory for cached LoRA preview images
-LORA_PREVIEWS_DIR = Path(__file__).parent / "lora_previews"
+# LORA_PREVIEW_PATH can be overridden via environment variable
+LORA_PREVIEWS_DIR = Path(os.environ.get("LORA_PREVIEW_PATH", str(Path(__file__).parent / "lora_previews")))
 LORA_PREVIEWS_DIR.mkdir(parents=True, exist_ok=True)
 
 

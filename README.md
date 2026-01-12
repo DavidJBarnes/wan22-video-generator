@@ -63,20 +63,23 @@ The SQLite database is automatically created when the backend starts. No manual 
 
 ### Database Location
 
-By default, the database is stored at `backend/comfyui_queue.db`. You can override this with the `DATABASE_PATH` environment variable:
+By default, the database is stored at `backend/comfyui_queue.db`. You can override paths with environment variables:
 
 ```bash
 # Set custom database path
 export DATABASE_PATH=/path/to/your/database.db
 
+# Set custom LoRA preview thumbnails path
+export LORA_PREVIEW_PATH=/path/to/lora_thumbnails
+
 # Or inline when starting
-DATABASE_PATH=/path/to/your/database.db ./start-api.sh
+DATABASE_PATH=/path/to/db.db LORA_PREVIEW_PATH=/path/to/previews ./start-api.sh
 ```
 
-| Path | Description |
-|------|-------------|
-| `DATABASE_PATH` env var | Custom database location (if set) |
-| `backend/comfyui_queue.db` | Default location (symlink to ~/backups/) |
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `DATABASE_PATH` | `backend/comfyui_queue.db` | SQLite database location |
+| `LORA_PREVIEW_PATH` | `backend/lora_previews/` | LoRA thumbnail images |
 
 ### Fresh Database Setup
 
