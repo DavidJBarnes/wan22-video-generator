@@ -2215,3 +2215,146 @@ async def remove_image_tag(image_path: str, tag_name: str):
     if removed:
         return {"image_path": image_path, "tag_name": tag_name, "message": "Tag removed from image"}
     raise HTTPException(status_code=404, detail="Tag association not found")
+
+
+# ============== Video Upscaling Routes ==============
+
+from upscale import upscale_video, get_available_models, MODELS as UPSCALE_MODELS
+
+
+class UpscaleRequest(BaseModel):
+    """Request body for video upscaling."""
+    video_path: str
+    scale: int = 2
+    model: str = "realesr-animevideov3"
+    output_path: Optional[str] = None
+
+
+@router.get("/upscale/models")
+async def get_upscale_models():
+    """Get available upscaling models and their supported scales."""
+    return {"models": get_available_models()}
+
+
+@router.post("/upscale")
+async def upscale_video_endpoint(request: UpscaleRequest):
+    """Upscale a video using Real-ESRGAN on the 3090 server.
+
+    Args:
+        video_path: Path to the video file to upscale
+        scale: Upscale factor (2, 3, or 4 depending on model)
+        model: Model name (realesrgan-x4plus, realesr-animevideov3, etc.)
+        output_path: Optional custom output path
+
+    Returns:
+        Status and path to upscaled video
+    """
+    # Validate video path exists
+    if not os.path.exists(request.video_path):
+        raise HTTPException(status_code=404, detail=f"Video not found: {request.video_path}")
+
+    # Validate model
+    if request.model not in UPSCALE_MODELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown model: {request.model}. Available: {list(UPSCALE_MODELS.keys())}"
+        )
+
+    # Validate scale for model
+    model_info = UPSCALE_MODELS[request.model]
+    if request.scale not in model_info["scales"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Scale {request.scale} not supported for {request.model}. Available: {model_info['scales']}"
+        )
+
+    # Run upscaling
+    result = upscale_video(
+        input_path=request.video_path,
+        output_path=request.output_path,
+        scale=request.scale,
+        model=request.model
+    )
+
+    if result["status"] == "error":
+        raise HTTPException(status_code=500, detail=result.get("error", "Upscaling failed"))
+
+    return result
+
+
+@router.post("/jobs/{job_id}/upscale")
+async def upscale_job_video(job_id: int, scale: int = 2, model: str = "realesr-animevideov3"):
+    """Upscale a job's final video.
+
+    The job must be completed and have a final video.
+    """
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job["status"] != "completed":
+        raise HTTPException(status_code=400, detail="Job is not completed")
+
+    # Find the final video
+    from video_utils import get_final_video_path
+    video_path = get_final_video_path(job_id, job.get("name", f"job_{job_id}"))
+
+    if not video_path or not os.path.exists(video_path):
+        raise HTTPException(status_code=404, detail="Final video not found for this job")
+
+    # Generate output path
+    video_stem = Path(video_path).stem
+    video_dir = Path(video_path).parent
+    output_path = str(video_dir / f"{video_stem}_upscaled_{scale}x.mp4")
+
+    # Run upscaling
+    result = upscale_video(
+        input_path=video_path,
+        output_path=output_path,
+        scale=scale,
+        model=model
+    )
+
+    if result["status"] == "error":
+        raise HTTPException(status_code=500, detail=result.get("error", "Upscaling failed"))
+
+    return result
+
+
+@router.get("/jobs/{job_id}/segments/{segment_index}/upscale")
+async def upscale_segment_video(job_id: int, segment_index: int, scale: int = 2, model: str = "realesr-animevideov3"):
+    """Upscale a specific segment's video."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    segment = get_segment(job_id, segment_index)
+    if not segment:
+        raise HTTPException(status_code=404, detail="Segment not found")
+
+    if segment["status"] != "completed":
+        raise HTTPException(status_code=400, detail="Segment is not completed")
+
+    # Find the segment video
+    video_path = get_segment_video_path(job_id, segment_index, job.get("name", f"job_{job_id}"))
+
+    if not video_path or not os.path.exists(video_path):
+        raise HTTPException(status_code=404, detail="Segment video not found")
+
+    # Generate output path
+    video_stem = Path(video_path).stem
+    video_dir = Path(video_path).parent
+    output_path = str(video_dir / f"{video_stem}_upscaled_{scale}x.mp4")
+
+    # Run upscaling
+    result = upscale_video(
+        input_path=video_path,
+        output_path=output_path,
+        scale=scale,
+        model=model
+    )
+
+    if result["status"] == "error":
+        raise HTTPException(status_code=500, detail=result.get("error", "Upscaling failed"))
+
+    return result

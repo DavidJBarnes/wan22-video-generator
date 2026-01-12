@@ -71,6 +71,7 @@ export default function JobDetail() {
   const [progress, setProgress] = useState(null);
   const [elapsedTime, setElapsedTime] = useState(null);
   const [finalizing, setFinalizing] = useState(false);
+  const [upscaling, setUpscaling] = useState(false);
   const autoFinalizeTriggeredRef = useRef(false);
 
   // Memoize expensive segment calculations - must be before early returns
@@ -362,6 +363,22 @@ export default function JobDetail() {
     }
   }
 
+  async function handleUpscaleVideo() {
+    setUpscaling(true);
+    showToast('Starting video upscale... This may take a few minutes.', 'info');
+
+    try {
+      const result = await API.upscaleJobVideo(id, 2, 'realesr-animevideov3');
+      showToast(`Video upscaled successfully (${result.scale}x)`, 'success');
+      await loadJobDetail();
+    } catch (error) {
+      console.error('Failed to upscale video:', error);
+      showToast(error.message || 'Failed to upscale video', 'error');
+    } finally {
+      setUpscaling(false);
+    }
+  }
+
   async function handleDeleteJob() {
     if (!confirm('Are you sure you want to delete this job?')) return;
 
@@ -538,13 +555,28 @@ export default function JobDetail() {
             >
               Your browser does not support video playback.
             </video>
-            <div style={{ marginTop: '12px' }}>
+            <div style={{ marginTop: '12px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
               <Button
                 variant="contained"
                 href={API.getJobVideo(id)}
                 download={`${job.name}.webm`}
               >
                 Download Video
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={handleUpscaleVideo}
+                disabled={upscaling}
+                sx={{ borderColor: '#7b1fa2', color: '#7b1fa2', '&:hover': { borderColor: '#6a1b9a', bgcolor: 'rgba(123, 31, 162, 0.04)' } }}
+              >
+                {upscaling ? (
+                  <>
+                    <CircularProgress size={20} color="inherit" sx={{ mr: 1 }} />
+                    Upscaling...
+                  </>
+                ) : (
+                  'Upscale 2x'
+                )}
               </Button>
             </div>
           </div>
