@@ -72,14 +72,18 @@ export DATABASE_PATH=/path/to/your/database.db
 # Set custom LoRA preview thumbnails path
 export LORA_PREVIEW_PATH=/path/to/lora_thumbnails
 
+# Set custom video output path
+export VIDEOS_PATH=/path/to/videos
+
 # Or inline when starting
-DATABASE_PATH=/path/to/db.db LORA_PREVIEW_PATH=/path/to/previews ./start-api.sh
+DATABASE_PATH=/path/to/db.db VIDEOS_PATH=/path/to/videos ./start-api.sh
 ```
 
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
 | `DATABASE_PATH` | `backend/comfyui_queue.db` | SQLite database location |
 | `LORA_PREVIEW_PATH` | `backend/lora_previews/` | LoRA thumbnail images |
+| `VIDEOS_PATH` | `backend/output/` | Generated video segments and final videos |
 
 ### Fresh Database Setup
 

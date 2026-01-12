@@ -9,10 +9,10 @@ import httpx
 
 
 # Output directory for downloaded videos and extracted frames
-# Use absolute path based on the backend directory to avoid CWD issues
+# VIDEOS_PATH can be overridden via environment variable
 BACKEND_DIR = Path(__file__).resolve().parent
-OUTPUT_DIR = BACKEND_DIR / "output"
-OUTPUT_DIR.mkdir(exist_ok=True)
+OUTPUT_DIR = Path(os.environ.get("VIDEOS_PATH", str(BACKEND_DIR / "output")))
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 print(f"[VideoUtils] Output directory: {OUTPUT_DIR}")
 
