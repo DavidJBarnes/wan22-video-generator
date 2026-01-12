@@ -1,128 +1,234 @@
 # Wan2.2 Video Generator
 
-A local application for generating long-form videos using ComfyUI and Wan2.2. Since Wan2.2 is limited to ~5 second clips, this app enables creating longer videos by breaking them into segments and automatically stitching them together.
+A local web application for generating long-form videos using the Wan2.2 image-to-video model via ComfyUI. Since Wan2.2 is limited to ~5-second clips, this app segments longer videos and automatically stitches them together.
 
 ## Prerequisites
 
-- **Python 3.10+** - For the backend API
+- **Python 3.11+** - For the backend API
 - **Node.js 18+** - For the React frontend
-- **ComfyUI** - Running locally with Wan2.2 models installed
-- **ffmpeg** - For video stitching (must be in PATH)
+- **ComfyUI** - Running with Wan2.2 models installed
+- **ffmpeg** - For video processing (must be in PATH)
+- **tmux** - For process management
 
-## Quick Start
+## Installation
 
-### Backend
+### 1. Clone the Repository
+
+```bash
+git clone <repository-url>
+cd wan22-video-generator
+```
+
+### 2. Backend Setup
 
 ```bash
 cd backend
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
-python main.py
 ```
 
-The backend API runs on **http://localhost:8000**.
-
-API documentation is available at http://localhost:8000/docs.
-
-### React App (Frontend)
+### 3. Frontend Setup
 
 ```bash
 cd react-app
+
+# Install dependencies
 npm install
-npm run dev
 ```
 
-The frontend runs on **http://localhost:5173**.
+### 4. Directory Setup
 
-### Production Build
-
-To build the React app for production:
+Create the required directories and symlinks for persistent storage:
 
 ```bash
-cd react-app
-npm run build
-npm run preview  # Preview the production build
+# Create backup directories
+mkdir -p ~/backups/video_output
+mkdir -p ~/backups/lora_previews
+
+# Create symlinks in backend/
+cd backend
+ln -sf ~/backups/comfyui_queue.db comfyui_queue.db
+ln -sf ~/backups/video_output output
+ln -sf ~/backups/lora_previews lora_previews
 ```
+
+## Database Setup
+
+The SQLite database is automatically created when the backend starts. No manual setup required.
+
+### Database Location
+
+| Path | Description |
+|------|-------------|
+| `~/backups/comfyui_queue.db` | SQLite database (actual file) |
+| `backend/comfyui_queue.db` | Symlink to the above |
+
+### Fresh Database Setup
+
+To create a new database (or reset an existing one):
+
+```bash
+# 1. Stop the backend if running
+tmux kill-session -t wan-api
+
+# 2. Remove or backup existing database
+rm ~/backups/comfyui_queue.db
+# Or backup: mv ~/backups/comfyui_queue.db ~/backups/comfyui_queue.db.bak
+
+# 3. Start the backend - database will be created automatically
+tmux new -s wan-api './start-api.sh'
+```
+
+The backend will automatically:
+- Create all required tables (jobs, job_segments, settings, lora_library, image_ratings, etc.)
+- Initialize default settings
+- Start the queue manager (if auto_start_queue is enabled)
+
+### Database Tables
+
+| Table | Purpose |
+|-------|---------|
+| `jobs` | Video generation jobs with status, prompts, parameters |
+| `job_segments` | Individual segments within each job |
+| `settings` | Application configuration (key-value store) |
+| `lora_library` | Cached LoRA metadata |
+| `image_ratings` | User ratings for images in the repository |
+| `uploaded_images` | Tracks images uploaded to ComfyUI (deduplication) |
+| `job_logs` | Activity logs for debugging |
 
 ## Configuration
 
-The application expects ComfyUI to be running at `http://localhost:8188` by default. Settings can be configured through the UI's Settings page.
+### Application Settings
 
----
+Settings are stored in the database and configurable via the web UI at `/settings`:
 
-## Overview
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `comfyui_url` | `http://localhost:8188` | ComfyUI server address |
+| `default_width` | `512` | Default video width in pixels |
+| `default_height` | `768` | Default video height in pixels |
+| `default_fps` | `16` | Frames per second |
+| `image_repo_path` | (empty) | Local directory containing source images |
+| `image_repo_url` | (empty) | URL prefix for serving images |
+| `auto_start_queue` | `true` | Start queue manager on backend startup |
 
-The Wan2.2 Video Generator connects to a locally running ComfyUI server to generate Wan2.2-based videos. It manages the complexity of creating longer videos by handling segment generation, frame extraction, and video stitching automatically.
+### Model Configuration
+
+Edit `backend/config.py` to configure the Wan2.2 models:
+
+```python
+MODELS = {
+    "high_noise": "wan22RemixT2VI2V_i2vHighV20.safetensors",
+    "low_noise": "wan22RemixT2VI2V_i2vLowV20.safetensors",
+    "vae": "wan_2.1_vae.safetensors",
+    "text_encoder": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+}
+```
+
+### Directory Paths
+
+| Path | Description |
+|------|-------------|
+| `backend/output/` | Generated video segments and final stitched videos |
+| `backend/lora_previews/` | LoRA preview images |
+| `image_repo_path` (setting) | Source images for video generation |
+
+## Running the Application
+
+### Start Services
+
+```bash
+# Start backend API server (in tmux)
+tmux new -s wan-api './start-api.sh'
+
+# Start frontend UI server (in a new terminal)
+tmux new -s wan-ui './start-ui.sh'
+```
+
+### Access Points
+
+| Service | URL |
+|---------|-----|
+| Frontend | http://localhost:3030 |
+| Backend API | http://localhost:9090 |
+| API Docs | http://localhost:9090/docs |
+
+### Managing tmux Sessions
+
+```bash
+# List sessions
+tmux ls
+
+# Attach to a session
+tmux attach -t wan-api
+
+# Detach from session: Ctrl+B, then D
+
+# Kill a session
+tmux kill-session -t wan-api
+```
+
+### Restart After Code Changes
+
+```bash
+# Restart backend
+tmux kill-session -t wan-api && tmux new -s wan-api './start-api.sh'
+
+# Restart frontend
+tmux kill-session -t wan-ui && tmux new -s wan-ui './start-ui.sh'
+```
+
+## ComfyUI Requirements
+
+### Required Models
+
+Download and place in your ComfyUI models directory:
+
+**UNET Models** (`models/unet/`):
+- `wan22RemixT2VI2V_i2vHighV20.safetensors` (high noise pass)
+- `wan22RemixT2VI2V_i2vLowV20.safetensors` (low noise pass)
+
+**VAE** (`models/vae/`):
+- `wan_2.1_vae.safetensors`
+
+**Text Encoder** (`models/text_encoders/`):
+- `umt5_xxl_fp8_e4m3fn_scaled.safetensors`
+
+### ComfyUI Startup
+
+For optimal memory management with Wan2.2:
+
+```bash
+python3 main.py --listen --port 8188 --cache-none
+```
+
+The `--cache-none` flag prevents RAM accumulation between jobs.
 
 ## How It Works
 
 ### Segments
 
-A **segment** is a short video clip generated by ComfyUI (typically ~5 seconds max).
+A **segment** is a short video clip generated by ComfyUI (typically ~5 seconds).
 
-To create a longer video, the user defines:
-- **Total duration**
-- **Number of segments**
+To create longer videos:
+1. User provides a starting image and prompt
+2. ComfyUI generates a ~5 second clip
+3. The app extracts the last frame as the starting image for the next segment
+4. User provides a new prompt (or reuses the previous one)
+5. Process repeats until all segments are complete
+6. ffmpeg stitches all segments into the final video
 
-Example: A 10-second video = 2 segments x 5 seconds each.
+### Job Status Lifecycle
 
-### Segment Generation Workflow
-
-1. **Segment 1**: The user provides a starting image and prompt. The app injects these into a Wan2.2 i2v workflow template and submits it to ComfyUI.
-
-2. **Subsequent Segments**: When a segment completes, the backend extracts the final frame of the output clip and uses it as the starting image for the next segment. The user can provide a new prompt for each segment.
-
-3. **Final Video**: After all segments are generated, the backend automatically stitches the segment videos together using ffmpeg.
-
-## Jobs and Queueing
-
-### Jobs
-
-A **job** is a complete video request consisting of:
-- One or more video segments
-- Associated inputs (starting images, prompts)
-- Workflow settings
-- The final stitched output
-
-### Local Job Queue
-
-To avoid overwhelming ComfyUI, the backend includes a lightweight queue system that:
-- Stores pending jobs
-- Submits only one segment at a time to ComfyUI
-- Waits for ComfyUI processing to complete
-- Fetches outputs and moves to the next segment
-- Marks a job complete when all segments are finished and stitched
-
-## Architecture
-
-### Frontend (React + Vite)
-
-- **React 19** with React Router for navigation
-- **Material UI 7** for components
-- Communicates with the backend via REST API
-
-Responsibilities:
-- Creating and configuring jobs (duration, segment count, prompts, starting image)
-- Displaying segment outputs, final-frame previews, and job status
-- Playing the final stitched video
-
-### Backend (Python + FastAPI)
-
-- **FastAPI** for the REST API
-- **SQLite** for job/segment persistence
-- **httpx** for async ComfyUI communication
-
-Responsibilities:
-- REST API endpoints for job creation, status, and results
-- Managing the local job queue
-- Submitting workflows to ComfyUI and polling for results
-- Downloading segment outputs and extracting final frames
-- Stitching all segments into the final video
-
-The backend holds Wan2.2 i2v workflow templates and injects variables like:
-- Starting image
-- Prompt
-- Seed (optional)
-- Duration
+```
+pending → running → awaiting_prompt → running → ... → awaiting_prompt → completed
+                                                                     ↘ failed
+```
 
 ## API Endpoints
 
@@ -132,9 +238,66 @@ The backend holds Wan2.2 i2v workflow templates and injects variables like:
 | POST | `/api/jobs` | Create a new job |
 | GET | `/api/jobs/{id}` | Get job details |
 | DELETE | `/api/jobs/{id}` | Delete a job |
-| GET | `/api/queue/status` | Get queue status |
-| POST | `/api/queue/start` | Start the queue |
-| POST | `/api/queue/stop` | Stop the queue |
+| POST | `/api/jobs/{id}/finalize` | Stitch segments into final video |
+| GET | `/api/jobs/{id}/segments` | List job segments |
+| POST | `/api/jobs/{id}/segments/{idx}/prompt` | Submit segment prompt |
+| GET | `/api/queue/status` | Get queue and ComfyUI status |
+| POST | `/api/queue/start` | Start the queue manager |
+| POST | `/api/queue/stop` | Stop the queue manager |
+| GET | `/api/settings` | Get all settings |
+| PUT | `/api/settings` | Update settings |
 | GET | `/health` | Health check |
 
 Full API documentation available at `/docs` when the backend is running.
+
+## Troubleshooting
+
+### Database Issues
+
+**Corrupted database**: Remove and restart (will recreate):
+```bash
+rm ~/backups/comfyui_queue.db
+tmux kill-session -t wan-api && tmux new -s wan-api './start-api.sh'
+```
+
+**Missing symlink**:
+```bash
+ln -sf ~/backups/comfyui_queue.db backend/comfyui_queue.db
+```
+
+### Connection Issues
+
+**ComfyUI not connecting**: Verify the URL in Settings matches your ComfyUI server.
+
+**Frontend can't reach backend**: Ensure backend is running on port 9090.
+
+### Memory Issues
+
+If ComfyUI runs out of memory:
+1. Use `--cache-none` flag when starting ComfyUI
+2. Reduce video dimensions in Settings
+3. Restart ComfyUI between large jobs
+
+## Project Structure
+
+```
+wan22-video-generator/
+├── backend/
+│   ├── main.py              # FastAPI entry point
+│   ├── routes.py            # API endpoints
+│   ├── database.py          # SQLite schema and operations
+│   ├── queue_manager.py     # Background job processing
+│   ├── comfyui_client.py    # ComfyUI API wrapper
+│   ├── config.py            # Default configuration
+│   ├── video_utils.py       # ffmpeg operations
+│   └── workflow_templates.py # Wan2.2 workflow templates
+├── react-app/
+│   ├── src/
+│   │   ├── pages/           # Dashboard, Queue, JobDetail, etc.
+│   │   └── components/      # Reusable UI components
+│   └── vite.config.js
+├── start-api.sh             # Backend startup script
+├── start-ui.sh              # Frontend startup script
+├── CLAUDE.md                # Detailed developer documentation
+└── README.md                # This file
+```

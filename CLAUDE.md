@@ -167,6 +167,45 @@ Persistent data is stored in `~/backups/` with symlinks in `backend/`:
 - `backend/output/` → `~/backups/video_output/` (generated videos)
 - `backend/lora_previews/` → `~/backups/lora_previews/` (LoRA preview images)
 
+### Setting Up a New Database
+
+The database is automatically created when the backend starts if it doesn't exist. To set up a fresh database:
+
+1. **Stop the backend** (if running):
+   ```bash
+   tmux kill-session -t wan-api
+   ```
+
+2. **Remove or rename the existing database**:
+   ```bash
+   # Option A: Delete completely (lose all data)
+   rm ~/backups/comfyui_queue.db
+
+   # Option B: Rename for backup
+   mv ~/backups/comfyui_queue.db ~/backups/comfyui_queue.db.bak
+   ```
+
+3. **Start the backend**:
+   ```bash
+   tmux new -s wan-api './start-api.sh'
+   ```
+
+   The backend will automatically:
+   - Create a new SQLite database with all required tables
+   - Initialize default settings (ComfyUI URL, dimensions, etc.)
+   - Start the queue manager (if auto_start_queue is enabled)
+
+4. **Configure settings** via the web UI at http://localhost:3030/settings:
+   - Set the ComfyUI URL (default: `http://localhost:8188`)
+   - Set the image repository path
+   - Adjust default video dimensions, FPS, etc.
+
+**Note**: If you're setting up on a new machine, ensure the symlink exists first:
+```bash
+mkdir -p ~/backups
+ln -sf ~/backups/comfyui_queue.db backend/comfyui_queue.db
+```
+
 ### Ports
 - Frontend: http://localhost:3030
 - Backend: http://localhost:9090
