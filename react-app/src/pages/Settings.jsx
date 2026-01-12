@@ -15,7 +15,7 @@ export default function Settings() {
 
   // Form fields
   const [comfyuiUrl, setComfyuiUrl] = useState('');
-  const [imageRepoPath, setImageRepoPath] = useState('');
+  const [imageRepoUrl, setImageRepoUrl] = useState('');
   const [defaultWidth, setDefaultWidth] = useState(640);
   const [defaultHeight, setDefaultHeight] = useState(640);
   const [defaultFps, setDefaultFps] = useState(16);
@@ -40,7 +40,7 @@ export default function Settings() {
       setSettings(s);
 
       setComfyuiUrl(s.comfyui_url || 'http://localhost:8188');
-      setImageRepoPath(s.image_repo_path || '');
+      setImageRepoUrl(s.image_repo_url || '');
       setDefaultWidth(parseInt(s.default_width) || 640);
       setDefaultHeight(parseInt(s.default_height) || 640);
       setDefaultFps(parseInt(s.default_fps) || 16);
@@ -123,7 +123,7 @@ export default function Settings() {
     try {
       const settingsPayload = {
         comfyui_url: comfyuiUrl || 'http://localhost:8188',
-        image_repo_path: imageRepoPath,
+        image_repo_url: imageRepoUrl,
         default_width: String(defaultWidth),
         default_height: String(defaultHeight),
         default_fps: String(defaultFps),
@@ -240,15 +240,15 @@ export default function Settings() {
         <div className="card settings-section">
           <h2>Image Repository</h2>
           <div className="form-group">
-            <label>Local Image Repository Path</label>
+            <label>Image Repository URL</label>
             <input
               type="text"
-              value={imageRepoPath}
-              onChange={(e) => setImageRepoPath(e.target.value)}
-              placeholder="/path/to/your/images"
+              value={imageRepoUrl}
+              onChange={(e) => setImageRepoUrl(e.target.value)}
+              placeholder="http://localhost:8080"
             />
             <small style={{ color: '#666', fontSize: '12px' }}>
-              Absolute path to a local directory containing your images
+              URL of a static file server with directory listings enabled.
             </small>
           </div>
           <div className="form-group">

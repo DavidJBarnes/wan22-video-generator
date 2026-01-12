@@ -42,25 +42,39 @@ export default function ImageRepo() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [folderPage, setFolderPage] = useState(1);
   const [imagePage, setImagePage] = useState(1);
+  const [imageRepoUrl, setImageRepoUrl] = useState('');
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
-  // Load available tags once
+  // Load settings and tags once
   useEffect(() => {
-    async function loadTags() {
+    async function loadSettingsAndTags() {
       try {
-        const data = await API.getImageTags();
-        setAvailableTags(data.tags || []);
+        // Load image repo URL setting
+        const settingsData = await API.getSettings();
+        const settings = settingsData.settings || settingsData;
+        const repoUrl = settings.image_repo_url || '';
+        setImageRepoUrl(repoUrl);
+        API.setImageRepoUrl(repoUrl);
+
+        // Load tags
+        const tagsData = await API.getImageTags();
+        setAvailableTags(tagsData.tags || []);
       } catch (error) {
-        console.error('Failed to load tags:', error);
+        console.error('Failed to load settings/tags:', error);
+      } finally {
+        setSettingsLoaded(true);
       }
     }
-    loadTags();
+    loadSettingsAndTags();
   }, []);
 
   useEffect(() => {
-    loadDirectory(currentPath);
-    setFolderPage(1); // Reset page when navigating
-    setImagePage(1);  // Reset image page when navigating
-  }, [currentPath, tagFilter]);
+    if (settingsLoaded) {
+      loadDirectory(currentPath);
+      setFolderPage(1); // Reset page when navigating
+      setImagePage(1);  // Reset image page when navigating
+    }
+  }, [currentPath, tagFilter, settingsLoaded]);
 
   useEffect(() => {
     applyRatingFilter();
@@ -95,7 +109,7 @@ export default function ImageRepo() {
       setLoading(false);
     } catch (err) {
       console.error('Failed to load image repository:', err);
-      setError(err.message || 'Failed to load directory. Please check that the Image Repository Path is set correctly in Settings.');
+      setError(err.message || 'Failed to load directory. Please check that the Image Repository URL is set correctly in Settings.');
       setLoading(false);
     }
   }
@@ -579,7 +593,7 @@ export default function ImageRepo() {
         <div className="breadcrumb" style={{ flex: 1 }}>
           {breadcrumbs.length === 0 ? (
             <span style={{ color: '#999' }}>
-              No repository path configured. Please set it in Settings.
+              No repository URL configured. Please set it in Settings.
             </span>
           ) : (
             breadcrumbs.map((crumb, index) => {

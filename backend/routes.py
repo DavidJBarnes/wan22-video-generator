@@ -1714,7 +1714,7 @@ async def browse_image_repo(path: str = "", tag: Optional[str] = None):
     repo_root = get_setting("image_repo_path", "")
 
     if not repo_root:
-        raise HTTPException(status_code=400, detail="Image repository path not configured. Please set it in Settings.")
+        raise HTTPException(status_code=400, detail="Image repository Local Path not configured. Set it in Settings to enable browsing.")
 
     # Security: Ensure the repo root exists and is accessible
     repo_root_path = Path(repo_root)

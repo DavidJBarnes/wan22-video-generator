@@ -5,6 +5,18 @@
 const API_BASE_URL = '/api';
 
 class APIClient {
+  constructor() {
+    this.imageRepoUrl = null; // Remote image repo URL (if configured)
+  }
+
+  setImageRepoUrl(url) {
+    this.imageRepoUrl = url || null;
+  }
+
+  getImageRepoUrl() {
+    return this.imageRepoUrl;
+  }
+
   async request(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
     const config = {
@@ -329,6 +341,50 @@ class APIClient {
   // ============== Image Repository ==============
 
   async browseImageRepo(path = '', tag = null) {
+    if (this.imageRepoUrl) {
+      // Fetch directory listing from URL and parse HTML
+      const cleanBase = this.imageRepoUrl.endsWith('/') ? this.imageRepoUrl.slice(0, -1) : this.imageRepoUrl;
+      const fullUrl = path ? `${cleanBase}/${path}/` : `${cleanBase}/`;
+
+      try {
+        const response = await fetch(fullUrl);
+        const html = await response.text();
+
+        // Parse HTML directory listing
+        const { folders, images } = this._parseDirectoryListing(html, path);
+
+        // Fetch preview images for each folder (in parallel, max 3 images each)
+        await Promise.all(folders.map(async (folder) => {
+          try {
+            const folderUrl = `${cleanBase}/${folder.path}/`;
+            const folderResponse = await fetch(folderUrl);
+            const folderHtml = await folderResponse.text();
+            const { images: folderImages } = this._parseDirectoryListing(folderHtml, folder.path);
+            folder.preview_images = folderImages.slice(0, 3).map(img => img.path);
+          } catch (e) {
+            folder.preview_images = [];
+          }
+        }));
+
+        // Build breadcrumbs
+        const breadcrumbs = [{ name: 'Root', path: '' }];
+        if (path) {
+          const parts = path.split('/');
+          let currentPath = '';
+          for (const part of parts) {
+            currentPath = currentPath ? `${currentPath}/${part}` : part;
+            breadcrumbs.push({ name: part, path: currentPath });
+          }
+        }
+
+        return { folders, images, breadcrumbs };
+      } catch (error) {
+        console.error('Failed to fetch directory listing:', error);
+        throw error;
+      }
+    }
+
+    // Fallback to local backend
     let url = `/image-repo/browse?path=${encodeURIComponent(path)}`;
     if (tag) {
       url += `&tag=${encodeURIComponent(tag)}`;
@@ -336,15 +392,54 @@ class APIClient {
     return this.request(url);
   }
 
+  _parseDirectoryListing(html, basePath = '') {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const links = Array.from(doc.querySelectorAll('a'));
+
+    const folders = [];
+    const images = [];
+
+    for (const link of links) {
+      const href = link.getAttribute('href');
+      if (!href || href === '../' || href.startsWith('?') || href.startsWith('/')) continue;
+
+      const name = decodeURIComponent(href.replace(/\/$/, ''));
+      const itemPath = basePath ? `${basePath}/${name}` : name;
+
+      if (href.endsWith('/')) {
+        folders.push({ name, path: itemPath, preview_images: [] });
+      } else if (/\.(jpg|jpeg|png|gif|webp)$/i.test(href)) {
+        images.push({ name, path: itemPath, rating: null });
+      }
+    }
+
+    return { folders, images };
+  }
+
   async getAllImages(path = '') {
+    if (this.imageRepoUrl) {
+      // For URL-based repo, just return empty - use browseImageRepo instead
+      return [];
+    }
     return this.request(`/image-repo/all-images?path=${encodeURIComponent(path)}`);
   }
 
   getRepoImage(path) {
+    if (this.imageRepoUrl) {
+      // Simple static file server - just append path
+      const cleanBase = this.imageRepoUrl.endsWith('/') ? this.imageRepoUrl.slice(0, -1) : this.imageRepoUrl;
+      return `${cleanBase}/${path}`;
+    }
     return `${API_BASE_URL}/image-repo/image?path=${encodeURIComponent(path)}`;
   }
 
   getRepoThumbnail(path, size = 150) {
+    if (this.imageRepoUrl) {
+      // Simple static file server - no thumbnails, return full image
+      const cleanBase = this.imageRepoUrl.endsWith('/') ? this.imageRepoUrl.slice(0, -1) : this.imageRepoUrl;
+      return `${cleanBase}/${path}`;
+    }
     return `${API_BASE_URL}/image-repo/thumbnail?path=${encodeURIComponent(path)}&size=${size}`;
   }
 
