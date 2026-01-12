@@ -5,6 +5,9 @@ import SwitchVideoIcon from '@mui/icons-material/SwitchVideo';
 import EditIcon from '@mui/icons-material/Edit';
 import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp';
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import API from '../api/client';
 import { useLoras } from '../contexts/LoraContext';
 import { formatDate, showToast } from '../utils/helpers';
@@ -59,6 +62,7 @@ export default function JobDetail() {
   const [lightboxImage, setLightboxImage] = useState(null);
   const [logs, setLogs] = useState([]);
   const [logsExpanded, setLogsExpanded] = useState(false);
+  const [deletedSegmentsExpanded, setDeletedSegmentsExpanded] = useState(false);
   // Use cached LoRA library from context
   const { loras: loraLibrary } = useLoras();
   const [selectedLoraForEdit, setSelectedLoraForEdit] = useState(null);
@@ -748,14 +752,12 @@ export default function JobDetail() {
         {segments.length === 0 ? (
           <div className="alert info">No segments yet</div>
         ) : (() => {
-          // Calculate display numbers: active segments get sequential numbers, deleted segments show original
-          let activeCount = 0;
-          return segments.map((seg, index) => {
-            // Soft delete: segment has deleted_at timestamp
-            const isDeleted = !!seg.deleted_at;
-            // For display: active segments get sequential numbers (1, 2, 3...)
-            // Deleted segments show their original number with strikethrough
-            const displayNumber = isDeleted ? seg.segment_index + 1 : ++activeCount;
+          // Separate active and deleted segments
+          const activeSegments = segments.filter(s => !s.deleted_at);
+          const deletedSegments = segments.filter(s => !!s.deleted_at);
+
+          // Helper function to render a segment
+          const renderSegment = (seg, displayNumber, isDeleted) => {
             // Can delete any non-deleted segment when job is not finalized
             const canDelete = !isDeleted && job.status === 'awaiting_prompt';
             // Can restore deleted segments when job is not finalized
@@ -867,7 +869,22 @@ export default function JobDetail() {
 
                 {/* Prompt Section */}
                 <div className="segment-prompt">
-                  <div><strong>Prompt:</strong> {seg.prompt || 'TBD'}</div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                    <div style={{ flex: 1 }}><strong>Prompt:</strong> {seg.prompt || 'TBD'}</div>
+                    {seg.prompt && (
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          navigator.clipboard.writeText(seg.prompt);
+                          showToast('Prompt copied', 'success');
+                        }}
+                        sx={{ padding: '2px', opacity: 0.6, '&:hover': { opacity: 1 } }}
+                        title="Copy prompt"
+                      >
+                        <ContentCopyIcon sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    )}
+                  </div>
                   {(() => {
                     const loraInfo = formatLorasDisplay(seg.high_lora, seg.low_lora);
                     if (loraInfo.count === 0) {
@@ -1070,7 +1087,49 @@ export default function JobDetail() {
                 )}
               </div>
             );
-          });
+          };
+
+          return (
+            <>
+              {/* Render active segments with sequential numbering */}
+              {activeSegments.map((seg, idx) => renderSegment(seg, idx + 1, false))}
+
+              {/* Deleted segments section - collapsible */}
+              {deletedSegments.length > 0 && (
+                <>
+                  <div
+                    onClick={() => setDeletedSegmentsExpanded(!deletedSegmentsExpanded)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '12px 16px',
+                      backgroundColor: '#f5f5f5',
+                      border: '1px solid #e0e0e0',
+                      borderRadius: '4px',
+                      marginBottom: '12px',
+                      cursor: 'pointer',
+                      userSelect: 'none'
+                    }}
+                  >
+                    {deletedSegmentsExpanded ? (
+                      <ExpandLessIcon sx={{ color: '#666' }} />
+                    ) : (
+                      <ExpandMoreIcon sx={{ color: '#666' }} />
+                    )}
+                    <span style={{ color: '#666', fontWeight: 500 }}>
+                      Deleted Segments ({deletedSegments.length})
+                    </span>
+                  </div>
+
+                  {/* Render deleted segments when expanded */}
+                  {deletedSegmentsExpanded && deletedSegments.map(seg =>
+                    renderSegment(seg, seg.segment_index + 1, true)
+                  )}
+                </>
+              )}
+            </>
+          );
         })()}
 
         {/* Continue or Finalize */}
