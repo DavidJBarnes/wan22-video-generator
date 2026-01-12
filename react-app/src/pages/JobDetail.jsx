@@ -273,11 +273,14 @@ export default function JobDetail() {
       const segmentWithoutPrompt = segmentsData.find(s => !s.prompt && s.status === 'pending');
       setNextSegmentIndex(segmentWithoutPrompt ? segmentWithoutPrompt.segment_index : segmentsData.length);
 
-      // Check if upscaled video exists
+      // Check if upscaled video exists (use range request to avoid downloading whole file)
       if (jobData.status === 'completed') {
         try {
-          const response = await fetch(API.getJobVideoUpscaled(id), { method: 'HEAD' });
-          setHasUpscaled(response.ok);
+          const response = await fetch(API.getJobVideoUpscaled(id), {
+            method: 'GET',
+            headers: { 'Range': 'bytes=0-0' }
+          });
+          setHasUpscaled(response.ok || response.status === 206);
         } catch {
           setHasUpscaled(false);
         }
