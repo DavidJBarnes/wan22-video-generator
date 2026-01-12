@@ -883,6 +883,50 @@ async def get_job_video(job_id: int):
     )
 
 
+@router.get("/jobs/{job_id}/video/upscaled")
+async def get_job_video_upscaled(job_id: int):
+    """Get the upscaled video for a completed job.
+
+    Returns the upscaled video file if it exists.
+    """
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Check if job has output videos
+    output_images = job.get("output_images") or []
+    if not output_images:
+        raise HTTPException(status_code=404, detail="No video available")
+
+    # Get the original video path
+    video_path = output_images[0] if output_images else None
+    if not video_path:
+        raise HTTPException(status_code=404, detail="No video path found")
+
+    # Construct upscaled video path (check for 2x upscaled)
+    video_stem = Path(video_path).stem
+    video_dir = Path(video_path).parent
+    upscaled_path = video_dir / f"{video_stem}_upscaled_2x.mp4"
+
+    if not upscaled_path.exists():
+        raise HTTPException(status_code=404, detail="No upscaled video available")
+
+    file_mtime = int(upscaled_path.stat().st_mtime)
+    actual_filename = f"{job.get('name', 'video')}_upscaled_2x.mp4"
+
+    return FileResponse(
+        path=str(upscaled_path),
+        media_type="video/mp4",
+        filename=actual_filename,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "ETag": f'"{file_mtime}"'
+        }
+    )
+
+
 @router.get("/jobs/{job_id}/segments/{segment_index}/video")
 async def get_segment_video(job_id: int, segment_index: int):
     """Get the video for a specific segment.
@@ -1714,7 +1758,7 @@ async def browse_image_repo(path: str = "", tag: Optional[str] = None):
     repo_root = get_setting("image_repo_path", "")
 
     if not repo_root:
-        raise HTTPException(status_code=400, detail="Image repository path not configured. Please set it in Settings.")
+        raise HTTPException(status_code=400, detail="Image repository Local Path not configured. Set it in Settings to enable browsing.")
 
     # Security: Ensure the repo root exists and is accessible
     repo_root_path = Path(repo_root)

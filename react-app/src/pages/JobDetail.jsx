@@ -72,6 +72,7 @@ export default function JobDetail() {
   const [elapsedTime, setElapsedTime] = useState(null);
   const [finalizing, setFinalizing] = useState(false);
   const [upscaling, setUpscaling] = useState(false);
+  const [hasUpscaled, setHasUpscaled] = useState(false);
   const autoFinalizeTriggeredRef = useRef(false);
 
   // Memoize expensive segment calculations - must be before early returns
@@ -271,6 +272,19 @@ export default function JobDetail() {
       // Calculate next segment index for prompt submission
       const segmentWithoutPrompt = segmentsData.find(s => !s.prompt && s.status === 'pending');
       setNextSegmentIndex(segmentWithoutPrompt ? segmentWithoutPrompt.segment_index : segmentsData.length);
+
+      // Check if upscaled video exists (use range request to avoid downloading whole file)
+      if (jobData.status === 'completed') {
+        try {
+          const response = await fetch(API.getJobVideoUpscaled(id), {
+            method: 'GET',
+            headers: { 'Range': 'bytes=0-0' }
+          });
+          setHasUpscaled(response.ok || response.status === 206);
+        } catch {
+          setHasUpscaled(false);
+        }
+      }
     } catch (error) {
       console.error('Failed to load job detail:', error);
       setLoading(false);
@@ -563,21 +577,33 @@ export default function JobDetail() {
               >
                 Download Video
               </Button>
-              <Button
-                variant="outlined"
-                onClick={handleUpscaleVideo}
-                disabled={upscaling}
-                sx={{ borderColor: '#7b1fa2', color: '#7b1fa2', '&:hover': { borderColor: '#6a1b9a', bgcolor: 'rgba(123, 31, 162, 0.04)' } }}
-              >
-                {upscaling ? (
-                  <>
-                    <CircularProgress size={20} color="inherit" sx={{ mr: 1 }} />
-                    Upscaling...
-                  </>
-                ) : (
-                  'Upscale 2x'
-                )}
-              </Button>
+              {hasUpscaled && (
+                <Button
+                  variant="contained"
+                  href={API.getJobVideoUpscaled(id)}
+                  download={`${job.name}_upscaled_2x.mp4`}
+                  sx={{ bgcolor: '#7b1fa2', '&:hover': { bgcolor: '#6a1b9a' } }}
+                >
+                  Download Upscaled
+                </Button>
+              )}
+              {!hasUpscaled && (
+                <Button
+                  variant="outlined"
+                  onClick={handleUpscaleVideo}
+                  disabled={upscaling}
+                  sx={{ borderColor: '#7b1fa2', color: '#7b1fa2', '&:hover': { borderColor: '#6a1b9a', bgcolor: 'rgba(123, 31, 162, 0.04)' } }}
+                >
+                  {upscaling ? (
+                    <>
+                      <CircularProgress size={20} color="inherit" sx={{ mr: 1 }} />
+                      Upscaling...
+                    </>
+                  ) : (
+                    'Upscale 2x'
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         ) : (
