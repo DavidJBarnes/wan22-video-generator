@@ -481,6 +481,18 @@ class APIClient {
       method: 'POST'
     });
   }
+
+  // ============== Video Upscaling ==============
+
+  async getUpscaleModels() {
+    return this.request('/upscale/models');
+  }
+
+  async upscaleJobVideo(jobId, scale = 2, model = 'realesr-animevideov3') {
+    return this.request(`/jobs/${jobId}/upscale?scale=${scale}&model=${encodeURIComponent(model)}`, {
+      method: 'POST'
+    });
+  }
 }
 
 export default new APIClient();
