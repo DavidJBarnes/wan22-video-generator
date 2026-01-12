@@ -102,9 +102,11 @@ def parse_loras(db_value: Optional[str]) -> List[Dict[str, Any]]:
     return [{"file": db_value, "weight": 1.0}]
 
 # Use absolute path to avoid issues with current working directory
+# DATABASE_PATH can be overridden via environment variable
+import os
 from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parent
-DATABASE_PATH = str(BACKEND_DIR / "comfyui_queue.db")
+DATABASE_PATH = os.environ.get("DATABASE_PATH", str(BACKEND_DIR / "comfyui_queue.db"))
 
 
 @contextmanager

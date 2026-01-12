@@ -63,10 +63,20 @@ The SQLite database is automatically created when the backend starts. No manual 
 
 ### Database Location
 
+By default, the database is stored at `backend/comfyui_queue.db`. You can override this with the `DATABASE_PATH` environment variable:
+
+```bash
+# Set custom database path
+export DATABASE_PATH=/path/to/your/database.db
+
+# Or inline when starting
+DATABASE_PATH=/path/to/your/database.db ./start-api.sh
+```
+
 | Path | Description |
 |------|-------------|
-| `~/backups/comfyui_queue.db` | SQLite database (actual file) |
-| `backend/comfyui_queue.db` | Symlink to the above |
+| `DATABASE_PATH` env var | Custom database location (if set) |
+| `backend/comfyui_queue.db` | Default location (symlink to ~/backups/) |
 
 ### Fresh Database Setup
 
