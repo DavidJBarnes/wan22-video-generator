@@ -42,30 +42,21 @@ export default function ImageRepo() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [folderPage, setFolderPage] = useState(1);
   const [imagePage, setImagePage] = useState(1);
-  const [imageRepoUrl, setImageRepoUrl] = useState('');
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
-  // Load settings and tags once
+  // Load tags once
   useEffect(() => {
-    async function loadSettingsAndTags() {
+    async function loadTags() {
       try {
-        // Load image repo URL setting
-        const settingsData = await API.getSettings();
-        const settings = settingsData.settings || settingsData;
-        const repoUrl = settings.image_repo_url || '';
-        setImageRepoUrl(repoUrl);
-        API.setImageRepoUrl(repoUrl);
-
-        // Load tags
         const tagsData = await API.getImageTags();
         setAvailableTags(tagsData.tags || []);
       } catch (error) {
-        console.error('Failed to load settings/tags:', error);
+        console.error('Failed to load tags:', error);
       } finally {
         setSettingsLoaded(true);
       }
     }
-    loadSettingsAndTags();
+    loadTags();
   }, []);
 
   useEffect(() => {

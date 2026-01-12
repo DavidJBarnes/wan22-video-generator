@@ -505,8 +505,7 @@ def init_db():
             "default_width": "640",
             "default_height": "640",
             "auto_start_queue": "true",
-            "image_repo_path": "",
-            "image_repo_url": ""
+            "image_repo_path": ""
         }
 
         for key, value in default_settings.items():
