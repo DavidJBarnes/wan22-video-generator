@@ -53,9 +53,12 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   const [frameInterpolation, setFrameInterpolation] = useState('2x');
 
   useEffect(() => {
+    console.log('[CreateJobModal] useEffect running with:', { preUploadedImageUrl, preUploadedDimensions, cloneData });
     async function initialize() {
       // Load settings first, then override with specific dimensions if provided
+      console.log('[CreateJobModal] Calling loadSettings...');
       await loadSettings();
+      console.log('[CreateJobModal] loadSettings completed');
 
       if (preUploadedImageUrl) {
         setImagePreview(API.getComfyUIImage(preUploadedImageUrl));
@@ -170,11 +173,20 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   async function loadSettings() {
     try {
       const data = await API.getSettings();
+      console.log('[CreateJobModal] API.getSettings() returned:', data);
       const s = data.settings || data;
+      console.log('[CreateJobModal] Parsed settings:', s);
+      console.log('[CreateJobModal] default_width:', s.default_width, 'type:', typeof s.default_width);
+      console.log('[CreateJobModal] default_height:', s.default_height, 'type:', typeof s.default_height);
+      console.log('[CreateJobModal] default_fps:', s.default_fps, 'type:', typeof s.default_fps);
       setSettings(s);
-      setWidth(parseInt(s.default_width) || 640);
-      setHeight(parseInt(s.default_height) || 640);
-      setFps(parseInt(s.default_fps) || 16);
+      const newWidth = parseInt(s.default_width) || 640;
+      const newHeight = parseInt(s.default_height) || 640;
+      const newFps = parseInt(s.default_fps) || 16;
+      console.log('[CreateJobModal] Setting width:', newWidth, 'height:', newHeight, 'fps:', newFps);
+      setWidth(newWidth);
+      setHeight(newHeight);
+      setFps(newFps);
       setFrameInterpolation(s.default_frame_interpolation || '2x');
 
       // Parse job naming presets
@@ -189,7 +201,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
         setNameDescriptions(sortedDescriptions);
       } catch { setNameDescriptions([]); }
     } catch (error) {
-      console.error('Failed to load settings:', error);
+      console.error('[CreateJobModal] Failed to load settings:', error);
     }
   }
 
