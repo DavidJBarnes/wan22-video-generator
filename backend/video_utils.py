@@ -9,9 +9,9 @@ import httpx
 
 
 # Output directory for downloaded videos and extracted frames
-# VIDEOS_PATH can be overridden via environment variable
+# JOB_OUTPUT_PATH can be overridden via environment variable
 BACKEND_DIR = Path(__file__).resolve().parent
-OUTPUT_DIR = Path(os.environ.get("VIDEOS_PATH", str(BACKEND_DIR / "output")))
+OUTPUT_DIR = Path(os.environ.get("JOB_OUTPUT_PATH", str(BACKEND_DIR / "output")))
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 print(f"[VideoUtils] Output directory: {OUTPUT_DIR}")

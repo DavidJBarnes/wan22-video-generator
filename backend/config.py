@@ -61,9 +61,7 @@ DEFAULT_NEGATIVE_PROMPT = (
 )
 
 # Output Directories
-OUTPUT_DIR = "output"
-SEGMENTS_DIR = "output/segments"
-FRAMES_DIR = "output/frames"
+# Note: Actual output path is set via JOB_OUTPUT_PATH env var in video_utils.py
 
 # Segment Duration Options (frames at 16 FPS)
 SEGMENT_DURATIONS = {

@@ -1948,7 +1948,8 @@ async def get_image_from_repo(path: str):
 
 
 # Thumbnail cache directory
-THUMBNAIL_CACHE_DIR = Path(__file__).parent / "thumbnail_cache"
+# THUMBNAIL_CACHE_PATH can be overridden via environment variable
+THUMBNAIL_CACHE_DIR = Path(os.environ.get("THUMBNAIL_CACHE_PATH", str(Path(__file__).parent / "thumbnail_cache")))
 THUMBNAIL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
