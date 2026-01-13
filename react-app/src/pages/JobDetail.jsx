@@ -584,53 +584,46 @@ export default function JobDetail() {
       <div className="card" style={{ marginBottom: '24px' }}>
         <h2 style={{ marginTop: 0 }}>Final Output</h2>
         {job.status === 'completed' ? (
-          <div>
-            <video
-              key={`video-${id}-${job.completed_at}`}
-              controls
-              style={{ width: '100%', maxWidth: width >= height ? '500px' : '300px', borderRadius: '4px' }}
-              src={API.getJobVideo(id)}
-            >
-              Your browser does not support video playback.
-            </video>
-            <div style={{ marginTop: '12px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-              <Button
-                variant="contained"
-                href={API.getJobVideo(id)}
-                download={`${job.name}.webm`}
+          <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+            {/* Left side: Video and buttons */}
+            <div style={{ flex: '0 0 auto' }}>
+              <video
+                key={`video-${id}-${job.completed_at}`}
+                controls
+                style={{ width: '100%', maxWidth: width >= height ? '500px' : '300px', borderRadius: '4px' }}
+                src={API.getJobVideo(id)}
               >
-                Download Video
-              </Button>
-              {hasUpscaled && (
+                Your browser does not support video playback.
+              </video>
+              <div style={{ marginTop: '12px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 <Button
                   variant="contained"
-                  href={API.getJobVideoUpscaled(id)}
-                  download={`${job.name}_upscaled_2x.mp4`}
-                  sx={{ bgcolor: '#7b1fa2', '&:hover': { bgcolor: '#6a1b9a' } }}
+                  href={API.getJobVideo(id)}
+                  download={`${job.name}.webm`}
                 >
-                  Download Upscaled
+                  Download Video
                 </Button>
-              )}
-              <Button
-                variant="outlined"
-                onClick={handleUpscaleVideo}
-                disabled={upscaling}
-                sx={{ borderColor: '#7b1fa2', color: '#7b1fa2', '&:hover': { borderColor: '#6a1b9a', bgcolor: 'rgba(123, 31, 162, 0.04)' } }}
-              >
-                {upscaling ? (
-                  <>
-                    <CircularProgress size={20} color="inherit" sx={{ mr: 1 }} />
-                    Upscaling...
-                  </>
-                ) : (
-                  'Upscale 2x'
-                )}
-              </Button>
+                <Button
+                  variant="outlined"
+                  onClick={handleUpscaleVideo}
+                  disabled={upscaling}
+                  sx={{ borderColor: '#7b1fa2', color: '#7b1fa2', '&:hover': { borderColor: '#6a1b9a', bgcolor: 'rgba(123, 31, 162, 0.04)' } }}
+                >
+                  {upscaling ? (
+                    <>
+                      <CircularProgress size={20} color="inherit" sx={{ mr: 1 }} />
+                      Upscaling...
+                    </>
+                  ) : (
+                    'Upscale 2x'
+                  )}
+                </Button>
+              </div>
             </div>
 
-            {/* Upscaled Videos List */}
+            {/* Right side: Upscaled Videos List */}
             {upscaledVideos.length > 0 && (
-              <div style={{ marginTop: '20px', borderTop: '1px solid #e0e0e0', paddingTop: '16px' }}>
+              <div style={{ flex: '1 1 300px', minWidth: '300px' }}>
                 <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#666' }}>Upscaled Videos</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {upscaledVideos.map((video) => (
@@ -645,10 +638,10 @@ export default function JobDetail() {
                         borderRadius: '4px'
                       }}
                     >
-                      <span style={{ flex: 1, fontSize: '14px', fontFamily: 'monospace' }}>
+                      <span style={{ flex: 1, fontSize: '14px', fontFamily: 'monospace', wordBreak: 'break-all' }}>
                         {video.filename}
                       </span>
-                      <span style={{ fontSize: '12px', color: '#666' }}>
+                      <span style={{ fontSize: '12px', color: '#666', whiteSpace: 'nowrap' }}>
                         {(video.size / 1024 / 1024).toFixed(1)} MB
                       </span>
                       <Button
