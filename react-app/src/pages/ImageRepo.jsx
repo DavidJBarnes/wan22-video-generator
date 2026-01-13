@@ -43,6 +43,8 @@ export default function ImageRepo() {
   const [folderPage, setFolderPage] = useState(1);
   const [imagePage, setImagePage] = useState(1);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [defaultWidth, setDefaultWidth] = useState(1280);
+  const [defaultHeight, setDefaultHeight] = useState(720);
 
   // Load tags once
   useEffect(() => {
@@ -309,18 +311,20 @@ export default function ImageRepo() {
     }
   }
 
-  // Load slideshow delay setting
+  // Load settings (slideshow delay, default dimensions)
   useEffect(() => {
-    async function loadSlideshowDelay() {
+    async function loadSettings() {
       try {
         const data = await API.getSettings();
         const settings = data.settings || data;
         setSlideshowDelay(parseInt(settings.slideshow_delay) || 5);
+        setDefaultWidth(parseInt(settings.default_width) || 1280);
+        setDefaultHeight(parseInt(settings.default_height) || 720);
       } catch (err) {
-        console.error('Failed to load slideshow delay:', err);
+        console.error('Failed to load settings:', err);
       }
     }
-    loadSlideshowDelay();
+    loadSettings();
   }, []);
 
   // Slideshow functions
@@ -826,6 +830,8 @@ export default function ImageRepo() {
           onCreateJob={handleCreateJobFromPreview}
           onDelete={handleDeleteImage}
           onNavigate={handleNavigateImage}
+          defaultWidth={defaultWidth}
+          defaultHeight={defaultHeight}
         />
       )}
 
