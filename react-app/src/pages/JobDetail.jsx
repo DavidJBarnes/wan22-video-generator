@@ -818,7 +818,11 @@ export default function JobDetail() {
             Clone Job
           </Button>
           {(job.status === 'pending' || job.status === 'awaiting_prompt') && (
-            <Button variant="outlined" onClick={handlePauseJob}>
+            <Button
+              variant="outlined"
+              onClick={handlePauseJob}
+              sx={{ borderColor: '#9c27b0', color: '#9c27b0', '&:hover': { borderColor: '#7b1fa2', bgcolor: 'rgba(156, 39, 176, 0.04)' } }}
+            >
               Pause Job
             </Button>
           )}
