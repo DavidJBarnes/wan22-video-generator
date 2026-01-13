@@ -45,7 +45,9 @@ class ProgressState:
         started = self.started_at  # Local copy to avoid race conditions
         if started is None:
             return None
-        return (datetime.now() - started).total_seconds()
+        # Handle both timezone-aware and naive datetimes
+        now = datetime.now(started.tzinfo) if started.tzinfo else datetime.now()
+        return (now - started).total_seconds()
 
     def to_dict(self, avg_run_time: Optional[float] = None) -> Dict[str, Any]:
         """Convert to dictionary for API response.
