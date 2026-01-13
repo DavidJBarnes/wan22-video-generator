@@ -376,6 +376,16 @@ class APIClient {
     });
   }
 
+  async deleteRepoImagesBulk(imagePaths) {
+    const formData = new FormData();
+    imagePaths.forEach(path => formData.append('image_paths', path));
+
+    return this.request('/image-repo/delete-bulk', {
+      method: 'POST',
+      body: formData
+    });
+  }
+
   async getImageRating(imagePath) {
     return this.request(`/image-repo/rating?image_path=${encodeURIComponent(imagePath)}`);
   }

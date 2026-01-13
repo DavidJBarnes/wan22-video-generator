@@ -2162,6 +2162,68 @@ async def delete_image_from_repo(image_path: str = Form(...)):
         raise HTTPException(status_code=500, detail=f"Failed to delete image: {str(e)}")
 
 
+@router.post("/image-repo/delete-bulk")
+async def delete_images_bulk(image_paths: List[str] = Form(...)):
+    """Delete multiple images from the repository.
+
+    Permanently removes multiple image files from the local filesystem.
+    Returns results for each image (success or failure).
+    """
+    repo_root = get_setting("image_repo_path", "")
+
+    if not repo_root:
+        raise HTTPException(status_code=400, detail="Image repository path not configured")
+
+    repo_root_path = Path(repo_root)
+    results = []
+    deleted_count = 0
+    failed_count = 0
+
+    for image_path in image_paths:
+        try:
+            # Build full path with security check
+            full_path = repo_root_path / image_path
+            full_path = full_path.resolve()
+
+            # Security: Ensure path is within repo root
+            if not str(full_path).startswith(str(repo_root_path.resolve())):
+                results.append({"path": image_path, "success": False, "error": "Access denied: Path is outside repository"})
+                failed_count += 1
+                continue
+
+            if not full_path.exists():
+                results.append({"path": image_path, "success": False, "error": "Image not found"})
+                failed_count += 1
+                continue
+
+            if not full_path.is_file():
+                results.append({"path": image_path, "success": False, "error": "Path is not a file"})
+                failed_count += 1
+                continue
+
+            # Check file extension for safety
+            if full_path.suffix.lower() not in ['.jpg', '.jpeg', '.png']:
+                results.append({"path": image_path, "success": False, "error": "Only JPG and PNG images can be deleted"})
+                failed_count += 1
+                continue
+
+            # Delete the file
+            full_path.unlink()
+            results.append({"path": image_path, "success": True})
+            deleted_count += 1
+
+        except Exception as e:
+            results.append({"path": image_path, "success": False, "error": str(e)})
+            failed_count += 1
+
+    return {
+        "success": failed_count == 0,
+        "deleted_count": deleted_count,
+        "failed_count": failed_count,
+        "results": results
+    }
+
+
 @router.get("/image-repo/rating")
 async def get_image_rating_endpoint(image_path: str):
     """Get the rating for a specific image."""
