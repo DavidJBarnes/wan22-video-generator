@@ -280,9 +280,11 @@ def apply_fade_effects(input_path: str, output_path: str, fade_in: bool = False,
         print(f"[VideoUtils] Error applying fade: {e}")
         return False
 
-
 def stitch_videos(video_paths: List[str], output_path: str, segment_info: Optional[List[dict]] = None) -> bool:
-    """Stitch multiple videos together using ffmpeg concat demuxer.
+    """Stitch multiple videos together using ffmpeg filter_complex.
+
+    Drops the first frame from segments 1+ to eliminate duplicate frames at boundaries
+    (since each segment's first frame is identical to the previous segment's last frame).
 
     Args:
         video_paths: List of paths to video files to concatenate
@@ -334,7 +336,7 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
 
     try:
         if len(processed_paths) == 1:
-            # Re-encode single video to WebM for Firefox compatibility
+            # Single video - re-encode to WebM for Firefox compatibility
             cmd = [
                 "ffmpeg",
                 "-y",
@@ -344,14 +346,13 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
                 "-b:v", "0",
                 "-pix_fmt", "yuv420p",
                 "-deadline", "realtime",
-                "-cpu-used", "8",  # Max speed (0-8, higher = faster)
-                "-row-mt", "1",  # Multi-threaded row encoding
+                "-cpu-used", "8",
+                "-row-mt", "1",
                 output_path
             ]
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode == 0 and os.path.exists(output_path):
                 print(f"[VideoUtils] Single video encoded to {output_path}")
-                # Clean up temp files
                 for temp_file in temp_files:
                     if os.path.exists(temp_file):
                         os.remove(temp_file)
@@ -360,41 +361,51 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
                 print(f"[VideoUtils] ffmpeg error: {result.stderr}")
                 return False
 
-        # Create a temporary file listing all videos for concat
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-            for video_path in processed_paths:
-                # Escape single quotes in path
-                escaped_path = video_path.replace("'", "'\\''")
-                f.write(f"file '{escaped_path}'\n")
-            concat_file = f.name
+        # Multiple segments: use filter_complex to drop first frame from segments 1+
+        # This eliminates the duplicate frame at segment boundaries
+        filter_parts = []
+        concat_inputs = []
 
-        # Use VP9/WebM for native Firefox support (no H.264 codec issues)
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", concat_file,
+        for i in range(len(processed_paths)):
+            if i == 0:
+                # First segment: use all frames
+                filter_parts.append(f"[{i}:v]setpts=PTS-STARTPTS[v{i}]")
+            else:
+                # Subsequent segments: drop first frame (it's a duplicate of previous segment's last frame)
+                filter_parts.append(f"[{i}:v]trim=start_frame=1,setpts=PTS-STARTPTS[v{i}]")
+            concat_inputs.append(f"[v{i}]")
+
+        # Concatenate all processed streams
+        filter_parts.append(f"{''.join(concat_inputs)}concat=n={len(processed_paths)}:v=1:a=0[outv]")
+        filter_complex = ";".join(filter_parts)
+
+        # Build ffmpeg command with all inputs
+        cmd = ["ffmpeg", "-y"]
+        for video_path in processed_paths:
+            cmd.extend(["-i", video_path])
+        cmd.extend([
+            "-filter_complex", filter_complex,
+            "-map", "[outv]",
             "-c:v", "libvpx-vp9",
-            "-crf", "30",  # Quality (lower = better, 30 is good balance)
-            "-b:v", "0",  # Variable bitrate
+            "-crf", "30",
+            "-b:v", "0",
             "-pix_fmt", "yuv420p",
             "-deadline", "realtime",
-            "-cpu-used", "8",  # Max speed (0-8, higher = faster)
-            "-row-mt", "1",  # Multi-threaded row encoding
+            "-cpu-used", "8",
+            "-row-mt", "1",
             output_path
-        ]
+        ])
 
+        print(f"[VideoUtils] Running ffmpeg with filter_complex to drop duplicate boundary frames")
         result = subprocess.run(cmd, capture_output=True, text=True)
 
         # Clean up temp files
-        os.unlink(concat_file)
         for temp_file in temp_files:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
 
         if result.returncode == 0 and os.path.exists(output_path):
-            print(f"[VideoUtils] Stitched {len(processed_paths)} videos to {output_path}")
+            print(f"[VideoUtils] Stitched {len(processed_paths)} videos to {output_path} (dropped {len(processed_paths) - 1} duplicate frames)")
             return True
         else:
             print(f"[VideoUtils] ffmpeg stitch error: {result.stderr}")
@@ -402,12 +413,10 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
 
     except Exception as e:
         print(f"[VideoUtils] Error stitching videos: {e}")
-        # Clean up temp files on error
         for temp_file in temp_files:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
         return False
-
 
 def get_job_output_dir(job_id: int) -> Path:
     """Get the output directory for a job, creating it if needed."""
