@@ -13,7 +13,7 @@ elif [ -d ".venv" ]; then
 fi
 
 # Environment variables
-export UPSCALE_SAVE_PATH="${UPSCALE_SAVE_PATH:-$HOME/upscaled_videos}"
+export UPSCALE_SAVE_PATH="${UPSCALE_SAVE_PATH:-/home/david/projects/wan22-data/upscaled_videos}"
 
 # Start uvicorn
 exec uvicorn main:app --host 0.0.0.0 --port 9090
