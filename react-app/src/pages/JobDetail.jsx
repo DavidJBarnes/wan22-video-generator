@@ -818,7 +818,11 @@ export default function JobDetail() {
             Clone Job
           </Button>
           {(job.status === 'pending' || job.status === 'awaiting_prompt') && (
-            <Button variant="outlined" onClick={handlePauseJob}>
+            <Button
+              variant="outlined"
+              onClick={handlePauseJob}
+              sx={{ borderColor: '#9c27b0', color: '#9c27b0', '&:hover': { borderColor: '#7b1fa2', bgcolor: 'rgba(156, 39, 176, 0.04)' } }}
+            >
               Pause Job
             </Button>
           )}
@@ -1402,7 +1406,6 @@ export default function JobDetail() {
           defaultPrompt={lastCompletedSegment?.prompt || ''}
           defaultLoras={buildDefaultLoras(lastCompletedSegment)}
           defaultFaceswap={buildDefaultFaceswap(lastCompletedSegment, job?.parameters)}
-          defaultFadeToBlack={false}
           defaultStartImageUrl={lastCompletedSegment?.end_frame_url || null}
           jobInputImage={job?.input_image}
           segments={segments}
@@ -1421,7 +1424,6 @@ export default function JobDetail() {
           defaultPrompt={editingSegment.prompt || ''}
           defaultLoras={buildDefaultLoras(editingSegment)}
           defaultFaceswap={buildDefaultFaceswap(editingSegment, job?.parameters)}
-          defaultFadeToBlack={Boolean(Number(editingSegment.fade_to_black))}
           defaultStartImageUrl={editingSegment.start_image_url || null}
           defaultCustomStartImage={editingSegment.custom_start_image || null}
           isEditing={true}

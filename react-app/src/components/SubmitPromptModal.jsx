@@ -29,7 +29,6 @@ export default function SubmitPromptModal({
   defaultPrompt = '',
   defaultLoras = [],  // Array of {high_file, high_weight, low_file, low_weight} pairs
   defaultFaceswap = null,  // {enabled, image, facesOrder, facesIndex} from previous segment or job
-  defaultFadeToBlack = false,  // Whether fade-to-black is enabled for this segment
   defaultStartImageUrl = null,  // URL of previous segment's end frame (for display)
   defaultCustomStartImage = null,  // Path of custom start image if already set
   isEditing = false,  // Whether editing an existing segment
@@ -56,9 +55,6 @@ export default function SubmitPromptModal({
   const [faceswapImage, setFaceswapImage] = useState(defaultFaceswap?.image || FACESWAP_FACES[0]?.value || '');
   const [faceswapFacesOrder, setFaceswapFacesOrder] = useState(defaultFaceswap?.facesOrder || 'left-right');
   const [faceswapFacesIndex, setFaceswapFacesIndex] = useState(defaultFaceswap?.facesIndex || '0');
-
-  // Fade to black state (initialized from defaults)
-  const [fadeToBlack, setFadeToBlack] = useState(defaultFadeToBlack);
 
   // Custom start image state (only for segments > 0)
   const [customStartImage, setCustomStartImage] = useState(defaultCustomStartImage);  // Path in image repo
@@ -228,7 +224,7 @@ export default function SubmitPromptModal({
         lorasArray,
         isEditing ? false : autoFinalize,  // Don't change auto-finalize when editing
         faceswapOptions,
-        fadeToBlack,
+        false,  // fadeToBlack - controlled via segment timeline, not modal
         customStartImage  // Custom start image path (or null for default)
       );
 
@@ -502,22 +498,6 @@ export default function SubmitPromptModal({
                 </div>
               </>
             )}
-          </div>
-
-          {/* Fade to Black */}
-          <div className="form-group">
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={fadeToBlack}
-                  onChange={(e) => setFadeToBlack(e.target.checked)}
-                />
-              }
-              label="Apply fade to black transition at end"
-            />
-            <FormHelperText sx={{ ml: 4, mt: -1 }}>
-              2-second fade out/in effect when stitching with next segment
-            </FormHelperText>
           </div>
 
           {/* Auto Finalize - hide when editing existing segment */}
