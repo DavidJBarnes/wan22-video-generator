@@ -459,9 +459,8 @@ class QueueManager:
         
         # Get job parameters
         params = job.get("parameters") or {}
-        fps = int(params.get("fps", get_setting("default_fps", "16")))
-        segment_duration = int(params.get("segment_duration", 5))
-        frames = fps * segment_duration + 1
+        target_fps = int(params.get("target_fps", get_setting("default_target_fps", "30")))
+        segment_duration = float(params.get("segment_duration", 5))
         
         # Determine the start image for this segment
         # Check for custom start image first (overrides default behavior)
@@ -616,9 +615,6 @@ class QueueManager:
         faceswap_faces_order = segment.get("faceswap_faces_order", "left-right") or "left-right"
         faceswap_faces_index = segment.get("faceswap_faces_index", "0") or "0"
 
-        # Get frame interpolation setting (default to 2x for smoother video)
-        frame_interpolation = params.get("frame_interpolation", "2x")
-
         # Use the job's seed for all segments (fixed seed per job)
         job_seed = job.get("seed")
         if job_seed is not None:
@@ -629,25 +625,24 @@ class QueueManager:
             negative_prompt=job.get("negative_prompt", get_setting("default_negative_prompt", "")),
             width=int(params.get("width", get_setting("default_width", "640"))),
             height=int(params.get("height", get_setting("default_height", "640"))),
-            frames=frames,
+            duration_sec=segment_duration,
+            target_fps=target_fps,
             start_image_filename=input_image,
             high_noise_model=get_setting("high_noise_model", "wan2.2_i2v_high_noise_14B_fp16.safetensors"),
             low_noise_model=get_setting("low_noise_model", "wan2.2_i2v_low_noise_14B_fp16.safetensors"),
             seed=job_seed,
             loras=loras if loras else None,
-            fps=fps,
             output_prefix=output_prefix,
             faceswap_enabled=faceswap_enabled,
             faceswap_image=faceswap_image,
             faceswap_faces_order=faceswap_faces_order,
             faceswap_faces_index=faceswap_faces_index,
-            frame_interpolation=frame_interpolation,
         )
 
         # Queue the prompt
         logger.info(f"[Job {job_id}] Queuing segment {segment_index} workflow to ComfyUI...")
         add_job_log(job_id, "INFO", f"Queuing segment {segment_index} to ComfyUI", segment_index=segment_index,
-                   details=f"image={input_image}, {params.get('width', 640)}x{params.get('height', 640)}, {frames} frames")
+                   details=f"image={input_image}, {params.get('width', 640)}x{params.get('height', 640)}, {segment_duration}s @ {target_fps}fps")
         success, result = client.queue_prompt(workflow)
         logger.info(f"[Job {job_id}] queue_prompt result: success={success}, result={result[:200] if isinstance(result, str) else result}")
 
@@ -657,8 +652,8 @@ class QueueManager:
                 "prompt": (segment.get("prompt") or job.get("prompt", ""))[:100] + "...",
                 "input_image": input_image,
                 "dimensions": f"{params.get('width', 640)}x{params.get('height', 640)}",
-                "frames": frames,
-                "fps": fps,
+                "duration_sec": segment_duration,
+                "target_fps": target_fps,
                 "loras": loras,
             }
             logger.error(f"[Job {job_id}] Segment {segment_index} FAILED to queue!")
@@ -973,11 +968,10 @@ class QueueManager:
     def _process_single_segment_job(self, job_id: int, job: dict, client: ComfyUIClient):
         """Process a job as a single segment (legacy behavior)."""
         print(f"[QueueManager] Processing job {job_id} as single segment")
-        
+
         params = job.get("parameters") or {}
-        fps = int(params.get("fps", get_setting("default_fps", "16")))
-        segment_duration = int(params.get("segment_duration", 5))
-        frames = fps * segment_duration + 1
+        target_fps = int(params.get("target_fps", get_setting("default_target_fps", "30")))
+        segment_duration = float(params.get("segment_duration", 5))
 
         # Check if ComfyUI queue is idle before submitting
         queue_status = client.get_queue_status()
@@ -1078,7 +1072,8 @@ class QueueManager:
             seed=job_seed,
             denoise=float(params.get("denoise", 0.75)),
             input_image=job.get("input_image"),
-            frames=frames,
+            duration_sec=segment_duration,
+            target_fps=target_fps,
             high_noise_model=get_setting("high_noise_model", "wan2.2_i2v_high_noise_14B_fp16.safetensors"),
             low_noise_model=get_setting("low_noise_model", "wan2.2_i2v_low_noise_14B_fp16.safetensors"),
         )

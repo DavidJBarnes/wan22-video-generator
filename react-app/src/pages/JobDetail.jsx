@@ -494,7 +494,13 @@ export default function JobDetail() {
   const width = job.width ?? params.width ?? 640;
   const height = job.height ?? params.height ?? 640;
   const segmentDuration = job.segment_duration ?? params.segment_duration ?? 5;
-  const fps = job.fps ?? params.fps ?? 16;
+
+  // Calculate display fps: new jobs have target_fps, legacy jobs have fps + frame_interpolation
+  const displayFps = params.target_fps
+    ? `${params.target_fps} fps`
+    : params.frame_interpolation === '2x'
+      ? `${(params.fps || 16) * 2} fps (legacy)`
+      : `${params.fps || 16} fps (legacy)`;
 
   // Format time as mm:ss or hh:mm:ss
   function formatExecutionTime(seconds) {
@@ -762,8 +768,8 @@ export default function JobDetail() {
             <div className="value">{segmentDuration}s per segment</div>
           </div>
           <div className="detail-meta-item">
-            <label>FPS / RIFE</label>
-            <div className="value">{fps} fps / {params.frame_interpolation === '2x' ? '2x' : 'None'}</div>
+            <label>Output FPS</label>
+            <div className="value">{displayFps}</div>
           </div>
           <div className="detail-meta-item">
             <label>Seed</label>

@@ -197,24 +197,55 @@ def _sanitize_filename(name: str) -> str:
     return safe.strip('_')
 
 
+# Generation FPS is fixed at 15fps - RIFE interpolation brings it to target fps
+GENERATION_FPS = 15
+
+
+def calculate_generation_params(target_fps: int, duration_sec: float) -> Dict[str, Any]:
+    """Calculate internal generation parameters from user-facing target fps.
+
+    Args:
+        target_fps: User-selected output fps (30 or 60)
+        duration_sec: Video duration in seconds
+
+    Returns:
+        Dict with:
+        - generation_fps: Base fps before interpolation (always 15)
+        - wan_frames: Number of frames for WanImageToVideo node
+        - rife_multiplier: RIFE interpolation factor (2 for 30fps, 4 for 60fps)
+        - output_fps: Final output fps (same as target_fps)
+    """
+    # Calculate RIFE multiplier to reach target fps from 15fps base
+    rife_multiplier = target_fps // GENERATION_FPS  # 30/15=2, 60/15=4
+
+    # Calculate frames for Wan generation (at 15fps)
+    wan_frames = int(duration_sec * GENERATION_FPS) + 1
+
+    return {
+        "generation_fps": GENERATION_FPS,
+        "wan_frames": wan_frames,
+        "rife_multiplier": rife_multiplier,
+        "output_fps": target_fps,
+    }
+
+
 def build_wan_i2v_workflow(
     prompt: str,
     negative_prompt: str = "",
     width: int = 640,
     height: int = 640,
-    frames: int = 81,
+    duration_sec: float = 5.0,
+    target_fps: int = 30,
     start_image_filename: str = "",
     high_noise_model: str = "wan2.2_i2v_high_noise_14B_fp16.safetensors",
     low_noise_model: str = "wan2.2_i2v_low_noise_14B_fp16.safetensors",
     seed: Optional[int] = None,
     loras: Optional[List[Dict[str, str]]] = None,
-    fps: int = 16,
     output_prefix: str = "",
     faceswap_enabled: bool = False,
     faceswap_image: str = "",
     faceswap_faces_order: str = "left-right",
     faceswap_faces_index: str = "0",
-    frame_interpolation: str = "none",
 ) -> Dict[str, Any]:
     """Build a Wan2.2 i2v workflow by injecting values into the pre-converted template.
 
@@ -223,7 +254,8 @@ def build_wan_i2v_workflow(
         negative_prompt: Negative prompt (things to avoid)
         width: Video width in pixels
         height: Video height in pixels
-        frames: Number of frames to generate
+        duration_sec: Video duration in seconds (default 5.0)
+        target_fps: Output fps - 30 or 60 (uses RIFE 2x or 4x interpolation)
         start_image_filename: Filename of the uploaded start image
         high_noise_model: UNET model for high noise pass
         low_noise_model: UNET model for low noise pass
@@ -232,15 +264,20 @@ def build_wan_i2v_workflow(
                - high_file: LoRA filename for high noise pass
                - low_file: LoRA filename for low noise pass
                If empty/None, no user LoRAs are applied (only lightx2v acceleration)
-        fps: Frames per second for output video (default 16)
         output_prefix: Filename prefix for output video (sanitized job name)
         faceswap_enabled: Whether to enable face swapping via ReActor
         faceswap_image: Filename of the face image to swap in (in ComfyUI input folder)
-        frame_interpolation: Frame interpolation mode - "none" or "2x" (RIFE)
 
     Returns:
         ComfyUI API workflow dict ready to submit
     """
+    # Calculate generation parameters from target fps
+    gen_params = calculate_generation_params(target_fps, duration_sec)
+    frames = gen_params["wan_frames"]
+    generation_fps = gen_params["generation_fps"]
+    rife_multiplier = gen_params["rife_multiplier"]
+    output_fps = gen_params["output_fps"]
+    print(f"[Workflow] Target {target_fps}fps: generating {frames} frames @ {generation_fps}fps, RIFE {rife_multiplier}x → {output_fps}fps")
     # Deep copy the template so we don't modify the original
     workflow = copy.deepcopy(WAN_I2V_API_WORKFLOW)
 
@@ -336,9 +373,10 @@ def build_wan_i2v_workflow(
     else:
         print("[Workflow] No user LoRAs selected (using only lightx2v acceleration)")
 
-    # Override FPS (node 94 - CreateVideo)
-    workflow["94"]["inputs"]["fps"] = fps
-    print(f"[Workflow] Set FPS: {fps}")
+    # Note: FPS for the base CreateVideo node is set to generation_fps
+    # This may be overwritten below when RIFE is added (which uses VHS_VideoCombine instead)
+    workflow["94"]["inputs"]["fps"] = generation_fps
+    print(f"[Workflow] Set base FPS: {generation_fps}")
 
     # Override output filename prefix
     safe_prefix = _sanitize_filename(output_prefix) if output_prefix else "ComfyUI"
@@ -393,11 +431,11 @@ def build_wan_i2v_workflow(
         }
 
         # Add VHS_VideoCombine node (node 186)
-        # Combines face-swapped frames into video
+        # Combines face-swapped frames into video (fps updated below with RIFE)
         workflow["186"] = {
             "class_type": "VHS_VideoCombine",
             "inputs": {
-                "frame_rate": fps,
+                "frame_rate": output_fps,  # Will be target fps after RIFE
                 "loop_count": 0,
                 "filename_prefix": safe_prefix,
                 "format": "video/h264-mp4",
@@ -407,72 +445,65 @@ def build_wan_i2v_workflow(
                 "trim_to_audio": False,
                 "pingpong": False,
                 "save_output": True,
-                "images": ["183", 0]  # Face-swapped frames from ReActor
+                "images": ["183", 0]  # Face-swapped frames from ReActor (rewired below for RIFE)
             },
             "_meta": {"title": "Video Combine (Faceswap)"}
         }
 
         print(f"[Workflow] Added faceswap nodes: 188 (LoadImage), 183 (ReActor), 186 (VHS_VideoCombine)")
         print(f"[Workflow] Removed node 108 (SaveVideo)")
+
+    # Always add RIFE frame interpolation (required for both 30fps and 60fps output)
+    print(f"[Workflow] Adding RIFE {rife_multiplier}x frame interpolation")
+
+    # Add RIFE VFI node (node 200)
+    workflow["200"] = {
+        "class_type": "RIFE VFI",
+        "inputs": {
+            "ckpt_name": "rife49.pth",  # rife49 has better quality, less VRAM than rife47
+            "clear_cache_after_n_frames": 10,  # Clear frequently to reduce system RAM usage
+            "multiplier": rife_multiplier,  # 2 for 30fps, 4 for 60fps
+            "fast_mode": True,  # Ignored in v4.5+ but kept for compatibility
+            "ensemble": True,
+            "scale_factor": 1,
+            # frames input will be wired below
+        },
+        "_meta": {"title": f"RIFE {rife_multiplier}x Interpolation"}
+    }
+
+    if faceswap_enabled:
+        # With faceswap: 183 (ReActor) → 200 (RIFE) → 186 (VHS_VideoCombine)
+        workflow["200"]["inputs"]["frames"] = ["183", 0]
+        workflow["186"]["inputs"]["images"] = ["200", 0]
+        workflow["186"]["inputs"]["frame_rate"] = output_fps
+        print(f"[Workflow] RIFE wired: ReActor(183) → RIFE(200) → VHS_VideoCombine(186) @ {output_fps}fps ({rife_multiplier}x interpolated)")
     else:
-        # Standard output via SaveVideo (node 108)
-        workflow["108"]["inputs"]["filename_prefix"] = safe_prefix
-        print(f"[Workflow] Set output prefix: {safe_prefix}")
+        # Without faceswap: use VHS_VideoCombine instead of CreateVideo+SaveVideo
+        # Remove CreateVideo and SaveVideo nodes
+        del workflow["94"]
+        del workflow["108"]
 
-    # Add RIFE frame interpolation if enabled
-    # "2x" doubles frames AND doubles fps, maintaining original duration with smoother motion
-    if frame_interpolation == "2x":
-        print(f"[Workflow] Adding RIFE 2x frame interpolation")
-        output_fps = fps * 2  # Double fps to maintain duration with interpolated frames
-
-        # Add RIFE VFI node (node 200)
-        workflow["200"] = {
-            "class_type": "RIFE VFI",
+        # Add VHS_VideoCombine node (node 186)
+        workflow["186"] = {
+            "class_type": "VHS_VideoCombine",
             "inputs": {
-                "ckpt_name": "rife49.pth",  # rife49 has better quality, less VRAM than rife47
-                "clear_cache_after_n_frames": 25,  # Clear more frequently to reduce system RAM usage
-                "multiplier": 2,
-                "fast_mode": True,  # Ignored in v4.5+ but kept for compatibility
-                "ensemble": True,
-                "scale_factor": 1,
-                # frames input will be wired below
+                "frame_rate": output_fps,
+                "loop_count": 0,
+                "filename_prefix": safe_prefix,
+                "format": "video/h264-mp4",
+                "pix_fmt": "yuv420p",
+                "crf": 15,
+                "save_metadata": True,
+                "trim_to_audio": False,
+                "pingpong": False,
+                "save_output": True,
+                "images": ["200", 0]  # From RIFE output
             },
-            "_meta": {"title": "RIFE Frame Interpolation"}
+            "_meta": {"title": "Video Combine (RIFE)"}
         }
 
-        if faceswap_enabled:
-            # With faceswap: 183 (ReActor) → 200 (RIFE) → 186 (VHS_VideoCombine)
-            workflow["200"]["inputs"]["frames"] = ["183", 0]
-            workflow["186"]["inputs"]["images"] = ["200", 0]
-            workflow["186"]["inputs"]["frame_rate"] = output_fps  # Doubled fps for same duration
-            print(f"[Workflow] RIFE wired: ReActor(183) → RIFE(200) → VHS_VideoCombine(186) @ {output_fps}fps (2x interpolated)")
-        else:
-            # Without faceswap + RIFE: use VHS_VideoCombine instead of CreateVideo+SaveVideo
-            # Remove CreateVideo and SaveVideo nodes
-            del workflow["94"]
-            del workflow["108"]
-
-            # Add VHS_VideoCombine node (node 186)
-            workflow["186"] = {
-                "class_type": "VHS_VideoCombine",
-                "inputs": {
-                    "frame_rate": output_fps,  # Doubled fps for same duration
-                    "loop_count": 0,
-                    "filename_prefix": safe_prefix,
-                    "format": "video/h264-mp4",
-                    "pix_fmt": "yuv420p",
-                    "crf": 15,
-                    "save_metadata": True,
-                    "trim_to_audio": False,
-                    "pingpong": False,
-                    "save_output": True,
-                    "images": ["200", 0]  # From RIFE output
-                },
-                "_meta": {"title": "Video Combine (RIFE)"}
-            }
-
-            # Wire: VAEDecode(87) → RIFE(200) → VHS_VideoCombine(186)
-            workflow["200"]["inputs"]["frames"] = ["87", 0]
-            print(f"[Workflow] RIFE wired: VAEDecode(87) → RIFE(200) → VHS_VideoCombine(186) @ {output_fps}fps (2x interpolated)")
+        # Wire: VAEDecode(87) → RIFE(200) → VHS_VideoCombine(186)
+        workflow["200"]["inputs"]["frames"] = ["87", 0]
+        print(f"[Workflow] RIFE wired: VAEDecode(87) → RIFE(200) → VHS_VideoCombine(186) @ {output_fps}fps ({rife_multiplier}x interpolated)")
 
     return workflow

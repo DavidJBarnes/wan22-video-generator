@@ -30,7 +30,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   const [prompt, setPrompt] = useState('');
   const [width, setWidth] = useState(640);
   const [height, setHeight] = useState(640);
-  const [fps, setFps] = useState(16);
+  const [targetFps, setTargetFps] = useState(30);
   const [segmentDuration, setSegmentDuration] = useState(5);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -50,7 +50,6 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   const [selectedPrefix, setSelectedPrefix] = useState(null);
   const [selectedDescription, setSelectedDescription] = useState(null);
   const [autoFinalize, setAutoFinalize] = useState(false);
-  const [frameInterpolation, setFrameInterpolation] = useState('2x');
 
   useEffect(() => {
     console.log('[CreateJobModal] useEffect running with:', { preUploadedImageUrl, preUploadedDimensions, cloneData });
@@ -78,9 +77,19 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
         setPrompt(cloneData.prompt || '');
         setWidth(cloneData.width || cloneData.parameters?.width || 640);
         setHeight(cloneData.height || cloneData.parameters?.height || 640);
-        setFps(cloneData.fps || cloneData.parameters?.fps || 16);
         setSegmentDuration(cloneData.segment_duration || cloneData.parameters?.segment_duration || 5);
-        setFrameInterpolation(cloneData.parameters?.frame_interpolation || '2x');
+
+        // Handle target_fps (new) or calculate from legacy fps + frame_interpolation
+        if (cloneData.parameters?.target_fps) {
+          setTargetFps(cloneData.parameters.target_fps);
+        } else {
+          // Legacy job: calculate effective output fps
+          const legacyFps = cloneData.fps || cloneData.parameters?.fps || 16;
+          const legacyInterp = cloneData.parameters?.frame_interpolation || '2x';
+          const effectiveFps = legacyInterp === '2x' ? legacyFps * 2 : legacyFps;
+          // Map to nearest supported target fps (30 or 60)
+          setTargetFps(effectiveFps >= 45 ? 60 : 30);
+        }
 
         // Copy faceswap settings
         if (cloneData.parameters?.faceswap_enabled) {
@@ -176,18 +185,14 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
       console.log('[CreateJobModal] API.getSettings() returned:', data);
       const s = data.settings || data;
       console.log('[CreateJobModal] Parsed settings:', s);
-      console.log('[CreateJobModal] default_width:', s.default_width, 'type:', typeof s.default_width);
-      console.log('[CreateJobModal] default_height:', s.default_height, 'type:', typeof s.default_height);
-      console.log('[CreateJobModal] default_fps:', s.default_fps, 'type:', typeof s.default_fps);
       setSettings(s);
       const newWidth = parseInt(s.default_width) || 640;
       const newHeight = parseInt(s.default_height) || 640;
-      const newFps = parseInt(s.default_fps) || 16;
-      console.log('[CreateJobModal] Setting width:', newWidth, 'height:', newHeight, 'fps:', newFps);
+      const newTargetFps = parseInt(s.default_target_fps) || 30;
+      console.log('[CreateJobModal] Setting width:', newWidth, 'height:', newHeight, 'targetFps:', newTargetFps);
       setWidth(newWidth);
       setHeight(newHeight);
-      setFps(newFps);
-      setFrameInterpolation(s.default_frame_interpolation || '2x');
+      setTargetFps(newTargetFps);
 
       // Parse job naming presets
       try {
@@ -328,14 +333,13 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
         parameters: {
           width,
           height,
-          fps,
+          target_fps: targetFps,
           segment_duration: segmentDuration,
           faceswap_enabled: faceswapEnabled,
           faceswap_image: faceswapEnabled ? faceswapImage : null,
           faceswap_faces_order: faceswapEnabled ? faceswapFacesOrder : null,
           faceswap_faces_index: faceswapEnabled ? faceswapFacesIndex : null,
-          auto_finalize: autoFinalize,
-          frame_interpolation: frameInterpolation
+          auto_finalize: autoFinalize
         }
       };
 
@@ -434,22 +438,11 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                 <MenuItem value={10}>10 sec</MenuItem>
               </Select>
             </FormControl>
-            <FormControl variant="outlined" size="small" sx={{ width: '100px' }}>
-              <InputLabel>FPS</InputLabel>
-              <Select value={fps} onChange={(e) => setFps(parseInt(e.target.value))} label="FPS">
-                <MenuItem value={8}>8</MenuItem>
-                <MenuItem value={12}>12</MenuItem>
-                <MenuItem value={16}>16</MenuItem>
-                <MenuItem value={20}>20</MenuItem>
-                <MenuItem value={24}>24</MenuItem>
-                <MenuItem value={32}>32</MenuItem>
-              </Select>
-            </FormControl>
             <FormControl variant="outlined" size="small" sx={{ width: '120px' }}>
-              <InputLabel>Interpolation</InputLabel>
-              <Select value={frameInterpolation} onChange={(e) => setFrameInterpolation(e.target.value)} label="Interpolation">
-                <MenuItem value="none">None</MenuItem>
-                <MenuItem value="2x">2x</MenuItem>
+              <InputLabel>Output FPS</InputLabel>
+              <Select value={targetFps} onChange={(e) => setTargetFps(parseInt(e.target.value))} label="Output FPS">
+                <MenuItem value={30}>30 fps</MenuItem>
+                <MenuItem value={60}>60 fps</MenuItem>
               </Select>
             </FormControl>
           </div>
