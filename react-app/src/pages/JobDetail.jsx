@@ -72,7 +72,6 @@ export default function JobDetail() {
   const [elapsedTime, setElapsedTime] = useState(null);
   const [finalizing, setFinalizing] = useState(false);
   const [upscaling, setUpscaling] = useState(false);
-  const [hasUpscaled, setHasUpscaled] = useState(false);
   const [upscaledVideos, setUpscaledVideos] = useState([]);
   const autoFinalizeTriggeredRef = useRef(false);
 
@@ -274,19 +273,8 @@ export default function JobDetail() {
       const segmentWithoutPrompt = segmentsData.find(s => !s.prompt && s.status === 'pending');
       setNextSegmentIndex(segmentWithoutPrompt ? segmentWithoutPrompt.segment_index : segmentsData.length);
 
-      // Check if legacy upscaled video exists and load new upscaled videos list
+      // Load upscaled videos list
       if (jobData.status === 'completed') {
-        try {
-          const response = await fetch(API.getJobVideoUpscaled(id), {
-            method: 'GET',
-            headers: { 'Range': 'bytes=0-0' }
-          });
-          setHasUpscaled(response.ok || response.status === 206);
-        } catch {
-          setHasUpscaled(false);
-        }
-
-        // Load upscaled videos list
         try {
           const upscaledData = await API.getUpscaledVideos(id);
           setUpscaledVideos(upscaledData.videos || []);
