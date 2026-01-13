@@ -8,6 +8,15 @@ A local web application for generating long-form videos using the Wan2.2 image-t
 - **Frontend**: React 19, Vite, Material UI 7, React Router
 - **AI Backend**: ComfyUI with Wan2.2 14B models
 
+## System Requirements
+
+- **ffmpeg** with `libx264` encoder (required for fade-to-black transitions)
+  - Verify with: `ffmpeg -encoders | grep libx264`
+  - On Ubuntu/Debian: `sudo apt install ffmpeg`
+- **ffprobe** (typically included with ffmpeg)
+- **Python 3.11+**
+- **Node.js 18+** (for frontend)
+
 ## Project Structure
 
 ```
