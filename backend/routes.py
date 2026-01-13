@@ -61,7 +61,11 @@ from database import (
     add_tags_to_image as db_add_tags_to_image,
     remove_tag_from_image as db_remove_tag_from_image,
     get_all_used_tags_with_counts as db_get_all_used_tags_with_counts,
-    get_images_by_tag as db_get_images_by_tag
+    get_images_by_tag as db_get_images_by_tag,
+    create_upscaled_video as db_create_upscaled_video,
+    get_upscaled_videos_for_job as db_get_upscaled_videos_for_job,
+    get_upscaled_video_by_id as db_get_upscaled_video_by_id,
+    delete_upscaled_video as db_delete_upscaled_video
 )
 from comfyui_client import ComfyUIClient
 from queue_manager import queue_manager
@@ -2395,6 +2399,7 @@ async def upscale_job_video(job_id: int, scale: int = 2, model: str = "realesr-a
     """Upscale a job's final video.
 
     The job must be completed and have a final video.
+    The upscaled video is saved to the database for tracking.
     """
     job = get_job(job_id)
     if not job:
@@ -2421,106 +2426,82 @@ async def upscale_job_video(job_id: int, scale: int = 2, model: str = "realesr-a
     if result["status"] == "error":
         raise HTTPException(status_code=500, detail=result.get("error", "Upscaling failed"))
 
-    return result
-
-
-@router.get("/jobs/{job_id}/segments/{segment_index}/upscale")
-async def upscale_segment_video(job_id: int, segment_index: int, scale: int = 2, model: str = "realesr-animevideov3"):
-    """Upscale a specific segment's video."""
-    job = get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-
-    segment = get_segment(job_id, segment_index)
-    if not segment:
-        raise HTTPException(status_code=404, detail="Segment not found")
-
-    if segment["status"] != "completed":
-        raise HTTPException(status_code=400, detail="Segment is not completed")
-
-    # Find the segment video
-    video_path = get_segment_video_path(job_id, segment_index, job.get("name", f"job_{job_id}"))
-
-    if not video_path or not os.path.exists(video_path):
-        raise HTTPException(status_code=404, detail="Segment video not found")
-
-    # Run upscaling (output_path=None lets upscale.py use UPSCALE_SAVE_PATH)
-    result = upscale_video(
-        input_path=video_path,
-        output_path=None,
-        scale=scale,
-        model=model
-    )
-
-    if result["status"] == "error":
-        raise HTTPException(status_code=500, detail=result.get("error", "Upscaling failed"))
+    # Save to database for tracking
+    output_path = result.get("output_path")
+    if output_path:
+        filename = Path(output_path).name
+        file_size = os.path.getsize(output_path) if os.path.exists(output_path) else None
+        db_create_upscaled_video(
+            job_id=job_id,
+            filename=filename,
+            file_path=output_path,
+            scale=scale,
+            model=model,
+            file_size=file_size
+        )
 
     return result
 
 
 @router.get("/jobs/{job_id}/upscaled-videos")
 async def list_upscaled_videos(job_id: int):
-    """List all upscaled videos for a job."""
+    """List all upscaled videos for a job from the database."""
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    if not UPSCALE_SAVE_PATH:
-        return {"videos": []}
+    # Get upscaled videos from database
+    db_videos = db_get_upscaled_videos_for_job(job_id)
 
-    upscale_dir = Path(UPSCALE_SAVE_PATH)
-    if not upscale_dir.exists():
-        return {"videos": []}
-
-    # Get job name and sanitize it for matching
-    job_name = job.get("name", f"job_{job_id}")
-    # Sanitize same way as video_utils does
-    sanitized_name = re.sub(r'[^\w\-.]', '_', job_name.replace(' ', '_'))
-
-    # Find all upscaled videos matching this job name
+    # Format response, checking if files still exist
     videos = []
-    for f in upscale_dir.glob(f"{sanitized_name}*_upscaled_*.mp4"):
-        stat = f.stat()
+    for v in db_videos:
+        file_exists = os.path.exists(v["file_path"]) if v.get("file_path") else False
         videos.append({
-            "filename": f.name,
-            "size": stat.st_size,
-            "created": stat.st_mtime,
-            "path": str(f)
+            "id": v["id"],
+            "filename": v["filename"],
+            "size": v.get("file_size") or 0,
+            "scale": v["scale"],
+            "model": v["model"],
+            "created": v["created_at"],
+            "exists": file_exists
         })
-
-    # Sort by creation time, newest first
-    videos.sort(key=lambda x: x["created"], reverse=True)
 
     return {"videos": videos}
 
 
-@router.delete("/upscaled-videos/{filename:path}")
-async def delete_upscaled_video(filename: str):
-    """Delete an upscaled video file."""
-    if not UPSCALE_SAVE_PATH:
-        raise HTTPException(status_code=400, detail="UPSCALE_SAVE_PATH not configured")
+@router.delete("/upscaled-videos/{video_id}")
+async def delete_upscaled_video_endpoint(video_id: int):
+    """Delete an upscaled video by its database ID.
 
-    # Security: only allow filenames, not paths
-    if "/" in filename or "\\" in filename or ".." in filename:
-        raise HTTPException(status_code=400, detail="Invalid filename")
+    Deletes both the file from disk and the database record.
+    """
+    # Get the record from database
+    video = db_get_upscaled_video_by_id(video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="Upscaled video not found")
 
-    upscale_dir = Path(UPSCALE_SAVE_PATH)
-    file_path = upscale_dir / filename
+    file_path = video.get("file_path")
+    filename = video.get("filename")
 
-    # Verify the file is within the upscale directory
-    try:
-        file_path.resolve().relative_to(upscale_dir.resolve())
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid file path")
+    # Delete the file if it exists
+    file_deleted = False
+    if file_path and os.path.exists(file_path):
+        try:
+            os.unlink(file_path)
+            file_deleted = True
+        except Exception as e:
+            # Log but continue - we still want to delete the DB record
+            print(f"Warning: Failed to delete file {file_path}: {e}")
 
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
+    # Delete from database
+    db_delete_upscaled_video(video_id)
 
-    try:
-        file_path.unlink()
-        return {"status": "success", "message": f"Deleted {filename}"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete: {str(e)}")
+    return {
+        "status": "success",
+        "message": f"Deleted {filename}",
+        "file_deleted": file_deleted
+    }
 
 
 @router.get("/upscaled-videos/{filename:path}/download")

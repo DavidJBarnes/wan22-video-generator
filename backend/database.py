@@ -469,6 +469,26 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_image_tags_v2_tag ON image_tags_v2(tag_name)
         """)
 
+        # Upscaled videos table - tracks upscaled videos associated with jobs
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS upscaled_videos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id INTEGER NOT NULL,
+                filename TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                scale INTEGER NOT NULL,
+                model TEXT NOT NULL,
+                file_size INTEGER,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+            )
+        """)
+
+        # Index for fast lookup by job_id
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_upscaled_videos_job_id ON upscaled_videos(job_id)
+        """)
+
         # Migrate from old schema if needed and always drop old tables
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='image_tag_associations'")
         if cursor.fetchone():
@@ -2213,3 +2233,98 @@ def add_tags_to_image(image_path: str, tag_names: List[str]) -> int:
             if add_tag_to_image(image_path, tag_name):
                 added += 1
     return added
+
+
+# ============== Upscaled Videos Functions ==============
+
+def create_upscaled_video(
+    job_id: int,
+    filename: str,
+    file_path: str,
+    scale: int,
+    model: str,
+    file_size: Optional[int] = None
+) -> int:
+    """Create a record for an upscaled video.
+
+    Args:
+        job_id: The job this upscaled video belongs to
+        filename: Just the filename (e.g., "video_upscaled_2x_20260112.mp4")
+        file_path: Full path to the file
+        scale: Upscale factor (2, 3, or 4)
+        model: Model used (e.g., "realesr-animevideov3")
+        file_size: File size in bytes (optional)
+
+    Returns:
+        The ID of the created record
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO upscaled_videos (job_id, filename, file_path, scale, model, file_size, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (job_id, filename, file_path, scale, model, file_size, utc_now_iso()))
+        return cursor.lastrowid
+
+
+def get_upscaled_videos_for_job(job_id: int) -> List[Dict[str, Any]]:
+    """Get all upscaled videos for a job, ordered by creation time (newest first)."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, job_id, filename, file_path, scale, model, file_size, created_at
+            FROM upscaled_videos
+            WHERE job_id = ?
+            ORDER BY created_at DESC
+        """, (job_id,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_upscaled_video_by_id(video_id: int) -> Optional[Dict[str, Any]]:
+    """Get an upscaled video record by its ID."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, job_id, filename, file_path, scale, model, file_size, created_at
+            FROM upscaled_videos
+            WHERE id = ?
+        """, (video_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_upscaled_video_by_filename(filename: str) -> Optional[Dict[str, Any]]:
+    """Get an upscaled video record by its filename."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, job_id, filename, file_path, scale, model, file_size, created_at
+            FROM upscaled_videos
+            WHERE filename = ?
+        """, (filename,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def delete_upscaled_video(video_id: int) -> bool:
+    """Delete an upscaled video record by ID.
+
+    Note: This only deletes the database record, not the file itself.
+    Returns True if deleted, False if not found.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM upscaled_videos WHERE id = ?", (video_id,))
+        return cursor.rowcount > 0
+
+
+def delete_upscaled_video_by_filename(filename: str) -> bool:
+    """Delete an upscaled video record by filename.
+
+    Note: This only deletes the database record, not the file itself.
+    Returns True if deleted, False if not found.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM upscaled_videos WHERE filename = ?", (filename,))
+        return cursor.rowcount > 0

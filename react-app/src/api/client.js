@@ -516,8 +516,8 @@ class APIClient {
     return this.request(`/jobs/${jobId}/upscaled-videos`);
   }
 
-  async deleteUpscaledVideo(filename) {
-    return this.request(`/upscaled-videos/${encodeURIComponent(filename)}`, {
+  async deleteUpscaledVideo(videoId) {
+    return this.request(`/upscaled-videos/${videoId}`, {
       method: 'DELETE'
     });
   }
