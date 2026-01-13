@@ -13,6 +13,13 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
   const [loadingJobs, setLoadingJobs] = useState(false);
   const imageRef = useRef(null);
 
+  // Zoom-on-hover state
+  const [zoomActive, setZoomActive] = useState(false);
+  const [zoomPosition, setZoomPosition] = useState({ x: 0, y: 0 });
+  const [lensPosition, setLensPosition] = useState({ x: 0, y: 0 });
+  const ZOOM_LEVEL = 2.5;
+  const LENS_SIZE = 180;
+
   // Tag state
   const [availableTags, setAvailableTags] = useState([]);
   const [imageTags, setImageTags] = useState([]);
@@ -192,6 +199,35 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
     }
   }
 
+  // Zoom-on-hover handlers
+  function handleMouseMove(e) {
+    if (!imageRef.current) return;
+
+    const rect = imageRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // Calculate percentage position within image
+    const percentX = (x / rect.width) * 100;
+    const percentY = (y / rect.height) * 100;
+
+    setZoomPosition({ x: percentX, y: percentY });
+
+    // Position lens centered on cursor, clamped to image bounds
+    setLensPosition({
+      x: Math.max(0, Math.min(rect.width - LENS_SIZE, x - LENS_SIZE / 2)),
+      y: Math.max(0, Math.min(rect.height - LENS_SIZE, y - LENS_SIZE / 2))
+    });
+  }
+
+  function handleMouseEnter() {
+    setZoomActive(true);
+  }
+
+  function handleMouseLeave() {
+    setZoomActive(false);
+  }
+
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex < images.length - 1;
 
@@ -208,23 +244,52 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
         <div className="modal-body" style={{ display: 'flex', gap: '24px', padding: '16px 24px' }}>
           {/* Left Side - Image Preview */}
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            {/* Image Preview */}
+            {/* Image Preview with Zoom */}
             <div style={{ flex: 1, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <img
-                ref={imageRef}
-                src={API.getRepoImage(image.path)}
-                alt={image.name}
-                style={{
-                  maxWidth: '100%',
-                  maxHeight: '55vh',
-                  objectFit: 'contain',
-                  borderRadius: '4px',
-                  border: '1px solid #ddd'
-                }}
-                onError={(e) => {
-                  e.target.src = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22400%22%3E%3Crect fill=%22%23ddd%22 width=%22400%22 height=%22400%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2224%22%3EImage not found%3C/text%3E%3C/svg%3E';
-                }}
-              />
+              <div
+                style={{ position: 'relative', display: 'inline-block' }}
+                onMouseMove={handleMouseMove}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+              >
+                <img
+                  ref={imageRef}
+                  src={API.getRepoImage(image.path)}
+                  alt={image.name}
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '55vh',
+                    objectFit: 'contain',
+                    borderRadius: '4px',
+                    border: '1px solid #ddd',
+                    cursor: 'zoom-in'
+                  }}
+                  onError={(e) => {
+                    e.target.src = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22400%22 height=%22400%22%3E%3Crect fill=%22%23ddd%22 width=%22400%22 height=%22400%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2224%22%3EImage not found%3C/text%3E%3C/svg%3E';
+                  }}
+                />
+                {/* Zoom Lens */}
+                {zoomActive && imageRef.current && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: lensPosition.x,
+                      top: lensPosition.y,
+                      width: LENS_SIZE,
+                      height: LENS_SIZE,
+                      borderRadius: '50%',
+                      border: '3px solid rgba(255,255,255,0.8)',
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+                      pointerEvents: 'none',
+                      overflow: 'hidden',
+                      backgroundImage: `url(${API.getRepoImage(image.path)})`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundSize: `${imageRef.current.offsetWidth * ZOOM_LEVEL}px ${imageRef.current.offsetHeight * ZOOM_LEVEL}px`,
+                      backgroundPosition: `${-zoomPosition.x * ZOOM_LEVEL * imageRef.current.offsetWidth / 100 + LENS_SIZE / 2}px ${-zoomPosition.y * ZOOM_LEVEL * imageRef.current.offsetHeight / 100 + LENS_SIZE / 2}px`
+                    }}
+                  />
+                )}
+              </div>
             </div>
           </div>
 
