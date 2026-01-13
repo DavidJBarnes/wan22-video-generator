@@ -12,5 +12,8 @@ elif [ -d ".venv" ]; then
     source .venv/bin/activate
 fi
 
+# Environment variables
+export UPSCALE_SAVE_PATH="${UPSCALE_SAVE_PATH:-$HOME/upscaled_videos}"
+
 # Start uvicorn
 exec uvicorn main:app --host 0.0.0.0 --port 9090
