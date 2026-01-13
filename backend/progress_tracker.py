@@ -55,8 +55,8 @@ class ProgressState:
         elapsed = self.elapsed_seconds
         eta_seconds = None
 
-        # Calculate ETA based on average run time
-        if avg_run_time and elapsed is not None:
+        # Calculate ETA based on average run time (only if we have both values)
+        if avg_run_time is not None and elapsed is not None:
             eta_seconds = max(0, avg_run_time - elapsed)
 
         return {
