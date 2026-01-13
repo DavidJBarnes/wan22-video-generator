@@ -6,9 +6,8 @@ COMFYUI_SERVER_URL = "http://localhost:8188"
 # Default Generation Parameters
 DEFAULT_WIDTH = 512
 DEFAULT_HEIGHT = 768
-DEFAULT_FPS = 16
-DEFAULT_FRAME_INTERPOLATION = "2x"  # "none" or "2x" (RIFE)
-DEFAULT_FRAMES_PER_SEGMENT = 81  # 5 seconds at 16 FPS
+DEFAULT_TARGET_FPS = 30  # Output fps: 30 or 60 (uses RIFE 2x or 4x interpolation)
+GENERATION_FPS = 15  # Internal: base fps before RIFE interpolation
 
 # Model Names
 # Note: Update these to match the models available on your ComfyUI server

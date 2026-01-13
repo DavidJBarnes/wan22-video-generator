@@ -321,19 +321,18 @@ class ComfyUIClient:
         negative_prompt: str = "",
         width: int = 640,
         height: int = 640,
-        frames: int = 81,
+        duration_sec: float = 5.0,
+        target_fps: int = 30,
         start_image_filename: str = "",
         high_noise_model: str = "wan2.2_i2v_high_noise_14B_fp16.safetensors",
         low_noise_model: str = "wan2.2_i2v_low_noise_14B_fp16.safetensors",
         seed: Optional[int] = None,
         loras: Optional[List[Dict[str, str]]] = None,
-        fps: int = 16,
         output_prefix: str = "",
         faceswap_enabled: bool = False,
         faceswap_image: str = "",
         faceswap_faces_order: str = "left-right",
         faceswap_faces_index: str = "0",
-        frame_interpolation: str = "none",
     ) -> Dict[str, Any]:
         """Build a Wan2.2 i2v workflow using the pre-converted API template.
 
@@ -341,33 +340,33 @@ class ComfyUIClient:
         user values into the pre-converted workflow constant.
 
         Args:
-            loras: Optional list of LoRA pairs (max 2). Each dict has:
+            duration_sec: Video duration in seconds (default 5.0)
+            target_fps: Output fps - 30 or 60 (uses RIFE 2x or 4x interpolation)
+            loras: Optional list of LoRA pairs (max 3). Each dict has:
                    - high_file: LoRA filename for high noise pass
                    - low_file: LoRA filename for low noise pass
             faceswap_enabled: Whether to enable face swapping via ReActor
             faceswap_image: Filename of the face image to swap in
             faceswap_faces_order: Order to process faces (left-right, right-left, etc.)
             faceswap_faces_index: Which face indices to process (e.g., "0", "0,1")
-            frame_interpolation: Frame interpolation mode - "none" or "2x" (RIFE)
         """
         return _build_wan_i2v_workflow(
             prompt=prompt,
             negative_prompt=negative_prompt,
             width=width,
             height=height,
-            frames=frames,
+            duration_sec=duration_sec,
+            target_fps=target_fps,
             start_image_filename=start_image_filename,
             high_noise_model=high_noise_model,
             low_noise_model=low_noise_model,
             seed=seed,
             loras=loras,
-            fps=fps,
             output_prefix=output_prefix,
             faceswap_enabled=faceswap_enabled,
             faceswap_image=faceswap_image,
             faceswap_faces_order=faceswap_faces_order,
             faceswap_faces_index=faceswap_faces_index,
-            frame_interpolation=frame_interpolation,
         )
 
     def build_workflow(
@@ -385,7 +384,8 @@ class ComfyUIClient:
         seed: Optional[int] = None,
         denoise: float = 0.75,
         input_image: Optional[str] = None,
-        frames: int = 81,
+        duration_sec: float = 5.0,
+        target_fps: int = 30,
         high_noise_model: str = "wan2.2_i2v_high_noise_14B_fp16.safetensors",
         low_noise_model: str = "wan2.2_i2v_low_noise_14B_fp16.safetensors",
     ) -> Dict[str, Any]:
@@ -401,7 +401,8 @@ class ComfyUIClient:
                 negative_prompt=negative_prompt,
                 width=width,
                 height=height,
-                frames=frames,
+                duration_sec=duration_sec,
+                target_fps=target_fps,
                 start_image_filename=input_image or "",
                 high_noise_model=high_noise_model,
                 low_noise_model=low_noise_model,

@@ -18,7 +18,7 @@ export default function Settings() {
   const [imageRepoPath, setImageRepoPath] = useState('');
   const [defaultWidth, setDefaultWidth] = useState(640);
   const [defaultHeight, setDefaultHeight] = useState(640);
-  const [defaultFps, setDefaultFps] = useState(16);
+  const [defaultTargetFps, setDefaultTargetFps] = useState(30);
   const [defaultNegativePrompt, setDefaultNegativePrompt] = useState('');
   const [queueWaitTimeout, setQueueWaitTimeout] = useState(30);
   const [segmentExecutionTimeout, setSegmentExecutionTimeout] = useState(20);
@@ -43,7 +43,7 @@ export default function Settings() {
       setImageRepoPath(s.image_repo_path || '');
       setDefaultWidth(parseInt(s.default_width) || 640);
       setDefaultHeight(parseInt(s.default_height) || 640);
-      setDefaultFps(parseInt(s.default_fps) || 16);
+      setDefaultTargetFps(parseInt(s.default_target_fps) || 30);
       setDefaultNegativePrompt(s.default_negative_prompt || 'blurry, low quality, distorted');
       setQueueWaitTimeout(Math.round((parseInt(s.queue_wait_timeout) || 1800) / 60)); // Convert seconds to minutes
       setSegmentExecutionTimeout(Math.round((parseInt(s.segment_execution_timeout) || 1200) / 60)); // Convert seconds to minutes
@@ -126,7 +126,7 @@ export default function Settings() {
         image_repo_path: imageRepoPath,
         default_width: String(defaultWidth),
         default_height: String(defaultHeight),
-        default_fps: String(defaultFps),
+        default_target_fps: String(defaultTargetFps),
         default_negative_prompt: defaultNegativePrompt,
         queue_wait_timeout: String(queueWaitTimeout * 60), // Convert minutes to seconds
         segment_execution_timeout: String(segmentExecutionTimeout * 60), // Convert minutes to seconds
@@ -429,14 +429,14 @@ export default function Settings() {
               />
             </div>
             <div className="form-group">
-              <label>FPS</label>
-              <input
-                type="number"
-                value={defaultFps}
-                onChange={(e) => setDefaultFps(parseInt(e.target.value))}
-                min="1"
-                max="60"
-              />
+              <label>Output FPS</label>
+              <select
+                value={defaultTargetFps}
+                onChange={(e) => setDefaultTargetFps(parseInt(e.target.value))}
+              >
+                <option value={30}>30 fps</option>
+                <option value={60}>60 fps</option>
+              </select>
             </div>
           </div>
           <div className="form-group">
