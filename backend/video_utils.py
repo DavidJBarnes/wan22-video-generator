@@ -3,10 +3,10 @@
 import os
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional, List
 import httpx
-
 
 # Output directory for downloaded videos and extracted frames
 # JOB_OUTPUT_PATH can be overridden via environment variable
@@ -157,42 +157,81 @@ def download_video_from_comfyui(video_url: str, output_path: str) -> bool:
         return False
 
 
+def _extract_last_frame_approximate(video_path: str, output_image_path: str) -> bool:
+    """Fallback: extract approximate last frame using sseof."""
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-sseof", "-0.1",
+        "-i", video_path,
+        "-frames:v", "1",
+        output_image_path
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode == 0 and os.path.exists(output_image_path):
+        print(f"[VideoUtils] Extracted approximate last frame to {output_image_path}")
+        return True
+    else:
+        print(f"[VideoUtils] ffmpeg error: {result.stderr}")
+        return False
+
+
 def extract_last_frame(video_path: str, output_image_path: str) -> bool:
-    """Extract the last frame from a video using ffmpeg.
-    
+    """Extract the exact last frame from a video using ffmpeg.
+
+    Uses ffprobe to get the exact frame count, then extracts that specific frame.
+    Falls back to approximate method if frame count cannot be determined.
+
     Args:
         video_path: Path to the input video file
-        output_image_path: Path where the extracted frame should be saved
-        
+        output_image_path: Path where the extracted frame should be saved (use .png for lossless)
+
     Returns:
         True if extraction was successful, False otherwise
     """
     try:
-        # Use ffmpeg to extract the last frame
-        # -sseof -1 seeks to 1 second before the end
-        # -frames:v 1 extracts only 1 frame
+        # First, get the total frame count
+        probe_cmd = [
+            "ffprobe",
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-count_frames",
+            "-show_entries", "stream=nb_read_frames",
+            "-of", "csv=p=0",
+            video_path
+        ]
+        result = subprocess.run(probe_cmd, capture_output=True, text=True)
+
+        if result.returncode != 0 or not result.stdout.strip():
+            # Fallback to original method if probe fails
+            print(f"[VideoUtils] Frame count probe failed, using approximate method")
+            return _extract_last_frame_approximate(video_path, output_image_path)
+
+        total_frames = int(result.stdout.strip())
+
+        # Extract the exact last frame using select filter
         cmd = [
             "ffmpeg",
-            "-y",  # Overwrite output file if exists
-            "-sseof", "-0.1",  # Seek to 0.1 seconds before end
+            "-y",
             "-i", video_path,
+            "-vf", f"select=eq(n\\,{total_frames - 1})",
             "-frames:v", "1",
-            "-q:v", "2",  # High quality JPEG
             output_image_path
         ]
-        
+
         result = subprocess.run(cmd, capture_output=True, text=True)
-        
+
         if result.returncode == 0 and os.path.exists(output_image_path):
-            print(f"[VideoUtils] Extracted last frame to {output_image_path}")
+            print(f"[VideoUtils] Extracted exact last frame (frame {total_frames - 1}) to {output_image_path}")
             return True
         else:
             print(f"[VideoUtils] ffmpeg error: {result.stderr}")
-            return False
-            
+            # Try fallback
+            return _extract_last_frame_approximate(video_path, output_image_path)
+
     except Exception as e:
         print(f"[VideoUtils] Error extracting last frame: {e}")
-        return False
+        return _extract_last_frame_approximate(video_path, output_image_path)
 
 
 def get_video_duration(video_path: str) -> Optional[float]:
@@ -217,7 +256,73 @@ def get_video_duration(video_path: str) -> Optional[float]:
     return None
 
 
-def apply_fade_effects(input_path: str, output_path: str, fade_in: bool = False, fade_out: bool = False, fade_duration: float = 2.0) -> bool:
+def get_video_durations(video_paths: List[str]) -> List[Optional[float]]:
+    """Get durations of multiple videos in parallel.
+
+    Args:
+        video_paths: List of paths to video files
+
+    Returns:
+        List of durations in seconds (or None for failures), in same order as input
+    """
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        return list(executor.map(get_video_duration, video_paths))
+
+
+def get_video_info(video_path: str) -> Optional[dict]:
+    """Get video metadata including duration, frame count, and fps.
+
+    Returns:
+        Dict with 'duration', 'frame_count', 'fps' keys, or None if probe fails.
+    """
+    try:
+        cmd = [
+            "ffprobe",
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-count_frames",
+            "-show_entries", "stream=nb_read_frames,r_frame_rate:format=duration",
+            "-of", "json",
+            video_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            import json
+            data = json.loads(result.stdout)
+
+            duration = float(data.get("format", {}).get("duration", 0))
+            frame_count = int(data.get("streams", [{}])[0].get("nb_read_frames", 0))
+
+            # Parse frame rate (can be "30/1" or "30000/1001" format)
+            fps_str = data.get("streams", [{}])[0].get("r_frame_rate", "0/1")
+            num, den = map(int, fps_str.split("/"))
+            fps = num / den if den != 0 else 0
+
+            return {
+                "duration": duration,
+                "frame_count": frame_count,
+                "fps": fps
+            }
+    except Exception as e:
+        print(f"[VideoUtils] Error getting video info: {e}")
+    return None
+
+
+def get_video_info_batch(video_paths: List[str]) -> List[Optional[dict]]:
+    """Get video info for multiple videos in parallel.
+
+    Args:
+        video_paths: List of paths to video files
+
+    Returns:
+        List of info dicts (or None for failures), in same order as input
+    """
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        return list(executor.map(get_video_info, video_paths))
+
+
+def apply_fade_effects(input_path: str, output_path: str, fade_in: bool = False, fade_out: bool = False,
+                       fade_duration: float = 2.0) -> bool:
     """Apply fade-in and/or fade-out effects to a video.
 
     Args:
@@ -280,7 +385,9 @@ def apply_fade_effects(input_path: str, output_path: str, fade_in: bool = False,
         print(f"[VideoUtils] Error applying fade: {e}")
         return False
 
-def stitch_videos(video_paths: List[str], output_path: str, segment_info: Optional[List[dict]] = None) -> bool:
+
+def stitch_videos(video_paths: List[str], output_path: str, segment_info: Optional[List[dict]] = None,
+                  high_quality: bool = False) -> bool:
     """Stitch multiple videos together using ffmpeg filter_complex.
 
     Drops the first frame from segments 1+ to eliminate duplicate frames at boundaries
@@ -292,6 +399,8 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
         segment_info: Optional list of dicts with segment metadata. If provided,
                      should have same length as video_paths. Each dict can contain:
                      - fade_to_black: bool - whether to apply fade-to-black transition after this segment
+        high_quality: If True, use slower but higher quality VP9 encoding settings.
+                     Recommended for final exports. Default False for fast previews.
 
     Returns:
         True if stitching was successful, False otherwise
@@ -308,7 +417,8 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
     temp_files = []
 
     # Debug: log segment_info
-    print(f"[VideoUtils] stitch_videos called with {len(video_paths)} videos, segment_info={segment_info}")
+    print(
+        f"[VideoUtils] stitch_videos called with {len(video_paths)} videos, segment_info={segment_info}, high_quality={high_quality}")
 
     for i, video_path in enumerate(video_paths):
         # Check if this segment needs fade-out (has fade_to_black enabled)
@@ -334,6 +444,34 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
         else:
             processed_paths.append(video_path)
 
+    # Define VP9 encoding parameters based on quality setting
+    if high_quality:
+        # Higher quality for final exports (slower encoding)
+        vp9_params = [
+            "-c:v", "libvpx-vp9",
+            "-crf", "24",  # Better quality (lower = better)
+            "-b:v", "0",  # Variable bitrate
+            "-pix_fmt", "yuv420p",
+            "-deadline", "good",  # Better quality than realtime
+            "-cpu-used", "2",  # Much better quality (0-8, lower = better)
+            "-row-mt", "1",  # Multi-threaded row encoding
+            "-auto-alt-ref", "1",  # Better compression efficiency
+            "-lag-in-frames", "25",  # Look-ahead for better bitrate decisions
+        ]
+        print("[VideoUtils] Using high-quality VP9 encoding settings")
+    else:
+        # Fast preview quality
+        vp9_params = [
+            "-c:v", "libvpx-vp9",
+            "-crf", "30",  # Moderate quality
+            "-b:v", "0",
+            "-pix_fmt", "yuv420p",
+            "-deadline", "realtime",  # Fastest encoding
+            "-cpu-used", "8",  # Maximum speed
+            "-row-mt", "1",
+        ]
+        print("[VideoUtils] Using fast preview VP9 encoding settings")
+
     try:
         if len(processed_paths) == 1:
             # Single video - re-encode to WebM for Firefox compatibility
@@ -341,13 +479,7 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
                 "ffmpeg",
                 "-y",
                 "-i", processed_paths[0],
-                "-c:v", "libvpx-vp9",
-                "-crf", "30",
-                "-b:v", "0",
-                "-pix_fmt", "yuv420p",
-                "-deadline", "realtime",
-                "-cpu-used", "8",
-                "-row-mt", "1",
+                *vp9_params,
                 output_path
             ]
             result = subprocess.run(cmd, capture_output=True, text=True)
@@ -386,13 +518,7 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
         cmd.extend([
             "-filter_complex", filter_complex,
             "-map", "[outv]",
-            "-c:v", "libvpx-vp9",
-            "-crf", "30",
-            "-b:v", "0",
-            "-pix_fmt", "yuv420p",
-            "-deadline", "realtime",
-            "-cpu-used", "8",
-            "-row-mt", "1",
+            *vp9_params,
             output_path
         ])
 
@@ -405,7 +531,8 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
                 os.remove(temp_file)
 
         if result.returncode == 0 and os.path.exists(output_path):
-            print(f"[VideoUtils] Stitched {len(processed_paths)} videos to {output_path} (dropped {len(processed_paths) - 1} duplicate frames)")
+            print(
+                f"[VideoUtils] Stitched {len(processed_paths)} videos to {output_path} (dropped {len(processed_paths) - 1} duplicate frames)")
             return True
         else:
             print(f"[VideoUtils] ffmpeg stitch error: {result.stderr}")
@@ -417,6 +544,7 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
             if os.path.exists(temp_file):
                 os.remove(temp_file)
         return False
+
 
 def get_job_output_dir(job_id: int) -> Path:
     """Get the output directory for a job, creating it if needed."""
@@ -431,16 +559,37 @@ def get_segment_video_path(job_id: int, segment_index: int) -> str:
     return str(job_dir / f"segment_{segment_index}.mp4")
 
 
-def get_segment_frame_path(job_id: int, segment_index: int, frame_type: str = "last") -> str:
+def get_segment_frame_path(job_id: int, segment_index: int, frame_type: str = "last", for_writing: bool = False) -> str:
     """Get the path where a segment's frame should be stored.
-    
+
     Args:
         job_id: The job ID
         segment_index: The segment index
         frame_type: Either "last" for the last frame or "start" for the start frame
+        for_writing: If True, always returns .png path for new frames.
+                    If False (default), checks for existing .jpg fallback for backward compatibility.
+
+    Returns:
+        Path to the frame file (PNG format for new files, may return .jpg for existing legacy files)
     """
     job_dir = get_job_output_dir(job_id)
-    return str(job_dir / f"segment_{segment_index}_{frame_type}_frame.jpg")
+    png_path = str(job_dir / f"segment_{segment_index}_{frame_type}_frame.png")
+
+    if for_writing:
+        # Always use PNG for new frames
+        return png_path
+
+    # For reading: check if PNG exists, fall back to legacy JPG if not
+    if os.path.exists(png_path):
+        return png_path
+
+    jpg_path = str(job_dir / f"segment_{segment_index}_{frame_type}_frame.jpg")
+    if os.path.exists(jpg_path):
+        print(f"[VideoUtils] Using legacy JPG frame: {jpg_path}")
+        return jpg_path
+
+    # Neither exists, return PNG path (caller will handle missing file)
+    return png_path
 
 
 def _sanitize_filename(name: str) -> str:
