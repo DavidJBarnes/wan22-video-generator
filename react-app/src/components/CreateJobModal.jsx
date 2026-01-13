@@ -254,16 +254,13 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   // Auto-build job name from prefix + description + duration + fps
   useEffect(() => {
     if (cloneData) return; // Don't override cloned job names
+    if (!selectedPrefix && !selectedDescription) return; // Don't clear manual name
 
     const parts = [];
     if (selectedPrefix) parts.push(selectedPrefix);
     if (selectedDescription) parts.push(selectedDescription);
-
-    // Only add metadata if we have a prefix or description
-    if (parts.length > 0) {
-      parts.push(`${segmentDuration}s`);
-      parts.push(`${targetFps}fps`);
-    }
+    parts.push(`${segmentDuration}s`);
+    parts.push(`${targetFps}fps`);
 
     setName(parts.join('-'));
   }, [selectedPrefix, selectedDescription, segmentDuration, targetFps]);
