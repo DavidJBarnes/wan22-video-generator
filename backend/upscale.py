@@ -1,4 +1,4 @@
-"""Video upscaling using Real-ESRGAN on remote 3090 server."""
+"""Video upscaling using Real-ESRGAN locally."""
 
 import os
 import subprocess
@@ -9,11 +9,13 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Remote server configuration
-REMOTE_HOST = "david@3090.zero"
-REMOTE_TOOLS_DIR = "/home/david/tools"
-REALESRGAN_BIN = f"{REMOTE_TOOLS_DIR}/realesrgan-ncnn-vulkan"
-REMOTE_WORK_DIR = "/tmp/upscale_work"
+# Local tools configuration
+TOOLS_DIR = Path.home() / "tools"
+REALESRGAN_BIN = TOOLS_DIR / "realesrgan-ncnn-vulkan"
+MODELS_DIR = TOOLS_DIR / "models"
+
+# Output directory for upscaled videos (optional, defaults to same dir as input)
+UPSCALE_SAVE_PATH = os.environ.get("UPSCALE_SAVE_PATH")
 
 # Available models
 MODELS = {
@@ -25,14 +27,12 @@ MODELS = {
 DEFAULT_MODEL = "realesr-animevideov3"
 
 
-def run_ssh_command(cmd: str, timeout: int = 600) -> tuple[int, str, str]:
-    """Run a command on the remote server via SSH."""
-    full_cmd = f'ssh {REMOTE_HOST} "{cmd}"'
-    logger.info(f"SSH: {cmd}")
+def run_command(cmd: list, timeout: int = 600) -> tuple[int, str, str]:
+    """Run a local command."""
+    logger.info(f"Running: {' '.join(cmd)}")
     try:
         result = subprocess.run(
-            full_cmd,
-            shell=True,
+            cmd,
             capture_output=True,
             text=True,
             timeout=timeout
@@ -40,22 +40,8 @@ def run_ssh_command(cmd: str, timeout: int = 600) -> tuple[int, str, str]:
         return result.returncode, result.stdout, result.stderr
     except subprocess.TimeoutExpired:
         return -1, "", "Command timed out"
-
-
-def scp_to_remote(local_path: str, remote_path: str) -> bool:
-    """Copy a file to the remote server."""
-    cmd = f"scp {local_path} {REMOTE_HOST}:{remote_path}"
-    logger.info(f"SCP upload: {local_path} -> {remote_path}")
-    result = subprocess.run(cmd, shell=True, capture_output=True)
-    return result.returncode == 0
-
-
-def scp_from_remote(remote_path: str, local_path: str) -> bool:
-    """Copy a file from the remote server."""
-    cmd = f"scp {REMOTE_HOST}:{remote_path} {local_path}"
-    logger.info(f"SCP download: {remote_path} -> {local_path}")
-    result = subprocess.run(cmd, shell=True, capture_output=True)
-    return result.returncode == 0
+    except Exception as e:
+        return -1, "", str(e)
 
 
 def upscale_video(
@@ -66,11 +52,11 @@ def upscale_video(
     progress_callback=None
 ) -> dict:
     """
-    Upscale a video using Real-ESRGAN on the remote 3090 server.
+    Upscale a video using Real-ESRGAN locally.
 
     Args:
-        input_path: Path to input video file (local)
-        output_path: Path for output video (local), auto-generated if None
+        input_path: Path to input video file
+        output_path: Path for output video, auto-generated if None
         scale: Upscale factor (2, 3, or 4 depending on model)
         model: Model name (realesrgan-x4plus, realesr-animevideov3, etc.)
         progress_callback: Optional callback(stage, percent, message)
@@ -83,6 +69,10 @@ def upscale_video(
         logger.info(f"[{stage}] {percent}% - {message}")
         if progress_callback:
             progress_callback(stage, percent, message)
+
+    # Check if realesrgan binary exists
+    if not REALESRGAN_BIN.exists():
+        return {"status": "error", "error": f"Real-ESRGAN binary not found at {REALESRGAN_BIN}"}
 
     # Validate inputs
     if not os.path.exists(input_path):
@@ -98,47 +88,51 @@ def upscale_video(
     # Generate output path if not provided
     if output_path is None:
         input_stem = Path(input_path).stem
-        input_dir = Path(input_path).parent
-        output_path = str(input_dir / f"{input_stem}_upscaled_{scale}x.mp4")
+        if UPSCALE_SAVE_PATH:
+            output_dir = Path(UPSCALE_SAVE_PATH)
+            output_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            output_dir = Path(input_path).parent
+        output_path = str(output_dir / f"{input_stem}_upscaled_{scale}x.mp4")
 
-    # Create unique work directory on remote
-    import uuid
-    work_id = str(uuid.uuid4())[:8]
-    remote_work = f"{REMOTE_WORK_DIR}/{work_id}"
+    # Create temp work directory
+    work_dir = tempfile.mkdtemp(prefix="upscale_")
+    frames_in = Path(work_dir) / "frames_in"
+    frames_out = Path(work_dir) / "frames_out"
+    frames_in.mkdir()
+    frames_out.mkdir()
 
     try:
-        report_progress("setup", 0, "Creating remote work directory")
+        report_progress("setup", 0, "Setting up work directory")
 
-        # Create work directory on remote
-        ret, _, err = run_ssh_command(f"mkdir -p {remote_work}/frames_in {remote_work}/frames_out")
-        if ret != 0:
-            return {"status": "error", "error": f"Failed to create work directory: {err}"}
+        # Extract frames using ffmpeg
+        report_progress("extract", 10, "Extracting frames")
+        ret, stdout, stderr = run_command([
+            "ffmpeg", "-i", input_path,
+            "-qscale:v", "2",
+            str(frames_in / "frame_%06d.png"),
+            "-y"
+        ], timeout=300)
 
-        # Upload video to remote
-        report_progress("upload", 5, "Uploading video to server")
-        remote_input = f"{remote_work}/input{Path(input_path).suffix}"
-        if not scp_to_remote(input_path, remote_input):
-            return {"status": "error", "error": "Failed to upload video"}
-
-        # Extract frames using ffmpeg on remote
-        report_progress("extract", 15, "Extracting frames")
-        ret, stdout, stderr = run_ssh_command(
-            f"ffmpeg -i {remote_input} -qscale:v 2 {remote_work}/frames_in/frame_%06d.png -y 2>&1",
-            timeout=300
-        )
         if ret != 0:
             return {"status": "error", "error": f"Failed to extract frames: {stderr}"}
 
         # Count frames
-        ret, stdout, _ = run_ssh_command(f"ls {remote_work}/frames_in | wc -l")
-        frame_count = int(stdout.strip()) if ret == 0 else 0
+        frame_files = list(frames_in.glob("*.png"))
+        frame_count = len(frame_files)
+        if frame_count == 0:
+            return {"status": "error", "error": "No frames extracted from video"}
         logger.info(f"Extracted {frame_count} frames")
 
         # Get video framerate
-        ret, stdout, _ = run_ssh_command(
-            f"ffprobe -v 0 -of csv=p=0 -select_streams v:0 -show_entries stream=r_frame_rate {remote_input}"
-        )
-        fps = "30" # default
+        ret, stdout, stderr = run_command([
+            "ffprobe", "-v", "0", "-of", "csv=p=0",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=r_frame_rate",
+            input_path
+        ])
+
+        fps = "30"  # default
         if ret == 0 and stdout.strip():
             fps_parts = stdout.strip().split('/')
             if len(fps_parts) == 2:
@@ -149,56 +143,73 @@ def upscale_video(
 
         # Run Real-ESRGAN upscaling
         report_progress("upscale", 30, f"Upscaling {frame_count} frames with {model} ({scale}x)")
-        ret, stdout, stderr = run_ssh_command(
-            f"cd {REMOTE_TOOLS_DIR} && ./realesrgan-ncnn-vulkan "
-            f"-i {remote_work}/frames_in "
-            f"-o {remote_work}/frames_out "
-            f"-n {model} -s {scale} -f png 2>&1",
-            timeout=1800  # 30 min timeout for upscaling
-        )
+        ret, stdout, stderr = run_command([
+            str(REALESRGAN_BIN),
+            "-i", str(frames_in),
+            "-o", str(frames_out),
+            "-m", str(MODELS_DIR),
+            "-n", model,
+            "-s", str(scale),
+            "-f", "png"
+        ], timeout=1800)  # 30 min timeout for upscaling
+
         if ret != 0:
             return {"status": "error", "error": f"Upscaling failed: {stderr or stdout}"}
 
         # Check upscaled frames exist
-        ret, stdout, _ = run_ssh_command(f"ls {remote_work}/frames_out | wc -l")
-        upscaled_count = int(stdout.strip()) if ret == 0 else 0
+        upscaled_files = list(frames_out.glob("*.png"))
+        upscaled_count = len(upscaled_files)
         if upscaled_count == 0:
             return {"status": "error", "error": "No upscaled frames produced"}
         logger.info(f"Upscaled {upscaled_count} frames")
 
+        # Check if input has audio
+        ret, stdout, stderr = run_command([
+            "ffprobe", "-v", "0",
+            "-select_streams", "a",
+            "-show_entries", "stream=codec_type",
+            "-of", "csv=p=0",
+            input_path
+        ])
+        has_audio = ret == 0 and "audio" in stdout
+
         # Reassemble video with ffmpeg
         report_progress("reassemble", 80, "Reassembling video")
-        remote_output = f"{remote_work}/output.mp4"
-
-        # Check if input has audio
-        ret, stdout, _ = run_ssh_command(
-            f"ffprobe -v 0 -select_streams a -show_entries stream=codec_type -of csv=p=0 {remote_input}"
-        )
-        has_audio = ret == 0 and "audio" in stdout
 
         if has_audio:
             # Reassemble with audio from original
-            ret, stdout, stderr = run_ssh_command(
-                f"ffmpeg -framerate {fps} -i {remote_work}/frames_out/frame_%06d.png "
-                f"-i {remote_input} -map 0:v -map 1:a -c:v libx264 -preset medium "
-                f"-crf 18 -pix_fmt yuv420p -c:a aac -shortest {remote_output} -y 2>&1",
-                timeout=300
-            )
+            ret, stdout, stderr = run_command([
+                "ffmpeg",
+                "-framerate", fps,
+                "-i", str(frames_out / "frame_%06d.png"),
+                "-i", input_path,
+                "-map", "0:v",
+                "-map", "1:a",
+                "-c:v", "libx264",
+                "-preset", "medium",
+                "-crf", "18",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                "-shortest",
+                output_path,
+                "-y"
+            ], timeout=300)
         else:
             # No audio
-            ret, stdout, stderr = run_ssh_command(
-                f"ffmpeg -framerate {fps} -i {remote_work}/frames_out/frame_%06d.png "
-                f"-c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p {remote_output} -y 2>&1",
-                timeout=300
-            )
+            ret, stdout, stderr = run_command([
+                "ffmpeg",
+                "-framerate", fps,
+                "-i", str(frames_out / "frame_%06d.png"),
+                "-c:v", "libx264",
+                "-preset", "medium",
+                "-crf", "18",
+                "-pix_fmt", "yuv420p",
+                output_path,
+                "-y"
+            ], timeout=300)
 
         if ret != 0:
             return {"status": "error", "error": f"Failed to reassemble video: {stderr or stdout}"}
-
-        # Download result
-        report_progress("download", 90, "Downloading upscaled video")
-        if not scp_from_remote(remote_output, output_path):
-            return {"status": "error", "error": "Failed to download upscaled video"}
 
         report_progress("complete", 100, "Upscaling complete")
 
@@ -211,9 +222,9 @@ def upscale_video(
         }
 
     finally:
-        # Cleanup remote work directory
-        logger.info(f"Cleaning up remote work directory: {remote_work}")
-        run_ssh_command(f"rm -rf {remote_work}", timeout=60)
+        # Cleanup work directory
+        logger.info(f"Cleaning up work directory: {work_dir}")
+        shutil.rmtree(work_dir, ignore_errors=True)
 
 
 def get_available_models() -> dict:
