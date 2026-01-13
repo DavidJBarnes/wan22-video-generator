@@ -219,7 +219,9 @@ def apply_fade_effects(input_path: str, output_path: str, fade_in: bool = False,
             "-y",
             "-i", input_path,
             "-vf", filter_string,
-            "-c:v", "libopenh264",
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "18",
             "-pix_fmt", "yuv420p",
             output_path
         ]
@@ -267,6 +269,9 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
     processed_paths = []
     temp_files = []
 
+    # Debug: log segment_info
+    print(f"[VideoUtils] stitch_videos called with {len(video_paths)} videos, segment_info={segment_info}")
+
     for i, video_path in enumerate(video_paths):
         # Check if this segment needs fade-out (has fade_to_black enabled)
         needs_fade_out = False
@@ -277,6 +282,8 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
         needs_fade_in = False
         if segment_info and i > 0 and i - 1 < len(segment_info):
             needs_fade_in = segment_info[i - 1].get("fade_to_black", False)
+
+        print(f"[VideoUtils] Segment {i}: fade_in={needs_fade_in}, fade_out={needs_fade_out}")
 
         if needs_fade_in or needs_fade_out:
             temp_path = video_path.replace(".mp4", "_faded.mp4")

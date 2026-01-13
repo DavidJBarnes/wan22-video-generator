@@ -1402,6 +1402,7 @@ export default function JobDetail() {
           defaultPrompt={lastCompletedSegment?.prompt || ''}
           defaultLoras={buildDefaultLoras(lastCompletedSegment)}
           defaultFaceswap={buildDefaultFaceswap(lastCompletedSegment, job?.parameters)}
+          defaultFadeToBlack={false}
           defaultStartImageUrl={lastCompletedSegment?.end_frame_url || null}
           jobInputImage={job?.input_image}
           segments={segments}
@@ -1420,6 +1421,7 @@ export default function JobDetail() {
           defaultPrompt={editingSegment.prompt || ''}
           defaultLoras={buildDefaultLoras(editingSegment)}
           defaultFaceswap={buildDefaultFaceswap(editingSegment, job?.parameters)}
+          defaultFadeToBlack={Boolean(Number(editingSegment.fade_to_black))}
           defaultStartImageUrl={editingSegment.start_image_url || null}
           defaultCustomStartImage={editingSegment.custom_start_image || null}
           isEditing={true}
