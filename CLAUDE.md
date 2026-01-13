@@ -321,58 +321,7 @@ Settings stored in SQLite `settings` table, editable via Settings page:
 
 When downloading LoRAs from CivitAI:
 - **API Token**: `458068b9eaef12cbb8cd9c409e2a75ec`
-- **Download Path**: `david@3090.zero:~/StabilityMatrix-linux-x64/Data/Packages/ComfyUI/models/loras/wan2.2`
-
-Example download command:
-```bash
-ssh david@3090.zero "curl -L -H 'Authorization: Bearer 458068b9eaef12cbb8cd9c409e2a75ec' -o ~/StabilityMatrix-linux-x64/Data/Packages/ComfyUI/models/loras/wan2.2/LORA_NAME.safetensors 'https://civitai.com/api/download/models/MODEL_VERSION_ID'"
-```
-
-## 3090 Server Setup
-
-ComfyUI runs on a remote server (`3090.zero` / `ssh david@3090.zero`) with:
-- **GPU**: NVIDIA RTX 3090 (24GB VRAM)
-- **RAM**: 61GB system RAM + 38GB swap
-- **Service**: `comfyui.service` (systemd)
-- **Startup script**: `/home/david/projects/scripts/ui.sh`
-- **Logs**: `/home/david/projects/scripts/comfyui.log`
-
-### ComfyUI Startup Args
-```bash
-python3 main.py --output-directory /home/david/StabilityMatrix-linux-x64/Data/Wan --listen --port 8188 --cache-none
-```
-
-### Memory Management (Critical)
-
-Wan2.2 + RIFE has a known RAM leak issue. Without mitigation, ~30GB RAM accumulates after each job until OOM kill.
-
-**Current mitigations:**
-1. `--cache-none` flag - Prevents RAM accumulation between jobs (added 2026-01-06)
-2. RIFE `clear_cache_after_n_frames: 25` - Clears RIFE cache every 25 frames during interpolation
-
-**If OOM issues return, additional options:**
-- Install [ComfyUI-Unload-Model](https://github.com/SeanScripts/ComfyUI-Unload-Model) and add to workflow
-- Call `/free` endpoint between jobs: `curl -X POST "http://3090.zero:8188/free" -d '{"unload_models": true, "free_memory": true}'`
-- Downgrade to PyTorch 2.7.1 if `--cache-none` causes issues
-- Restart ComfyUI every N jobs as nuclear option
-
-**Useful commands:**
-```bash
-# Check ComfyUI service status
-ssh david@3090.zero "systemctl status comfyui"
-
-# View recent logs
-ssh david@3090.zero "tail -50 /home/david/projects/scripts/comfyui.log"
-
-# Check for OOM kills
-ssh david@3090.zero "journalctl -u comfyui --since '1 hour ago' | grep -E 'OOM|kill'"
-
-# Check memory usage
-ssh david@3090.zero "free -h && ps aux --sort=-%mem | head -5"
-
-# Restart ComfyUI (requires sudo)
-ssh david@3090.zero "sudo systemctl restart comfyui"
-```
+- **Download Path**: `~/StabilityMatrix-linux-x64/Data/Packages/ComfyUI/models/loras/wan2.2`
 
 ## RIFE Frame Interpolation
 
@@ -425,10 +374,6 @@ if history.get("status", {}).get("status_str") == "error":
 ```
 
 Never report a ComfyUI job as "failed" without capturing and showing me the actual error from the API.
-
-## ssh access
-Access the Comfyui server via ssh at: 3090.zero
-Access the a1111 server via ssh at: 2070.zero
 
 ## git and source control
 Always create a relevant git branch (fix/* or feature/*) before starting work. Name branches descriptively, like feature/video-chaining or fix/queue-persistence. Commit with clear messages and push to remote when a task is complete.
