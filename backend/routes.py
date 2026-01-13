@@ -2346,7 +2346,7 @@ async def get_upscale_models():
 
 @router.post("/upscale")
 async def upscale_video_endpoint(request: UpscaleRequest):
-    """Upscale a video using Real-ESRGAN on the 3090 server.
+    """Upscale a video using Real-ESRGAN locally.
 
     Args:
         video_path: Path to the video file to upscale
