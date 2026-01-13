@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { FormControl, InputLabel, Select, MenuItem, Pagination, Box, CircularProgress, Button } from '@mui/material';
+import { FormControl, InputLabel, Select, MenuItem, Pagination, Box, CircularProgress, Button, Checkbox } from '@mui/material';
 import LazyImage from '../components/LazyImage';
 
 const FOLDERS_PER_PAGE = 24;
@@ -45,6 +45,8 @@ export default function ImageRepo() {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [defaultWidth, setDefaultWidth] = useState(1280);
   const [defaultHeight, setDefaultHeight] = useState(720);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedImages, setSelectedImages] = useState(new Set());
 
   // Load tags once
   useEffect(() => {
@@ -308,6 +310,57 @@ export default function ImageRepo() {
     if (newIndex >= 0 && newIndex < images.length) {
       setSelectedImage(images[newIndex]);
       setSelectedImageIndex(newIndex);
+    }
+  }
+
+  // Selection mode functions
+  function toggleSelectMode() {
+    if (selectMode) {
+      // Exiting select mode - clear selection
+      setSelectedImages(new Set());
+    }
+    setSelectMode(!selectMode);
+  }
+
+  function toggleImageSelection(imagePath) {
+    setSelectedImages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(imagePath)) {
+        newSet.delete(imagePath);
+      } else {
+        newSet.add(imagePath);
+      }
+      return newSet;
+    });
+  }
+
+  async function handleBulkDelete() {
+    if (selectedImages.size === 0) return;
+
+    const confirmed = window.confirm(`Delete ${selectedImages.size} image${selectedImages.size > 1 ? 's' : ''}? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      const result = await API.deleteRepoImagesBulk(Array.from(selectedImages));
+
+      if (result.deleted_count > 0) {
+        showToast(`Deleted ${result.deleted_count} image${result.deleted_count > 1 ? 's' : ''}`, 'success');
+        // Remove deleted images from local state
+        const deletedPaths = new Set(result.results.filter(r => r.success).map(r => r.path));
+        setImages(images.filter(img => !deletedPaths.has(img.path)));
+        setAllImages(allImages.filter(img => !deletedPaths.has(img.path)));
+      }
+
+      if (result.failed_count > 0) {
+        showToast(`Failed to delete ${result.failed_count} image${result.failed_count > 1 ? 's' : ''}`, 'error');
+      }
+
+      // Clear selection and exit select mode
+      setSelectedImages(new Set());
+      setSelectMode(false);
+    } catch (error) {
+      console.error('Bulk delete failed:', error);
+      showToast('Failed to delete images', 'error');
     }
   }
 
@@ -580,6 +633,26 @@ export default function ImageRepo() {
             >
               {loadingSlideshow ? <CircularProgress size={16} color="inherit" /> : 'Slideshow'}
             </Button>
+            <div style={{ borderLeft: '1px solid #ddd', height: '24px', margin: '0 4px' }} />
+            <Button
+              variant={selectMode ? "contained" : "outlined"}
+              size="small"
+              onClick={toggleSelectMode}
+              disabled={images.length === 0}
+              color={selectMode ? "primary" : "inherit"}
+            >
+              {selectMode ? 'Cancel' : 'Select'}
+            </Button>
+            {selectMode && selectedImages.size > 0 && (
+              <Button
+                variant="contained"
+                size="small"
+                color="error"
+                onClick={handleBulkDelete}
+              >
+                Delete ({selectedImages.size})
+              </Button>
+            )}
           </div>
         </div>
 
@@ -723,11 +796,13 @@ export default function ImageRepo() {
               {paginatedImages.map((image, index) => {
                 // Calculate actual index in full images array for preview navigation
                 const actualIndex = (imagePage - 1) * IMAGES_PER_PAGE + index;
+                const isSelected = selectedImages.has(image.path);
                 return (
                   <div
                     key={image.path}
-                    className="repo-item image"
-                    onClick={() => openImagePreview(image, actualIndex)}
+                    className={`repo-item image ${isSelected ? 'selected' : ''}`}
+                    onClick={() => selectMode ? toggleImageSelection(image.path) : openImagePreview(image, actualIndex)}
+                    style={isSelected ? { outline: '3px solid #1976d2', outlineOffset: '-3px' } : {}}
                   >
                     <div className="repo-item-preview">
                       <LazyImage
@@ -737,6 +812,23 @@ export default function ImageRepo() {
                           e.target.src = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22%3E%3Crect fill=%22%23ddd%22 width=%22200%22 height=%22200%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23999%22%3E🖼️%3C/text%3E%3C/svg%3E';
                         }}
                       />
+                      {selectMode && (
+                        <Checkbox
+                          checked={isSelected}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={() => toggleImageSelection(image.path)}
+                          sx={{
+                            position: 'absolute',
+                            top: 4,
+                            left: 4,
+                            padding: '2px',
+                            backgroundColor: 'rgba(255,255,255,0.8)',
+                            borderRadius: '4px',
+                            '&:hover': { backgroundColor: 'rgba(255,255,255,0.95)' }
+                          }}
+                          size="small"
+                        />
+                      )}
                     </div>
                     <div className="repo-item-name">
                       {image.name}
@@ -766,12 +858,23 @@ export default function ImageRepo() {
 
               {paginatedImages.map((image, index) => {
                 const actualIndex = (imagePage - 1) * IMAGES_PER_PAGE + index;
+                const isSelected = selectedImages.has(image.path);
                 return (
                   <div
                     key={image.path}
-                    className="repo-list-item image"
-                    onClick={() => openImagePreview(image, actualIndex)}
+                    className={`repo-list-item image ${isSelected ? 'selected' : ''}`}
+                    onClick={() => selectMode ? toggleImageSelection(image.path) : openImagePreview(image, actualIndex)}
+                    style={isSelected ? { backgroundColor: '#e3f2fd' } : {}}
                   >
+                    {selectMode && (
+                      <Checkbox
+                        checked={isSelected}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => toggleImageSelection(image.path)}
+                        size="small"
+                        sx={{ padding: '4px', marginRight: '4px' }}
+                      />
+                    )}
                     <span className="repo-list-icon">🖼️</span>
                     <span className="repo-list-name">
                       {image.name}

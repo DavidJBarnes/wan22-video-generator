@@ -73,6 +73,7 @@
   border-radius: 4px;
   background: #f5f5f5;
   margin-bottom: 8px;
+  position: relative;
 }
 
 .repo-item-preview img {
