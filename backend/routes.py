@@ -2406,9 +2406,13 @@ async def upscale_job_video(job_id: int, scale: int = 2, model: str = "realesr-a
     if job["status"] != "completed":
         raise HTTPException(status_code=400, detail="Job is not completed")
 
-    # Find the final video
-    from video_utils import get_final_video_path
-    video_path = get_final_video_path(job_id, job.get("name", f"job_{job_id}"))
+    # Find the final video from stored output_images
+    output_images = job.get("output_images") or []
+    video_path = None
+    for path in output_images:
+        if path.endswith('.webm') or path.endswith('.mp4'):
+            video_path = path
+            break
 
     if not video_path or not os.path.exists(video_path):
         raise HTTPException(status_code=404, detail="Final video not found for this job")

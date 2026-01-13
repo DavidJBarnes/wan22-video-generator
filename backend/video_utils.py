@@ -408,24 +408,38 @@ def _sanitize_filename(name: str) -> str:
     return safe.strip('_')
 
 
-def get_final_video_path(job_id: int, job_name: str = None, finalized_at: str = None) -> str:
+def get_final_video_path(job_id: int, job_name: str = None, duration_secs: int = None, fps: int = None) -> str:
     """Get the path where the final stitched video should be stored.
 
     Args:
         job_id: The job ID
         job_name: Optional job name to include in filename
-        finalized_at: Optional datetime string when job was finalized (unused, kept for compatibility)
+        duration_secs: Total video duration in seconds
+        fps: Output frames per second
 
     Returns:
         Path to the final video file
+        Format: {job_name}-{duration}s-{fps}fps-{job_id}.webm
     """
     job_dir = get_job_output_dir(job_id)
 
+    # Build filename parts
+    parts = []
+
     if job_name:
-        # Create filename-friendly version: JobName_00001.webm
-        safe_name = _sanitize_filename(job_name)
-        filename = f"{safe_name}_00001.webm"
+        parts.append(_sanitize_filename(job_name))
+
+    if duration_secs is not None:
+        parts.append(f"{duration_secs}s")
+
+    if fps is not None:
+        parts.append(f"{fps}fps")
+
+    parts.append(str(job_id))
+
+    if parts:
+        filename = "-".join(parts) + ".webm"
     else:
-        filename = f"job_{job_id}_00001.webm"
+        filename = f"job_{job_id}.webm"
 
     return str(job_dir / filename)
