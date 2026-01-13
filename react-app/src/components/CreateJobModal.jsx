@@ -253,7 +253,6 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
 
   // Auto-build job name from prefix + description + duration + fps
   useEffect(() => {
-    if (cloneData) return; // Don't override cloned job names
     if (!selectedPrefix && !selectedDescription) return; // Don't clear manual name
 
     const parts = [];
@@ -389,6 +388,9 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                 options={namePrefixes}
                 value={selectedPrefix}
                 onChange={(e, newValue) => setSelectedPrefix(newValue)}
+                onInputChange={(e, newValue, reason) => {
+                  if (reason === 'input') setSelectedPrefix(newValue);
+                }}
                 freeSolo
                 sx={{ width: '120px' }}
                 renderInput={(params) => (
@@ -402,6 +404,9 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                 options={nameDescriptions}
                 value={selectedDescription}
                 onChange={(e, newValue) => setSelectedDescription(newValue)}
+                onInputChange={(e, newValue, reason) => {
+                  if (reason === 'input') setSelectedDescription(newValue);
+                }}
                 freeSolo
                 sx={{ width: '180px' }}
                 renderInput={(params) => (
