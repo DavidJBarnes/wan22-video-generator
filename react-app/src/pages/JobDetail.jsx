@@ -998,9 +998,11 @@ export default function JobDetail() {
                     {seg.prompt && (
                       <IconButton
                         size="small"
-                        onClick={() => {
-                          navigator.clipboard.writeText(seg.prompt);
-                          showToast('Prompt copied', 'success');
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(seg.prompt)
+                            .then(() => showToast('Prompt copied', 'success'))
+                            .catch(() => showToast('Failed to copy prompt', 'error'));
                         }}
                         sx={{ padding: '2px', opacity: 0.6, '&:hover': { opacity: 1 } }}
                         title="Copy prompt"
