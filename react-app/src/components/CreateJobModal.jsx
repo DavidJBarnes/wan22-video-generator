@@ -251,16 +251,37 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
     }
   }
 
-  // Auto-build job name from prefix + description
+  // Auto-build job name from prefix + description + duration + fps
   useEffect(() => {
     if (cloneData) return; // Don't override cloned job names
-    if (!selectedPrefix && !selectedDescription) return;
 
     const parts = [];
     if (selectedPrefix) parts.push(selectedPrefix);
     if (selectedDescription) parts.push(selectedDescription);
+
+    // Only add metadata if we have a prefix or description
+    if (parts.length > 0) {
+      parts.push(`${segmentDuration}s`);
+      parts.push(`${targetFps}fps`);
+    }
+
     setName(parts.join('-'));
-  }, [selectedPrefix, selectedDescription]);
+  }, [selectedPrefix, selectedDescription, segmentDuration, targetFps]);
+
+  // Generate filename preview (job name + job id)
+  const filenamePreview = useMemo(() => {
+    const sanitize = (str) => {
+      if (!str) return '';
+      let safe = str.replace(/[^a-zA-Z0-9\-_]/g, '_');
+      while (safe.includes('__')) safe = safe.replace(/__/g, '_');
+      return safe.replace(/^_+|_+$/g, '');
+    };
+
+    const safeName = sanitize(name);
+    if (!safeName) return '';
+
+    return `${safeName}-{id}.webm`;
+  }, [name]);
 
   function handleImageChange(e) {
     const file = e.target.files[0];
@@ -401,6 +422,13 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
               sx={{ flex: 1 }}
             />
           </div>
+
+          {/* Filename preview */}
+          {name.trim() && (
+            <div style={{ fontSize: '11px', color: '#888', marginBottom: '12px', marginTop: '-8px' }}>
+              Output: <span style={{ fontFamily: 'monospace', color: '#666' }}>{filenamePreview}</span>
+            </div>
+          )}
 
           {/* Row 2: Dimensions + Duration + FPS + Interpolation */}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center' }}>

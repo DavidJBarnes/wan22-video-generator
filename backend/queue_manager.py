@@ -925,7 +925,6 @@ class QueueManager:
         # Get job info for naming the final video
         job = get_job(job_id)
         job_name = job.get("name", f"job_{job_id}")
-        finalized_at = datetime.now().isoformat()
 
         # Get all completed segments (excluding deleted ones)
         segments = get_job_segments(job_id)
@@ -955,7 +954,7 @@ class QueueManager:
             return
 
         # Stitch videos together with descriptive filename
-        final_video_path = get_final_video_path(job_id, job_name, finalized_at)
+        final_video_path = get_final_video_path(job_id, job_name)
         if stitch_videos(video_paths, final_video_path, segment_info=segment_info):
             # Update job with final video path
             update_job_status(job_id, "completed", output_images=[final_video_path])
