@@ -402,11 +402,11 @@ export default function JobDetail() {
     }
   }
 
-  async function handleDeleteUpscaledVideo(filename) {
+  async function handleDeleteUpscaledVideo(videoId, filename) {
     if (!confirm(`Delete upscaled video "${filename}"?`)) return;
 
     try {
-      await API.deleteUpscaledVideo(filename);
+      await API.deleteUpscaledVideo(videoId);
       showToast('Upscaled video deleted', 'success');
       // Refresh the list
       const upscaledData = await API.getUpscaledVideos(id);
@@ -657,7 +657,7 @@ export default function JobDetail() {
                         variant="outlined"
                         size="small"
                         color="error"
-                        onClick={() => handleDeleteUpscaledVideo(video.filename)}
+                        onClick={() => handleDeleteUpscaledVideo(video.id, video.filename)}
                         sx={{ minWidth: 'auto', px: 1 }}
                       >
                         Delete
