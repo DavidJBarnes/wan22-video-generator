@@ -251,18 +251,24 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
     }
   }
 
-  // Auto-build job name from prefix + description
+  // Auto-build job name from prefix + description + duration + fps
   useEffect(() => {
     if (cloneData) return; // Don't override cloned job names
-    if (!selectedPrefix && !selectedDescription) return;
 
     const parts = [];
     if (selectedPrefix) parts.push(selectedPrefix);
     if (selectedDescription) parts.push(selectedDescription);
-    setName(parts.join('-'));
-  }, [selectedPrefix, selectedDescription]);
 
-  // Generate filename preview (what the final video will be named)
+    // Only add metadata if we have a prefix or description
+    if (parts.length > 0) {
+      parts.push(`${segmentDuration}s`);
+      parts.push(`${targetFps}fps`);
+    }
+
+    setName(parts.join('-'));
+  }, [selectedPrefix, selectedDescription, segmentDuration, targetFps]);
+
+  // Generate filename preview (job name + job id)
   const filenamePreview = useMemo(() => {
     const sanitize = (str) => {
       if (!str) return '';
@@ -271,15 +277,11 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
       return safe.replace(/^_+|_+$/g, '');
     };
 
-    const parts = [];
     const safeName = sanitize(name);
-    if (safeName) parts.push(safeName);
-    parts.push(`${segmentDuration}s`);
-    parts.push(`${targetFps}fps`);
-    parts.push('{id}');
+    if (!safeName) return '';
 
-    return parts.join('-') + '.webm';
-  }, [name, segmentDuration, targetFps]);
+    return `${safeName}-{id}.webm`;
+  }, [name]);
 
   function handleImageChange(e) {
     const file = e.target.files[0];
