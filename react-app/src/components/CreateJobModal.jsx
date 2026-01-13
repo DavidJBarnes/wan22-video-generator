@@ -262,6 +262,25 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
     setName(parts.join('-'));
   }, [selectedPrefix, selectedDescription]);
 
+  // Generate filename preview (what the final video will be named)
+  const filenamePreview = useMemo(() => {
+    const sanitize = (str) => {
+      if (!str) return '';
+      let safe = str.replace(/[^a-zA-Z0-9\-_]/g, '_');
+      while (safe.includes('__')) safe = safe.replace(/__/g, '_');
+      return safe.replace(/^_+|_+$/g, '');
+    };
+
+    const parts = [];
+    const safeName = sanitize(name);
+    if (safeName) parts.push(safeName);
+    parts.push(`${segmentDuration}s`);
+    parts.push(`${targetFps}fps`);
+    parts.push('{id}');
+
+    return parts.join('-') + '.webm';
+  }, [name, segmentDuration, targetFps]);
+
   function handleImageChange(e) {
     const file = e.target.files[0];
     if (file) {
@@ -401,6 +420,13 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
               sx={{ flex: 1 }}
             />
           </div>
+
+          {/* Filename preview */}
+          {name.trim() && (
+            <div style={{ fontSize: '11px', color: '#888', marginBottom: '12px', marginTop: '-8px' }}>
+              Output: <span style={{ fontFamily: 'monospace', color: '#666' }}>{filenamePreview}</span>
+            </div>
+          )}
 
           {/* Row 2: Dimensions + Duration + FPS + Interpolation */}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center' }}>
