@@ -5,7 +5,7 @@ import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import './CreateJobModal.css';
 
-export default function ImagePreviewModal({ image, images, currentIndex, onClose, onCreateJob, onDelete, onNavigate }) {
+export default function ImagePreviewModal({ image, images, currentIndex, onClose, onCreateJob, onDelete, onNavigate, defaultWidth = 1280, defaultHeight = 720 }) {
   const [deleting, setDeleting] = useState(false);
   const [creatingJob, setCreatingJob] = useState(false);
   const [rating, setRating] = useState(image.rating || null);
@@ -155,17 +155,18 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
       const data = await API.selectImageFromRepo(image.path);
       showToast('Image uploaded successfully!', 'success');
 
-      // Get dimensions from the already-displayed image element
-      let dimensions = { width: 768, height: 512 }; // Default to landscape
+      // Get dimensions from the already-displayed image element, using settings defaults
+      let dimensions = { width: defaultWidth, height: defaultHeight }; // Default to landscape from settings
       if (imageRef.current) {
         const naturalW = imageRef.current.naturalWidth;
         const naturalH = imageRef.current.naturalHeight;
         console.log('[ImagePreviewModal] Image natural dimensions:', naturalW, 'x', naturalH);
         if (naturalW && naturalH) {
           const isLandscape = naturalW > naturalH;
+          // Use settings defaults, swapping for portrait orientation
           dimensions = isLandscape
-            ? { width: 768, height: 512 }
-            : { width: 512, height: 768 };
+            ? { width: defaultWidth, height: defaultHeight }
+            : { width: defaultHeight, height: defaultWidth };
           console.log('[ImagePreviewModal] Setting dimensions:', dimensions, 'isLandscape:', isLandscape);
         } else {
           console.log('[ImagePreviewModal] naturalWidth/Height not available, using defaults');
