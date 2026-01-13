@@ -16,7 +16,7 @@ from routes import router
 from queue_manager import queue_manager
 from comfyui_client import ComfyUIClient
 from progress_tracker import progress_tracker
-from video_utils import download_video_from_comfyui, extract_last_frame, get_segment_video_path, get_segment_frame_path
+from video_utils import download_video_from_comfyui, extract_last_frame, remux_video, get_segment_video_path, get_segment_frame_path
 
 
 def recover_segment_from_comfyui(segment: dict, client: ComfyUIClient, comfyui_url: str):
@@ -51,6 +51,9 @@ def recover_segment_from_comfyui(segment: dict, client: ComfyUIClient, comfyui_u
         print(f"[Recovery] Failed to download video for segment {segment_index} of job {job_id}")
         update_segment_status(job_id, segment_index, "failed", error_message="Recovery failed: video download failed")
         return False
+
+    # Remux to fix duration metadata (VHS_VideoCombine issue)
+    remux_video(video_path)
 
     # Extract last frame
     frame_path = get_segment_frame_path(job_id, segment_index, "last")

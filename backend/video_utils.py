@@ -17,6 +17,42 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 print(f"[VideoUtils] Output directory: {OUTPUT_DIR}")
 
 
+def remux_video(input_path: str) -> str:
+    """Remux a video to fix missing duration metadata.
+
+    VHS_VideoCombine outputs videos without proper duration metadata.
+    This remux operation rewrites the container without re-encoding,
+    which fixes the duration metadata issue.
+
+    Args:
+        input_path: Path to the input video file
+
+    Returns:
+        The input path (modified in-place) on success, or original path on failure
+    """
+    temp_path = input_path + ".remux.mp4"
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-i", input_path, "-c", "copy", temp_path],
+            capture_output=True,
+            text=True
+        )
+        if result.returncode == 0 and os.path.exists(temp_path):
+            os.replace(temp_path, input_path)
+            print(f"[VideoUtils] Remuxed video to fix duration metadata: {input_path}")
+            return input_path
+        else:
+            print(f"[VideoUtils] Remux warning: {result.stderr}")
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            return input_path
+    except Exception as e:
+        print(f"[VideoUtils] Remux error (non-fatal): {e}")
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        return input_path
+
+
 def optimize_video_for_web(video_path: str) -> bool:
     """Optimize an MP4 video for web streaming by moving moov atom to start.
 

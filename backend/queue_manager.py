@@ -34,6 +34,7 @@ from progress_tracker import progress_tracker
 from video_utils import (
     download_video_from_comfyui,
     extract_last_frame,
+    remux_video,
     stitch_videos,
     get_segment_video_path,
     get_segment_frame_path,
@@ -748,6 +749,8 @@ class QueueManager:
                     print(f"[QueueManager] Downloading video from {video_url} to {video_path}")
                     if download_video_from_comfyui(video_url, video_path):
                         print(f"[QueueManager] Video downloaded successfully")
+                        # Remux to fix duration metadata (VHS_VideoCombine issue)
+                        remux_video(video_path)
                         # Extract the last frame
                         frame_path = get_segment_frame_path(job_id, segment_index, "last")
                         print(f"[QueueManager] Extracting last frame to {frame_path}")
