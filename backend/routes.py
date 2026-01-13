@@ -2327,7 +2327,7 @@ async def remove_image_tag(image_path: str, tag_name: str):
 
 # ============== Video Upscaling Routes ==============
 
-from upscale import upscale_video, get_available_models, MODELS as UPSCALE_MODELS
+from upscale import upscale_video, get_available_models, MODELS as UPSCALE_MODELS, UPSCALE_SAVE_PATH
 
 
 class UpscaleRequest(BaseModel):
@@ -2456,3 +2456,97 @@ async def upscale_segment_video(job_id: int, segment_index: int, scale: int = 2,
         raise HTTPException(status_code=500, detail=result.get("error", "Upscaling failed"))
 
     return result
+
+
+@router.get("/jobs/{job_id}/upscaled-videos")
+async def list_upscaled_videos(job_id: int):
+    """List all upscaled videos for a job."""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if not UPSCALE_SAVE_PATH:
+        return {"videos": []}
+
+    upscale_dir = Path(UPSCALE_SAVE_PATH)
+    if not upscale_dir.exists():
+        return {"videos": []}
+
+    # Get job name and sanitize it for matching
+    job_name = job.get("name", f"job_{job_id}")
+    # Sanitize same way as video_utils does
+    sanitized_name = re.sub(r'[^\w\-.]', '_', job_name.replace(' ', '_'))
+
+    # Find all upscaled videos matching this job name
+    videos = []
+    for f in upscale_dir.glob(f"{sanitized_name}*_upscaled_*.mp4"):
+        stat = f.stat()
+        videos.append({
+            "filename": f.name,
+            "size": stat.st_size,
+            "created": stat.st_mtime,
+            "path": str(f)
+        })
+
+    # Sort by creation time, newest first
+    videos.sort(key=lambda x: x["created"], reverse=True)
+
+    return {"videos": videos}
+
+
+@router.delete("/upscaled-videos/{filename:path}")
+async def delete_upscaled_video(filename: str):
+    """Delete an upscaled video file."""
+    if not UPSCALE_SAVE_PATH:
+        raise HTTPException(status_code=400, detail="UPSCALE_SAVE_PATH not configured")
+
+    # Security: only allow filenames, not paths
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    upscale_dir = Path(UPSCALE_SAVE_PATH)
+    file_path = upscale_dir / filename
+
+    # Verify the file is within the upscale directory
+    try:
+        file_path.resolve().relative_to(upscale_dir.resolve())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid file path")
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    try:
+        file_path.unlink()
+        return {"status": "success", "message": f"Deleted {filename}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete: {str(e)}")
+
+
+@router.get("/upscaled-videos/{filename:path}/download")
+async def download_upscaled_video(filename: str):
+    """Download an upscaled video file."""
+    if not UPSCALE_SAVE_PATH:
+        raise HTTPException(status_code=400, detail="UPSCALE_SAVE_PATH not configured")
+
+    # Security: only allow filenames, not paths
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    upscale_dir = Path(UPSCALE_SAVE_PATH)
+    file_path = upscale_dir / filename
+
+    # Verify the file is within the upscale directory
+    try:
+        file_path.resolve().relative_to(upscale_dir.resolve())
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid file path")
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return FileResponse(
+        path=str(file_path),
+        filename=filename,
+        media_type="video/mp4"
+    )

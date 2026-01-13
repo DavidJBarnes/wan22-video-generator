@@ -511,6 +511,20 @@ class APIClient {
       method: 'POST'
     });
   }
+
+  async getUpscaledVideos(jobId) {
+    return this.request(`/jobs/${jobId}/upscaled-videos`);
+  }
+
+  async deleteUpscaledVideo(filename) {
+    return this.request(`/upscaled-videos/${encodeURIComponent(filename)}`, {
+      method: 'DELETE'
+    });
+  }
+
+  getUpscaledVideoUrl(filename) {
+    return `${API_BASE_URL}/upscaled-videos/${encodeURIComponent(filename)}/download`;
+  }
 }
 
 export default new APIClient();

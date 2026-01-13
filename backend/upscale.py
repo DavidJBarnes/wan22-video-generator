@@ -87,13 +87,15 @@ def upscale_video(
 
     # Generate output path if not provided
     if output_path is None:
+        from datetime import datetime
         input_stem = Path(input_path).stem
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if UPSCALE_SAVE_PATH:
             output_dir = Path(UPSCALE_SAVE_PATH)
             output_dir.mkdir(parents=True, exist_ok=True)
         else:
             output_dir = Path(input_path).parent
-        output_path = str(output_dir / f"{input_stem}_upscaled_{scale}x.mp4")
+        output_path = str(output_dir / f"{input_stem}_upscaled_{scale}x_{timestamp}.mp4")
 
     # Create temp work directory
     work_dir = tempfile.mkdtemp(prefix="upscale_")

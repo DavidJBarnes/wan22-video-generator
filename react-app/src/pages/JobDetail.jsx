@@ -73,6 +73,7 @@ export default function JobDetail() {
   const [finalizing, setFinalizing] = useState(false);
   const [upscaling, setUpscaling] = useState(false);
   const [hasUpscaled, setHasUpscaled] = useState(false);
+  const [upscaledVideos, setUpscaledVideos] = useState([]);
   const autoFinalizeTriggeredRef = useRef(false);
 
   // Memoize expensive segment calculations - must be before early returns
@@ -273,7 +274,7 @@ export default function JobDetail() {
       const segmentWithoutPrompt = segmentsData.find(s => !s.prompt && s.status === 'pending');
       setNextSegmentIndex(segmentWithoutPrompt ? segmentWithoutPrompt.segment_index : segmentsData.length);
 
-      // Check if upscaled video exists (use range request to avoid downloading whole file)
+      // Check if legacy upscaled video exists and load new upscaled videos list
       if (jobData.status === 'completed') {
         try {
           const response = await fetch(API.getJobVideoUpscaled(id), {
@@ -283,6 +284,14 @@ export default function JobDetail() {
           setHasUpscaled(response.ok || response.status === 206);
         } catch {
           setHasUpscaled(false);
+        }
+
+        // Load upscaled videos list
+        try {
+          const upscaledData = await API.getUpscaledVideos(id);
+          setUpscaledVideos(upscaledData.videos || []);
+        } catch {
+          setUpscaledVideos([]);
         }
       }
     } catch (error) {
@@ -390,6 +399,21 @@ export default function JobDetail() {
       showToast(error.message || 'Failed to upscale video', 'error');
     } finally {
       setUpscaling(false);
+    }
+  }
+
+  async function handleDeleteUpscaledVideo(filename) {
+    if (!confirm(`Delete upscaled video "${filename}"?`)) return;
+
+    try {
+      await API.deleteUpscaledVideo(filename);
+      showToast('Upscaled video deleted', 'success');
+      // Refresh the list
+      const upscaledData = await API.getUpscaledVideos(id);
+      setUpscaledVideos(upscaledData.videos || []);
+    } catch (error) {
+      console.error('Failed to delete upscaled video:', error);
+      showToast(error.message || 'Failed to delete upscaled video', 'error');
     }
   }
 
@@ -587,24 +611,69 @@ export default function JobDetail() {
                   Download Upscaled
                 </Button>
               )}
-              {!hasUpscaled && (
-                <Button
-                  variant="outlined"
-                  onClick={handleUpscaleVideo}
-                  disabled={upscaling}
-                  sx={{ borderColor: '#7b1fa2', color: '#7b1fa2', '&:hover': { borderColor: '#6a1b9a', bgcolor: 'rgba(123, 31, 162, 0.04)' } }}
-                >
-                  {upscaling ? (
-                    <>
-                      <CircularProgress size={20} color="inherit" sx={{ mr: 1 }} />
-                      Upscaling...
-                    </>
-                  ) : (
-                    'Upscale 2x'
-                  )}
-                </Button>
-              )}
+              <Button
+                variant="outlined"
+                onClick={handleUpscaleVideo}
+                disabled={upscaling}
+                sx={{ borderColor: '#7b1fa2', color: '#7b1fa2', '&:hover': { borderColor: '#6a1b9a', bgcolor: 'rgba(123, 31, 162, 0.04)' } }}
+              >
+                {upscaling ? (
+                  <>
+                    <CircularProgress size={20} color="inherit" sx={{ mr: 1 }} />
+                    Upscaling...
+                  </>
+                ) : (
+                  'Upscale 2x'
+                )}
+              </Button>
             </div>
+
+            {/* Upscaled Videos List */}
+            {upscaledVideos.length > 0 && (
+              <div style={{ marginTop: '20px', borderTop: '1px solid #e0e0e0', paddingTop: '16px' }}>
+                <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', color: '#666' }}>Upscaled Videos</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {upscaledVideos.map((video) => (
+                    <div
+                      key={video.filename}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '8px 12px',
+                        backgroundColor: '#f5f5f5',
+                        borderRadius: '4px'
+                      }}
+                    >
+                      <span style={{ flex: 1, fontSize: '14px', fontFamily: 'monospace' }}>
+                        {video.filename}
+                      </span>
+                      <span style={{ fontSize: '12px', color: '#666' }}>
+                        {(video.size / 1024 / 1024).toFixed(1)} MB
+                      </span>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        href={`/api/upscaled-videos/${encodeURIComponent(video.filename)}/download`}
+                        download={video.filename}
+                        sx={{ bgcolor: '#7b1fa2', '&:hover': { bgcolor: '#6a1b9a' }, minWidth: 'auto', px: 2 }}
+                      >
+                        Download
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        color="error"
+                        onClick={() => handleDeleteUpscaledVideo(video.filename)}
+                        sx={{ minWidth: 'auto', px: 1 }}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="placeholder-box">
