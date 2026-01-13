@@ -42,9 +42,10 @@ class ProgressState:
     @property
     def elapsed_seconds(self) -> Optional[float]:
         """Calculate elapsed time in seconds since start."""
-        if self.started_at is None:
+        started = self.started_at  # Local copy to avoid race conditions
+        if started is None:
             return None
-        return (datetime.now() - self.started_at).total_seconds()
+        return (datetime.now() - started).total_seconds()
 
     def to_dict(self, avg_run_time: Optional[float] = None) -> Dict[str, Any]:
         """Convert to dictionary for API response.
