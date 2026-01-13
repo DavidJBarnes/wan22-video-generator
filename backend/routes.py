@@ -2410,15 +2410,10 @@ async def upscale_job_video(job_id: int, scale: int = 2, model: str = "realesr-a
     if not video_path or not os.path.exists(video_path):
         raise HTTPException(status_code=404, detail="Final video not found for this job")
 
-    # Generate output path
-    video_stem = Path(video_path).stem
-    video_dir = Path(video_path).parent
-    output_path = str(video_dir / f"{video_stem}_upscaled_{scale}x.mp4")
-
-    # Run upscaling
+    # Run upscaling (output_path=None lets upscale.py use UPSCALE_SAVE_PATH)
     result = upscale_video(
         input_path=video_path,
-        output_path=output_path,
+        output_path=None,
         scale=scale,
         model=model
     )
@@ -2449,15 +2444,10 @@ async def upscale_segment_video(job_id: int, segment_index: int, scale: int = 2,
     if not video_path or not os.path.exists(video_path):
         raise HTTPException(status_code=404, detail="Segment video not found")
 
-    # Generate output path
-    video_stem = Path(video_path).stem
-    video_dir = Path(video_path).parent
-    output_path = str(video_dir / f"{video_stem}_upscaled_{scale}x.mp4")
-
-    # Run upscaling
+    # Run upscaling (output_path=None lets upscale.py use UPSCALE_SAVE_PATH)
     result = upscale_video(
         input_path=video_path,
-        output_path=output_path,
+        output_path=None,
         scale=scale,
         model=model
     )
