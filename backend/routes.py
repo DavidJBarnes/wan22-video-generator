@@ -1,6 +1,6 @@
 """API routes for the ComfyUI Queue Manager."""
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import RedirectResponse, FileResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
