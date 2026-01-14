@@ -14,6 +14,7 @@ export default function Settings() {
   const [loadingHidden, setLoadingHidden] = useState(false);
 
   // Form fields
+  const [apiUrl, setApiUrl] = useState('');
   const [comfyuiUrl, setComfyuiUrl] = useState('');
   const [imageRepoPath, setImageRepoPath] = useState('');
   const [defaultWidth, setDefaultWidth] = useState(640);
@@ -39,6 +40,7 @@ export default function Settings() {
       const s = data.settings || data;
       setSettings(s);
 
+      setApiUrl(s.api_url || '');
       setComfyuiUrl(s.comfyui_url || 'http://localhost:8188');
       setImageRepoPath(s.image_repo_path || '');
       setDefaultWidth(parseInt(s.default_width) || 640);
@@ -122,6 +124,7 @@ export default function Settings() {
 
     try {
       const settingsPayload = {
+        api_url: apiUrl,
         comfyui_url: comfyuiUrl || 'http://localhost:8188',
         image_repo_path: imageRepoPath,
         default_width: String(defaultWidth),
@@ -137,6 +140,10 @@ export default function Settings() {
       };
 
       await API.updateSettings(settingsPayload);
+
+      // Update API client with new base URL
+      API.setBaseUrl(apiUrl);
+
       showToast('Settings saved successfully', 'success');
       setSaving(false);
 
@@ -233,6 +240,23 @@ export default function Settings() {
             />
             <small style={{ color: '#666', fontSize: '12px' }}>
               Max time for ComfyUI to generate a single video segment. Increase for high-resolution or high-FPS videos.
+            </small>
+          </div>
+        </div>
+
+        {/* API Configuration */}
+        <div className="card settings-section">
+          <h2>API Configuration</h2>
+          <div className="form-group">
+            <label>API URL</label>
+            <input
+              type="text"
+              value={apiUrl}
+              onChange={(e) => setApiUrl(e.target.value)}
+              placeholder="Leave empty for default (relative URL)"
+            />
+            <small style={{ color: '#666', fontSize: '12px' }}>
+              Backend API URL. Leave empty to use the default relative URL (/api). Only set this if the API is hosted on a different server.
             </small>
           </div>
         </div>

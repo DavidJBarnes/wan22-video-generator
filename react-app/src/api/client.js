@@ -2,15 +2,37 @@
  * API Client for communicating with the backend
  */
 
-const API_BASE_URL = '/api';
+const DEFAULT_API_URL = '/api';
 
 class APIClient {
   constructor() {
-    // No instance state needed
+    // Load custom API URL from localStorage if set
+    this.baseUrl = localStorage.getItem('api_url') || DEFAULT_API_URL;
+  }
+
+  /**
+   * Set a custom API base URL
+   * @param {string} url - The new base URL (e.g., 'http://2070.zero:9090/api')
+   */
+  setBaseUrl(url) {
+    if (url && url.trim()) {
+      this.baseUrl = url.trim();
+      localStorage.setItem('api_url', this.baseUrl);
+    } else {
+      this.baseUrl = DEFAULT_API_URL;
+      localStorage.removeItem('api_url');
+    }
+  }
+
+  /**
+   * Get the current API base URL
+   */
+  getBaseUrl() {
+    return this.baseUrl;
   }
 
   async request(endpoint, options = {}) {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const url = `${this.baseUrl}${endpoint}`;
     const config = {
       headers: {
         'Content-Type': 'application/json',
@@ -216,19 +238,19 @@ class APIClient {
   }
 
   getJobThumbnail(jobId) {
-    return `${API_BASE_URL}/jobs/${jobId}/thumbnail`;
+    return `${this.baseUrl}/jobs/${jobId}/thumbnail`;
   }
 
   getSegmentFrame(jobId, segmentIndex) {
-    return `${API_BASE_URL}/jobs/${jobId}/segments/${segmentIndex}/frame`;
+    return `${this.baseUrl}/jobs/${jobId}/segments/${segmentIndex}/frame`;
   }
 
   getJobVideo(jobId) {
-    return `${API_BASE_URL}/jobs/${jobId}/video`;
+    return `${this.baseUrl}/jobs/${jobId}/video`;
   }
 
   getSegmentVideo(jobId, segmentIndex) {
-    return `${API_BASE_URL}/jobs/${jobId}/segments/${segmentIndex}/video`;
+    return `${this.baseUrl}/jobs/${jobId}/segments/${segmentIndex}/video`;
   }
 
   async submitSegmentPrompt(jobId, segmentIndex, prompt, loras = [], autoFinalize = false, faceswapOptions = null, fadeToBlack = false, customStartImage = null) {
@@ -345,11 +367,11 @@ class APIClient {
   }
 
   getRepoImage(path) {
-    return `${API_BASE_URL}/image-repo/image?path=${encodeURIComponent(path)}`;
+    return `${this.baseUrl}/image-repo/image?path=${encodeURIComponent(path)}`;
   }
 
   getRepoThumbnail(path, size = 150) {
-    return `${API_BASE_URL}/image-repo/thumbnail?path=${encodeURIComponent(path)}&size=${size}`;
+    return `${this.baseUrl}/image-repo/thumbnail?path=${encodeURIComponent(path)}&size=${size}`;
   }
 
   async selectImageFromRepo(imagePath) {
@@ -435,7 +457,7 @@ class APIClient {
   // ============== ComfyUI View Proxy ==============
 
   getComfyUIImage(filename, subfolder = '', type = 'input') {
-    return `${API_BASE_URL}/comfyui/view?filename=${encodeURIComponent(filename)}&subfolder=${subfolder}&type=${type}`;
+    return `${this.baseUrl}/comfyui/view?filename=${encodeURIComponent(filename)}&subfolder=${subfolder}&type=${type}`;
   }
 
   // ============== LoRA Library ==============
@@ -483,7 +505,7 @@ class APIClient {
   }
 
   getLoraPreviewUrl(loraId) {
-    return `${API_BASE_URL}/loras/${loraId}/preview`;
+    return `${this.baseUrl}/loras/${loraId}/preview`;
   }
 
   async getHiddenLoras() {
@@ -519,7 +541,7 @@ class APIClient {
   }
 
   getUpscaledVideoUrl(filename) {
-    return `${API_BASE_URL}/upscaled-videos/${encodeURIComponent(filename)}/download`;
+    return `${this.baseUrl}/upscaled-videos/${encodeURIComponent(filename)}/download`;
   }
 }
 
