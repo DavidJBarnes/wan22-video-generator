@@ -2573,6 +2573,15 @@ async def generate_vr_image(
     return {"vr_id": vr_id, "status": "pending"}
 
 
+@router.get("/vr/for-image")
+async def get_vr_images_for_image(image_path: str):
+    """Get all VR images generated from a source image."""
+    from database import get_vr_images_for_source
+
+    vr_images = get_vr_images_for_source(image_path)
+    return {"vr_images": vr_images}
+
+
 @router.get("/vr/{vr_id}")
 async def get_vr_image_status(vr_id: int):
     """Get the status of a VR image generation."""
@@ -2583,15 +2592,6 @@ async def get_vr_image_status(vr_id: int):
         raise HTTPException(status_code=404, detail="VR image not found")
 
     return vr_image
-
-
-@router.get("/vr/for-image")
-async def get_vr_images_for_image(image_path: str):
-    """Get all VR images generated from a source image."""
-    from database import get_vr_images_for_source
-
-    vr_images = get_vr_images_for_source(image_path)
-    return {"vr_images": vr_images}
 
 
 @router.get("/vr/{vr_id}/download")
