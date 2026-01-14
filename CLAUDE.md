@@ -8,22 +8,24 @@ A local web application for generating long-form videos using the Wan2.2 image-t
 
 ### Environment Variables (STRICT - NO FALLBACKS)
 
-The `DATABASE_PATH` environment variable is **required**. The API will refuse to start if:
-- `DATABASE_PATH` is not set, OR
-- The database file does not exist at the specified path
+The following environment variables are **required**. The API will refuse to start if any are missing or point to non-existent paths:
+
+| Variable | Path on 2070.zero | Validated in |
+|----------|-------------------|--------------|
+| `DATABASE_PATH` | `/home/david/projects/wan22-data/database/queue.db` | `database.py` |
+| `JOB_OUTPUT_PATH` | `/home/david/projects/wan22-data/output` | `video_utils.py` |
 
 There are **no default fallbacks**. This is intentional to prevent silent misconfiguration.
 
-On 2070.zero, `DATABASE_PATH` is set to: `/home/david/projects/wan22-data/database/queue.db`
-
 ### Start Scripts
 
-`start-api.sh` sets `DATABASE_PATH` explicitly:
+`start-api.sh` sets environment variables explicitly:
 ```bash
 export DATABASE_PATH="${DATABASE_PATH:-/home/david/projects/wan22-data/database/queue.db}"
+export JOB_OUTPUT_PATH="${JOB_OUTPUT_PATH:-/home/david/projects/wan22-data/output}"
 ```
 
-**NEVER add fallback defaults to `database.py`** - the strict validation prevents the app from silently using the wrong database.
+**NEVER add fallback defaults to `database.py` or `video_utils.py`** - the strict validation prevents the app from silently using wrong paths.
 
 ## Tech Stack
 

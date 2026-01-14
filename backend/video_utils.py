@@ -1,6 +1,7 @@
 """Video utilities for frame extraction and video stitching."""
 
 import os
+import sys
 import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -8,11 +9,18 @@ from pathlib import Path
 from typing import Optional, List
 import httpx
 
-# Output directory for downloaded videos and extracted frames
-# JOB_OUTPUT_PATH can be overridden via environment variable
-BACKEND_DIR = Path(__file__).resolve().parent
-OUTPUT_DIR = Path(os.environ.get("JOB_OUTPUT_PATH", str(BACKEND_DIR / "output")))
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+# JOB_OUTPUT_PATH must be set via environment variable - no fallback allowed
+JOB_OUTPUT_PATH = os.environ.get("JOB_OUTPUT_PATH")
+
+if not JOB_OUTPUT_PATH:
+    print("FATAL: JOB_OUTPUT_PATH environment variable is not set. Cannot start API.", file=sys.stderr)
+    sys.exit(1)
+
+OUTPUT_DIR = Path(JOB_OUTPUT_PATH)
+
+if not OUTPUT_DIR.exists():
+    print(f"FATAL: Output directory not found at path: {OUTPUT_DIR}. Cannot start API.", file=sys.stderr)
+    sys.exit(1)
 
 print(f"[VideoUtils] Output directory: {OUTPUT_DIR}")
 
