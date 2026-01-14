@@ -40,7 +40,8 @@ export default function Settings() {
       const s = data.settings || data;
       setSettings(s);
 
-      setApiUrl(s.api_url || '');
+      // api_url is client-side only, stored in localStorage via API client
+      setApiUrl(API.getBaseUrl() === '/api' ? '' : API.getBaseUrl());
       setComfyuiUrl(s.comfyui_url || 'http://localhost:8188');
       setImageRepoPath(s.image_repo_path || '');
       setDefaultWidth(parseInt(s.default_width) || 640);
@@ -124,7 +125,6 @@ export default function Settings() {
 
     try {
       const settingsPayload = {
-        api_url: apiUrl,
         comfyui_url: comfyuiUrl || 'http://localhost:8188',
         image_repo_path: imageRepoPath,
         default_width: String(defaultWidth),
@@ -141,7 +141,7 @@ export default function Settings() {
 
       await API.updateSettings(settingsPayload);
 
-      // Update API client with new base URL
+      // Update client-side API URL after successful save
       API.setBaseUrl(apiUrl);
 
       showToast('Settings saved successfully', 'success');
