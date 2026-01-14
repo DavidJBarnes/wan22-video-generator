@@ -1221,6 +1221,91 @@ class QueueManager:
             except Exception as e:
                 print(f"Notification error: {e}")
 
+    def try_recover_failed_segments(self, job_id: int, failed_segments: list) -> list:
+        """Attempt to recover failed segments that may have completed in ComfyUI.
+
+        This is called during retry to check if ComfyUI actually finished
+        processing segments that were marked as failed (e.g., due to timeout).
+
+        Args:
+            job_id: The job ID
+            failed_segments: List of segment dicts with at least 'segment_index' and 'comfyui_prompt_id'
+
+        Returns:
+            List of segment indices that were successfully recovered
+        """
+        recovered = []
+        comfyui_url = get_setting("comfyui_url", "http://localhost:8188")
+
+        try:
+            client = ComfyUIClient(comfyui_url)
+        except Exception as e:
+            logger.warning(f"[Job {job_id}] Could not connect to ComfyUI for recovery check: {e}")
+            return recovered
+
+        for segment in failed_segments:
+            segment_index = segment.get("segment_index")
+            prompt_id = segment.get("comfyui_prompt_id")
+
+            if not prompt_id:
+                logger.debug(f"[Job {job_id}] Segment {segment_index} has no prompt_id, skipping recovery check")
+                continue
+
+            logger.info(f"[Job {job_id}] Checking if segment {segment_index} completed in ComfyUI (prompt_id={prompt_id})")
+            add_job_log(job_id, "INFO", f"Checking ComfyUI for segment {segment_index} recovery",
+                       segment_index=segment_index, details=f"prompt_id={prompt_id}")
+
+            recovery_result = client.check_prompt_completion(prompt_id)
+
+            if recovery_result.get("completed") and recovery_result.get("video_info"):
+                # ComfyUI finished! Try to recover
+                video_info = recovery_result["video_info"]
+                logger.info(f"[Job {job_id}] Segment {segment_index} found completed in ComfyUI: {video_info['filename']}")
+
+                video_url = f"{comfyui_url}/view?filename={video_info['filename']}&subfolder={video_info['subfolder']}&type={video_info['type']}"
+                video_path = get_segment_video_path(job_id, segment_index)
+
+                if download_video_from_comfyui(video_url, video_path):
+                    remux_video(video_path)
+                    frame_path = get_segment_frame_path(job_id, segment_index, "last")
+
+                    if extract_last_frame(video_path, frame_path):
+                        with open(frame_path, "rb") as f:
+                            frame_data = f.read()
+
+                        uploaded_filename = client.upload_image(frame_data, f"job_{job_id}_seg_{segment_index}_last.jpg")
+
+                        if uploaded_filename:
+                            end_frame_url = f"{comfyui_url}/view?filename={uploaded_filename}&subfolder=&type=input"
+                            completion_data = recovery_result.get("data", {})
+                            exec_time = client.extract_execution_time_from_data(completion_data)
+
+                            update_segment_status(
+                                job_id, segment_index, "completed",
+                                video_path=video_path,
+                                end_frame_url=end_frame_url,
+                                execution_time=exec_time
+                            )
+                            update_segment_start_image(job_id, segment_index + 1, end_frame_url)
+
+                            exec_time_str = f"{exec_time:.1f}s" if exec_time else "unknown"
+                            logger.info(f"[Job {job_id}] Segment {segment_index} RECOVERED from ComfyUI")
+                            add_job_log(job_id, "INFO", f"Segment {segment_index} recovered during retry",
+                                       segment_index=segment_index, details=f"execution_time={exec_time_str}")
+                            recovered.append(segment_index)
+                            continue
+
+                # Recovery failed
+                logger.warning(f"[Job {job_id}] Segment {segment_index} found in ComfyUI but recovery processing failed")
+                add_job_log(job_id, "WARN", f"Segment {segment_index} recovery failed during processing",
+                           segment_index=segment_index)
+
+            elif recovery_result.get("error"):
+                logger.info(f"[Job {job_id}] Segment {segment_index} had ComfyUI error: {recovery_result['error']}")
+
+        client.close()
+        return recovered
+
 
 # Global queue manager instance
 queue_manager = QueueManager()
