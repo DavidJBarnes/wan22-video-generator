@@ -10,7 +10,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import API from '../api/client';
 import { useLoras } from '../contexts/LoraContext';
-import { formatDate, formatTime, showToast } from '../utils/helpers';
+import { formatDate, formatTime as formatTimeOfDay, showToast } from '../utils/helpers';
 import SubmitPromptModal from '../components/SubmitPromptModal';
 import CreateJobModal from '../components/CreateJobModal';
 import EditJobModal from '../components/EditJobModal';
@@ -953,7 +953,7 @@ export default function JobDetail() {
                   color: '#666'
                 }}>
                   <span title={seg.created_at ? formatDate(seg.created_at) : ''}>
-                    {formatTime(seg.created_at)}
+                    {formatTimeOfDay(seg.created_at)}
                   </span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     {seg.status === 'running' ? (
@@ -965,7 +965,7 @@ export default function JobDetail() {
                     )}
                   </span>
                   <span title={seg.completed_at ? formatDate(seg.completed_at) : ''}>
-                    {formatTime(seg.completed_at)}
+                    {formatTimeOfDay(seg.completed_at)}
                   </span>
                 </div>
 
