@@ -29,6 +29,10 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
   const [generatingVR, setGeneratingVR] = useState(false);
   const [vrImages, setVrImages] = useState([]);
   const [loadingVRImages, setLoadingVRImages] = useState(false);
+  const [vrSettings, setVrSettings] = useState({
+    eyeSeparation: 0.03,
+    depthStrength: 1.0
+  });
 
   // Lock scroll on .main-content when modal is open
   useEffect(() => {
@@ -107,6 +111,23 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
     }
     loadVRImages();
   }, [image.path]);
+
+  // Load VR settings once
+  useEffect(() => {
+    async function loadVRSettings() {
+      try {
+        const data = await API.getSettings();
+        const s = data.settings || data;
+        setVrSettings({
+          eyeSeparation: parseFloat(s.vr_eye_separation) || 0.03,
+          depthStrength: parseFloat(s.vr_depth_strength) || 1.0
+        });
+      } catch (error) {
+        console.error('Failed to load VR settings:', error);
+      }
+    }
+    loadVRSettings();
+  }, []);
 
   async function handleAddTag(tagName) {
     if (!tagName) return;
@@ -225,7 +246,11 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
     showToast('Starting VR image generation...', 'info');
 
     try {
-      const result = await API.generateVRImage(image.path);
+      const result = await API.generateVRImage(
+        image.path,
+        vrSettings.eyeSeparation,
+        vrSettings.depthStrength
+      );
       const vrId = result.vr_id;
 
       // Poll for completion
