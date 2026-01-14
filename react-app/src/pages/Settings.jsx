@@ -29,6 +29,13 @@ export default function Settings() {
   const [newDescription, setNewDescription] = useState('');
   const [promptIdentity, setPromptIdentity] = useState('');
   const [slideshowDelay, setSlideshowDelay] = useState(5);
+
+  // VR 180 stereo settings
+  const [vrEyeSeparation, setVrEyeSeparation] = useState(0.03);
+  const [vrDepthStrength, setVrDepthStrength] = useState(1.0);
+  const [vrOutputWidth, setVrOutputWidth] = useState(4128);
+  const [vrOutputHeight, setVrOutputHeight] = useState(2208);
+
   useEffect(() => {
     loadSettings();
     loadHiddenLoras();
@@ -63,6 +70,12 @@ export default function Settings() {
 
       setPromptIdentity(s.prompt_identity || '');
       setSlideshowDelay(parseInt(s.slideshow_delay) || 5);
+
+      // VR settings
+      setVrEyeSeparation(parseFloat(s.vr_eye_separation) || 0.03);
+      setVrDepthStrength(parseFloat(s.vr_depth_strength) || 1.0);
+      setVrOutputWidth(parseInt(s.vr_output_width) || 4128);
+      setVrOutputHeight(parseInt(s.vr_output_height) || 2208);
 
       setLoading(false);
     } catch (error) {
@@ -136,7 +149,12 @@ export default function Settings() {
         job_name_prefixes: JSON.stringify(namePrefixes),
         job_name_descriptions: JSON.stringify(nameDescriptions),
         prompt_identity: promptIdentity,
-        slideshow_delay: String(slideshowDelay)
+        slideshow_delay: String(slideshowDelay),
+        // VR settings
+        vr_eye_separation: String(vrEyeSeparation),
+        vr_depth_strength: String(vrDepthStrength),
+        vr_output_width: String(vrOutputWidth),
+        vr_output_height: String(vrOutputHeight)
       };
 
       await API.updateSettings(settingsPayload);
@@ -505,6 +523,73 @@ export default function Settings() {
             <small style={{ color: '#666', fontSize: '12px' }}>
               This text is automatically prepended to all prompts (job creation and segment prompts)
             </small>
+          </div>
+        </div>
+
+        {/* VR 180 Stereo Settings */}
+        <div className="card settings-section">
+          <h2>VR 180 Stereo</h2>
+          <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
+            Settings for generating VR 180° stereoscopic images using MiDaS depth estimation.
+            Optimized for Meta Quest 3S.
+          </p>
+          <div className="settings-grid">
+            <div className="form-group">
+              <label>Eye Separation</label>
+              <input
+                type="number"
+                value={vrEyeSeparation}
+                onChange={(e) => setVrEyeSeparation(parseFloat(e.target.value) || 0.03)}
+                min="0.01"
+                max="0.1"
+                step="0.005"
+              />
+              <small style={{ color: '#666', fontSize: '12px' }}>
+                Horizontal displacement factor (0.01-0.1). Higher = more 3D depth.
+              </small>
+            </div>
+            <div className="form-group">
+              <label>Depth Strength</label>
+              <input
+                type="number"
+                value={vrDepthStrength}
+                onChange={(e) => setVrDepthStrength(parseFloat(e.target.value) || 1.0)}
+                min="0.1"
+                max="3.0"
+                step="0.1"
+              />
+              <small style={{ color: '#666', fontSize: '12px' }}>
+                Multiplier for depth-based displacement (0.1-3.0).
+              </small>
+            </div>
+            <div className="form-group">
+              <label>Output Width</label>
+              <input
+                type="number"
+                value={vrOutputWidth}
+                onChange={(e) => setVrOutputWidth(parseInt(e.target.value) || 4128)}
+                min="1920"
+                max="8192"
+                step="8"
+              />
+              <small style={{ color: '#666', fontSize: '12px' }}>
+                Width of each eye view (total width = 2x). Default 4128 for Quest 3S.
+              </small>
+            </div>
+            <div className="form-group">
+              <label>Output Height</label>
+              <input
+                type="number"
+                value={vrOutputHeight}
+                onChange={(e) => setVrOutputHeight(parseInt(e.target.value) || 2208)}
+                min="1080"
+                max="4096"
+                step="8"
+              />
+              <small style={{ color: '#666', fontSize: '12px' }}>
+                Height of output image. Default 2208 for Quest 3S.
+              </small>
+            </div>
           </div>
         </div>
         </div>

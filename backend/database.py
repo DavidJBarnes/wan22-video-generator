@@ -553,7 +553,12 @@ def init_db():
             "default_width": "640",
             "default_height": "640",
             "auto_start_queue": "true",
-            "image_repo_path": ""
+            "image_repo_path": "",
+            # VR 180 stereo image generation settings
+            "vr_eye_separation": "0.03",
+            "vr_depth_strength": "1.0",
+            "vr_output_width": "4128",
+            "vr_output_height": "2208"
         }
 
         for key, value in default_settings.items():
