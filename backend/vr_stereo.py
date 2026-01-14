@@ -47,6 +47,41 @@ def _load_midas():
     return _midas_model, _midas_transform, _device
 
 
+def unload_midas_model():
+    """Unload MiDaS model from GPU memory to free VRAM.
+
+    This should be called after VR generation is complete to release
+    GPU memory for other tasks (like video generation).
+    """
+    global _midas_model, _midas_transform, _device
+
+    if _midas_model is None:
+        return
+
+    import torch
+    import gc
+
+    print("[VRStereo] Unloading MiDaS model...")
+
+    # Move model to CPU first (releases GPU memory)
+    _midas_model.to("cpu")
+
+    # Clear references
+    _midas_model = None
+    _midas_transform = None
+    _device = None
+
+    # Force garbage collection
+    gc.collect()
+
+    # Clear CUDA cache if available
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+
+    print("[VRStereo] MiDaS model unloaded, GPU memory freed")
+
+
 def estimate_depth(image_path: str) -> np.ndarray:
     """Estimate depth map from an image using MiDaS.
 
@@ -164,6 +199,10 @@ def generate_stereo_pair(
         import traceback
         traceback.print_exc()
         return False, str(e)
+
+    finally:
+        # Always unload the model to free GPU memory
+        unload_midas_model()
 
 
 def get_vr_output_path(source_image: str, vr_id: int) -> str:
