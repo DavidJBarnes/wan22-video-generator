@@ -12,6 +12,16 @@ export function formatDate(dateString) {
   }
 }
 
+export function formatTime(isoString) {
+  if (!isoString) return '--';
+  try {
+    const date = new Date(isoString);
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  } catch {
+    return '--';
+  }
+}
+
 export function getChipClass(status) {
   const statusMap = {
     pending: 'chip-pending',

@@ -10,7 +10,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import API from '../api/client';
 import { useLoras } from '../contexts/LoraContext';
-import { formatDate, showToast } from '../utils/helpers';
+import { formatDate, formatTime, showToast } from '../utils/helpers';
 import SubmitPromptModal from '../components/SubmitPromptModal';
 import CreateJobModal from '../components/CreateJobModal';
 import EditJobModal from '../components/EditJobModal';
@@ -492,10 +492,11 @@ export default function JobDetail() {
 
   // Format time as mm:ss or hh:mm:ss
   function formatExecutionTime(seconds) {
-    if (!seconds || seconds <= 0) return null;
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = Math.round(seconds % 60);
+    const num = parseFloat(seconds);
+    if (!Number.isFinite(num) || num <= 0) return null;
+    const hrs = Math.floor(num / 3600);
+    const mins = Math.floor((num % 3600) / 60);
+    const secs = Math.round(num % 60);
     if (hrs > 0) {
       return `${hrs}h ${mins}m ${secs}s`;
     } else if (mins > 0) {
@@ -898,12 +899,6 @@ export default function JobDetail() {
                     <strong style={isDeleted ? { textDecoration: 'line-through', color: '#999' } : {}}>
                       Segment {displayNumber}
                     </strong>
-                    {seg.status === 'running' && <CircularProgress size={16} sx={{ ml: 1 }} />}
-                    {(seg.completed_at || seg.execution_time) && (
-                      <span style={{ marginLeft: '8px', color: '#666', fontSize: '12px' }}>
-                        ({seg.completed_at ? formatDate(seg.completed_at) : ''}{seg.completed_at && seg.execution_time ? ' | ' : ''}{seg.execution_time ? formatExecutionTime(seg.execution_time) : ''})
-                      </span>
-                    )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <StatusChip status={isDeleted ? 'deleted' : seg.status} />
@@ -944,6 +939,34 @@ export default function JobDetail() {
                       </Button>
                     )}
                   </div>
+                </div>
+
+                {/* Timestamp Row */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '6px 12px',
+                  backgroundColor: '#fafafa',
+                  borderBottom: '1px solid #eee',
+                  fontSize: '12px',
+                  color: '#666'
+                }}>
+                  <span title={seg.created_at ? formatDate(seg.created_at) : ''}>
+                    {formatTime(seg.created_at)}
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {seg.status === 'running' ? (
+                      <CircularProgress size={12} />
+                    ) : seg.execution_time ? (
+                      formatExecutionTime(seg.execution_time)
+                    ) : (
+                      '--'
+                    )}
+                  </span>
+                  <span title={seg.completed_at ? formatDate(seg.completed_at) : ''}>
+                    {formatTime(seg.completed_at)}
+                  </span>
                 </div>
 
               <div className="segment-content">
