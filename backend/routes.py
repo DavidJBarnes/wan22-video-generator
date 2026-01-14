@@ -2537,7 +2537,7 @@ async def generate_vr_image(
     vr_id = create_vr_image(image_path, eye_separation, depth_strength)
 
     # Get full path to source image
-    source_path = get_image_repo_path()
+    source_path = get_setting("image_repo_path", "")
     if not source_path:
         update_vr_image_status(vr_id, "failed", error_message="Image repository not configured")
         raise HTTPException(status_code=400, detail="Image repository not configured")
