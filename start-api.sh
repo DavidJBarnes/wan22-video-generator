@@ -12,10 +12,8 @@ elif [ -d ".venv" ]; then
     source .venv/bin/activate
 fi
 
-# Load user environment (for DATABASE_PATH, etc.)
-[ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"
-
 # Environment variables
+export DATABASE_PATH="${DATABASE_PATH:-/home/david/projects/wan22-data/database/queue.db}"
 export UPSCALE_SAVE_PATH="${UPSCALE_SAVE_PATH:-/home/david/projects/wan22-data/upscaled_videos}"
 
 # Start uvicorn
