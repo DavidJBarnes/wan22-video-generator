@@ -727,7 +727,11 @@ async def move_job_to_bottom_endpoint(job_id: int):
 
 @router.post("/jobs/{job_id}/retry")
 async def retry_job(job_id: int):
-    """Retry a failed job by resetting incomplete segments while preserving completed ones."""
+    """Retry a failed job by resetting incomplete segments while preserving completed ones.
+
+    Before resetting, attempts to recover any failed segments that may have
+    actually completed in ComfyUI (e.g., due to timeout during polling).
+    """
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -738,7 +742,18 @@ async def retry_job(job_id: int):
     # Get existing segments
     existing_segments = db_get_job_segments(job_id)
 
-    # Reset non-completed segments to pending (preserves completed segments)
+    # Find failed segments that have a comfyui_prompt_id (candidates for recovery)
+    failed_segments = [
+        s for s in existing_segments
+        if s.get("status") == "failed" and s.get("comfyui_prompt_id")
+    ]
+
+    # Attempt to recover failed segments from ComfyUI
+    recovered_indices = []
+    if failed_segments:
+        recovered_indices = queue_manager.try_recover_failed_segments(job_id, failed_segments)
+
+    # Reset non-completed segments to pending (preserves completed segments, including recovered ones)
     # This allows the job to pick up where it left off
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -754,7 +769,11 @@ async def retry_job(job_id: int):
     # Move job to bottom of queue (retried jobs shouldn't jump ahead)
     move_job_to_bottom(job_id)
 
-    return {"status": "pending", "id": job_id}
+    return {
+        "status": "pending",
+        "id": job_id,
+        "recovered_segments": recovered_indices
+    }
 
 
 @router.post("/jobs/{job_id}/finalize")

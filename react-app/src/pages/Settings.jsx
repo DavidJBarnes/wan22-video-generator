@@ -40,7 +40,8 @@ export default function Settings() {
       const s = data.settings || data;
       setSettings(s);
 
-      setApiUrl(s.api_url || '');
+      // api_url is client-side only, stored in localStorage via API client
+      setApiUrl(API.getBaseUrl() === '/api' ? '' : API.getBaseUrl());
       setComfyuiUrl(s.comfyui_url || 'http://localhost:8188');
       setImageRepoPath(s.image_repo_path || '');
       setDefaultWidth(parseInt(s.default_width) || 640);
@@ -124,7 +125,6 @@ export default function Settings() {
 
     try {
       const settingsPayload = {
-        api_url: apiUrl,
         comfyui_url: comfyuiUrl || 'http://localhost:8188',
         image_repo_path: imageRepoPath,
         default_width: String(defaultWidth),
@@ -141,7 +141,7 @@ export default function Settings() {
 
       await API.updateSettings(settingsPayload);
 
-      // Update API client with new base URL
+      // Update client-side API URL after successful save
       API.setBaseUrl(apiUrl);
 
       showToast('Settings saved successfully', 'success');
@@ -249,14 +249,27 @@ export default function Settings() {
           <h2>API Configuration</h2>
           <div className="form-group">
             <label>API URL</label>
-            <input
-              type="text"
-              value={apiUrl}
-              onChange={(e) => setApiUrl(e.target.value)}
-              placeholder="Leave empty for default (relative URL)"
-            />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="text"
+                value={apiUrl}
+                onChange={(e) => setApiUrl(e.target.value)}
+                placeholder="Leave empty for default (relative URL)"
+                style={{ flex: 1 }}
+              />
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => {
+                  API.setBaseUrl(apiUrl);
+                  window.location.reload();
+                }}
+              >
+                Apply & Reload
+              </Button>
+            </div>
             <small style={{ color: '#666', fontSize: '12px' }}>
-              Backend API URL. Leave empty to use the default relative URL (/api). Only set this if the API is hosted on a different server.
+              Backend API URL (e.g., http://2070.zero:9090/api). Click "Apply & Reload" to save and refresh.
             </small>
           </div>
         </div>
