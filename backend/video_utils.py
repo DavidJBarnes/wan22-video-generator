@@ -449,7 +449,7 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
         # Higher quality for final exports (slower encoding)
         vp9_params = [
             "-c:v", "libvpx-vp9",
-            "-crf", "24",  # Better quality (lower = better)
+            "-crf", "18",  # Better quality (lower = better)
             "-b:v", "0",  # Variable bitrate
             "-pix_fmt", "yuv420p",
             "-deadline", "good",  # Better quality than realtime
