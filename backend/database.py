@@ -558,7 +558,8 @@ def init_db():
             "vr_eye_separation": "0.03",
             "vr_depth_strength": "1.0",
             "vr_output_width": "4128",
-            "vr_output_height": "2208"
+            "vr_output_height": "2208",
+            "vr_equirectangular": "true"
         }
 
         for key, value in default_settings.items():
