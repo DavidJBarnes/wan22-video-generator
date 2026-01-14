@@ -25,6 +25,11 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
   const [imageTags, setImageTags] = useState([]);
   const [loadingTags, setLoadingTags] = useState(false);
 
+  // VR image state
+  const [generatingVR, setGeneratingVR] = useState(false);
+  const [vrImages, setVrImages] = useState([]);
+  const [loadingVRImages, setLoadingVRImages] = useState(false);
+
   // Lock scroll on .main-content when modal is open
   useEffect(() => {
     const mainContent = document.querySelector('.main-content');
@@ -85,6 +90,22 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
       setLoadingTags(false);
     }
     loadImageTags();
+  }, [image.path]);
+
+  // Load VR images when image changes
+  useEffect(() => {
+    async function loadVRImages() {
+      setLoadingVRImages(true);
+      try {
+        const data = await API.getVRImagesForImage(image.path);
+        setVrImages(data.vr_images || []);
+      } catch (error) {
+        console.error('Failed to load VR images:', error);
+        setVrImages([]);
+      }
+      setLoadingVRImages(false);
+    }
+    loadVRImages();
   }, [image.path]);
 
   async function handleAddTag(tagName) {
@@ -197,6 +218,58 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
       console.error('Failed to set rating:', error);
       showToast('Failed to save rating', 'error');
     }
+  }
+
+  async function handleGenerateVR() {
+    setGeneratingVR(true);
+    showToast('Starting VR image generation...', 'info');
+
+    try {
+      const result = await API.generateVRImage(image.path);
+      const vrId = result.vr_id;
+
+      // Poll for completion
+      const pollInterval = setInterval(async () => {
+        try {
+          const status = await API.getVRImageStatus(vrId);
+          if (status.status === 'completed') {
+            clearInterval(pollInterval);
+            setGeneratingVR(false);
+            showToast('VR image generated successfully!', 'success');
+            // Refresh VR images list
+            const data = await API.getVRImagesForImage(image.path);
+            setVrImages(data.vr_images || []);
+          } else if (status.status === 'failed') {
+            clearInterval(pollInterval);
+            setGeneratingVR(false);
+            showToast(`VR generation failed: ${status.error_message}`, 'error');
+          }
+        } catch (error) {
+          clearInterval(pollInterval);
+          setGeneratingVR(false);
+          showToast('Failed to check VR generation status', 'error');
+        }
+      }, 2000);
+
+      // Timeout after 5 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        if (generatingVR) {
+          setGeneratingVR(false);
+          showToast('VR generation timed out', 'error');
+        }
+      }, 300000);
+
+    } catch (error) {
+      console.error('Failed to generate VR image:', error);
+      showToast(error.message || 'Failed to start VR generation', 'error');
+      setGeneratingVR(false);
+    }
+  }
+
+  function handleOpenVRImage(vrId) {
+    const url = API.getVRImageUrl(vrId);
+    window.open(url, '_blank');
   }
 
   // Zoom-on-hover handlers
@@ -405,13 +478,56 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
               )}
             </div>
 
+            {/* VR Images */}
+            <div style={{ marginBottom: '16px' }}>
+              <Typography variant="subtitle2" sx={{ fontSize: '12px', color: '#666', mb: 1 }}>
+                VR Images
+              </Typography>
+              {loadingVRImages ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+                  <CircularProgress size={20} />
+                </Box>
+              ) : vrImages.length === 0 ? (
+                <Typography variant="body2" sx={{ color: '#999', fontStyle: 'italic', fontSize: '13px' }}>
+                  No VR images generated
+                </Typography>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '80px', overflowY: 'auto' }}>
+                  {vrImages.filter(vr => vr.status === 'completed').map(vr => (
+                    <Button
+                      key={vr.id}
+                      size="small"
+                      variant="text"
+                      onClick={() => handleOpenVRImage(vr.id)}
+                      sx={{
+                        justifyContent: 'flex-start',
+                        textTransform: 'none',
+                        fontSize: '12px',
+                        padding: '4px 8px'
+                      }}
+                    >
+                      VR #{vr.id} - {new Date(vr.created_at).toLocaleDateString()}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Action Buttons */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <Button
+                variant="outlined"
+                fullWidth
+                onClick={handleGenerateVR}
+                disabled={deleting || creatingJob || generatingVR}
+              >
+                {generatingVR ? <CircularProgress size={20} color="inherit" /> : 'Generate VR Image'}
+              </Button>
               <Button
                 variant="contained"
                 fullWidth
                 onClick={handleCreateJob}
-                disabled={deleting || creatingJob}
+                disabled={deleting || creatingJob || generatingVR}
               >
                 {creatingJob ? <CircularProgress size={20} color="inherit" /> : 'New Job'}
               </Button>
@@ -420,7 +536,7 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
                 color="error"
                 fullWidth
                 onClick={handleDelete}
-                disabled={deleting || creatingJob}
+                disabled={deleting || creatingJob || generatingVR}
               >
                 {deleting ? 'Deleting...' : 'Delete Image'}
               </Button>

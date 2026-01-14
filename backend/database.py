@@ -497,6 +497,26 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_upscaled_videos_job_id ON upscaled_videos(job_id)
         """)
 
+        # VR 180 stereo images table - tracks generated VR images
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS vr_images (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_image_path TEXT NOT NULL,
+                output_path TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                error_message TEXT,
+                eye_separation REAL DEFAULT 0.03,
+                depth_strength REAL DEFAULT 1.0,
+                created_at TEXT NOT NULL,
+                completed_at TEXT
+            )
+        """)
+
+        # Index for fast lookup by source image
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_vr_images_source ON vr_images(source_image_path)
+        """)
+
         # Migrate from old schema if needed and always drop old tables
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='image_tag_associations'")
         if cursor.fetchone():
@@ -2335,4 +2355,104 @@ def delete_upscaled_video_by_filename(filename: str) -> bool:
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM upscaled_videos WHERE filename = ?", (filename,))
+        return cursor.rowcount > 0
+
+
+# ============== VR Images Functions ==============
+
+def create_vr_image(
+    source_image_path: str,
+    eye_separation: float = 0.03,
+    depth_strength: float = 1.0
+) -> int:
+    """Create a new VR image generation record.
+
+    Args:
+        source_image_path: Path to the source image
+        eye_separation: Horizontal displacement factor
+        depth_strength: Multiplier for depth-based displacement
+
+    Returns:
+        The ID of the created record
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO vr_images (source_image_path, status, eye_separation, depth_strength, created_at)
+            VALUES (?, 'pending', ?, ?, ?)
+        """, (source_image_path, eye_separation, depth_strength, utc_now_iso()))
+        return cursor.lastrowid
+
+
+def update_vr_image_status(
+    vr_id: int,
+    status: str,
+    output_path: Optional[str] = None,
+    error_message: Optional[str] = None
+):
+    """Update VR image generation status.
+
+    Args:
+        vr_id: The VR image record ID
+        status: New status ('pending', 'processing', 'completed', 'failed')
+        output_path: Path to the generated stereo image (on completion)
+        error_message: Error message (on failure)
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        if status == 'completed':
+            cursor.execute("""
+                UPDATE vr_images
+                SET status = ?, output_path = ?, completed_at = ?
+                WHERE id = ?
+            """, (status, output_path, utc_now_iso(), vr_id))
+        elif status == 'failed':
+            cursor.execute("""
+                UPDATE vr_images
+                SET status = ?, error_message = ?, completed_at = ?
+                WHERE id = ?
+            """, (status, error_message, utc_now_iso(), vr_id))
+        else:
+            cursor.execute("""
+                UPDATE vr_images SET status = ? WHERE id = ?
+            """, (status, vr_id))
+
+
+def get_vr_image(vr_id: int) -> Optional[Dict[str, Any]]:
+    """Get a VR image record by ID."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM vr_images WHERE id = ?", (vr_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_vr_images_for_source(source_image_path: str) -> List[Dict[str, Any]]:
+    """Get all VR images generated from a source image.
+
+    Args:
+        source_image_path: Path to the source image
+
+    Returns:
+        List of VR image records, ordered by creation date descending
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM vr_images
+            WHERE source_image_path = ?
+            ORDER BY created_at DESC
+        """, (source_image_path,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def delete_vr_image(vr_id: int) -> bool:
+    """Delete a VR image record.
+
+    Note: This only deletes the database record, not the file itself.
+    Returns True if deleted, False if not found.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM vr_images WHERE id = ?", (vr_id,))
         return cursor.rowcount > 0

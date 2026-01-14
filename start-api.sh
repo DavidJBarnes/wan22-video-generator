@@ -20,6 +20,7 @@ export JOB_OUTPUT_PATH="${JOB_OUTPUT_PATH:-/home/david/projects/wan22-data/job_o
 export UPSCALE_SAVE_PATH="${UPSCALE_SAVE_PATH:-/home/david/projects/wan22-data/upscaled_videos}"
 export LORA_PREVIEW_PATH="${LORA_PREVIEW_PATH:-/home/david/projects/wan22-data/lora_previews}"
 export THUMBNAIL_CACHE_PATH="${THUMBNAIL_CACHE_PATH:-/home/david/projects/wan22-data/thumbnail_cache}"
+export VR_OUTPUT_PATH="${VR_OUTPUT_PATH:-/home/david/projects/wan22-data/vr_images}"
 
 # Log the paths being used (helpful for debugging)
 echo "=== Wan2.2 Video Generator API ==="
@@ -28,6 +29,7 @@ echo "JOB_OUTPUT_PATH:     $JOB_OUTPUT_PATH"
 echo "UPSCALE_SAVE_PATH:   $UPSCALE_SAVE_PATH"
 echo "LORA_PREVIEW_PATH:   $LORA_PREVIEW_PATH"
 echo "THUMBNAIL_CACHE_PATH: $THUMBNAIL_CACHE_PATH"
+echo "VR_OUTPUT_PATH:      $VR_OUTPUT_PATH"
 echo "=================================="
 
 # Verify critical paths exist
@@ -39,6 +41,11 @@ fi
 if [ ! -d "$JOB_OUTPUT_PATH" ]; then
     echo "Creating job output directory: $JOB_OUTPUT_PATH"
     mkdir -p "$JOB_OUTPUT_PATH"
+fi
+
+if [ ! -d "$VR_OUTPUT_PATH" ]; then
+    echo "Creating VR output directory: $VR_OUTPUT_PATH"
+    mkdir -p "$VR_OUTPUT_PATH"
 fi
 
 # Start uvicorn
