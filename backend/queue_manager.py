@@ -994,11 +994,12 @@ class QueueManager:
         print(f"[QueueManager] Finalizing job {job_id} - stitching {len(completed_segments)} segment(s) (deleted segments excluded)")
 
         # Collect all segment video paths and metadata for fade effects
+        # Use the video_path stored in the database (actual location) not regenerated paths
         video_paths = []
         segment_info = []
         for segment in completed_segments:
             segment_index = segment["segment_index"]
-            video_path = get_segment_video_path(job_id, segment_index)
+            video_path = segment.get("video_path")
             if video_path and os.path.exists(video_path):
                 video_paths.append(video_path)
                 # Include segment metadata for fade-to-black effect
