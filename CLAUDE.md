@@ -6,22 +6,24 @@ A local web application for generating long-form videos using the Wan2.2 image-t
 
 **This application runs on 2070.zero (remote GPU box), NOT locally.**
 
-### Environment Variables
+### Environment Variables (STRICT - NO FALLBACKS)
 
-The following environment variables are set in `~/.bashrc` on 2070.zero and MUST be loaded by `start-api.sh`:
+The `DATABASE_PATH` environment variable is **required**. The API will refuse to start if:
+- `DATABASE_PATH` is not set, OR
+- The database file does not exist at the specified path
 
-- `DATABASE_PATH` - Path to the SQLite database file
+There are **no default fallbacks**. This is intentional to prevent silent misconfiguration.
 
-**NEVER remove the `source ~/.bashrc` line from `start-api.sh`.** This loads critical environment variables including the database path. Removing it will cause the app to use a wrong/empty database.
+On 2070.zero, `DATABASE_PATH` is set to: `/home/david/projects/wan22-data/database/queue.db`
 
 ### Start Scripts
 
-`start-api.sh` MUST contain:
+`start-api.sh` sets `DATABASE_PATH` explicitly:
 ```bash
-[ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"
+export DATABASE_PATH="${DATABASE_PATH:-/home/david/projects/wan22-data/database/queue.db}"
 ```
 
-This line loads user environment variables before starting the backend.
+**NEVER add fallback defaults to `database.py`** - the strict validation prevents the app from silently using the wrong database.
 
 ## Tech Stack
 

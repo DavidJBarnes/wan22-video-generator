@@ -10,7 +10,13 @@ import subprocess
 import sqlite3
 from pathlib import Path
 
-DB_PATH = os.environ.get("DB_PATH", "comfyui_queue.db")
+DB_PATH = os.environ.get("DATABASE_PATH")
+if not DB_PATH:
+    print("FATAL: DATABASE_PATH environment variable is not set.")
+    exit(1)
+if not Path(DB_PATH).exists():
+    print(f"FATAL: Database file not found at path: {DB_PATH}")
+    exit(1)
 
 def convert_video(mp4_path: str) -> str | None:
     """Convert an MP4 to WebM, return new path or None on failure."""

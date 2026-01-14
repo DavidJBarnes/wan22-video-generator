@@ -101,12 +101,20 @@ def parse_loras(db_value: Optional[str]) -> List[Dict[str, Any]]:
     # Fall back to treating as single filename (legacy format)
     return [{"file": db_value, "weight": 1.0}]
 
-# Use absolute path to avoid issues with current working directory
-# DATABASE_PATH can be overridden via environment variable
+# DATABASE_PATH must be set via environment variable - no fallback allowed
 import os
+import sys
 from pathlib import Path
-BACKEND_DIR = Path(__file__).resolve().parent
-DATABASE_PATH = os.environ.get("DATABASE_PATH", str(BACKEND_DIR / "comfyui_queue.db"))
+
+DATABASE_PATH = os.environ.get("DATABASE_PATH")
+
+if not DATABASE_PATH:
+    print("FATAL: DATABASE_PATH environment variable is not set. Cannot start API.", file=sys.stderr)
+    sys.exit(1)
+
+if not Path(DATABASE_PATH).exists():
+    print(f"FATAL: Database file not found at path: {DATABASE_PATH}. Cannot start API.", file=sys.stderr)
+    sys.exit(1)
 
 
 @contextmanager
