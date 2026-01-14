@@ -664,6 +664,75 @@ class ComfyUIClient:
 
         return media_urls
 
+    def check_prompt_completion(self, prompt_id: str) -> Dict[str, Any]:
+        """Check if a prompt completed and return completion info.
+
+        This is specifically designed for timeout recovery - it checks
+        ComfyUI's history to see if the job actually finished.
+
+        Returns:
+            Dict with:
+            - completed: bool - True if the prompt finished successfully
+            - data: dict - Full completion data if completed
+            - video_info: dict - Video output info (filename, subfolder, type) if available
+            - error: str - Error message if there was a ComfyUI execution error
+        """
+        result = {
+            "completed": False,
+            "data": None,
+            "video_info": None,
+            "error": None
+        }
+
+        try:
+            response = self.client.get(f"{self.base_url}/history/{prompt_id}", timeout=10.0)
+            if response.status_code != 200:
+                return result
+
+            data = response.json()
+            if prompt_id not in data:
+                return result
+
+            prompt_data = data[prompt_id]
+            result["data"] = prompt_data
+
+            # Check for execution errors
+            status_info = prompt_data.get("status", {})
+            if status_info.get("status_str") == "error":
+                messages = status_info.get("messages", [])
+                for msg in messages:
+                    if isinstance(msg, list) and len(msg) >= 2 and msg[0] == "execution_error":
+                        error_data = msg[1] if isinstance(msg[1], dict) else {}
+                        result["error"] = f"{error_data.get('exception_type', 'Error')}: {error_data.get('exception_message', 'Unknown error')}"
+                        return result
+
+            # Look for video output
+            outputs = prompt_data.get("outputs", {})
+            for node_id, node_output in outputs.items():
+                for media_key in ("videos", "gifs", "images"):
+                    if media_key in node_output and node_output[media_key]:
+                        for media in node_output[media_key]:
+                            filename = media.get("filename", "")
+                            if any(ext in filename.lower() for ext in ['.mp4', '.webm', '.gif']):
+                                result["completed"] = True
+                                result["video_info"] = {
+                                    "filename": filename,
+                                    "subfolder": media.get("subfolder", ""),
+                                    "type": media.get("type", "output")
+                                }
+                                return result
+
+            # If we have outputs but no video, still mark as completed
+            if outputs:
+                result["completed"] = True
+
+        except httpx.ConnectError:
+            pass  # Connection error - can't check
+        except Exception as e:
+            print(f"[ComfyUI] Error checking prompt completion: {e}")
+
+        return result
+
     def close(self):
         """Close the HTTP client."""
         self.client.close()

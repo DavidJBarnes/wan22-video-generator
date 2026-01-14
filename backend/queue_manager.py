@@ -845,8 +845,66 @@ class QueueManager:
             time.sleep(self._status_poll_interval)
             waited += self._status_poll_interval
 
-        # Timeout
+        # Timeout - but first check if ComfyUI actually completed (recovery)
         if waited >= max_wait:
+            logger.warning(f"[Job {job_id}] Segment {segment_index} timeout reached, checking for late completion...")
+            add_job_log(job_id, "WARN", f"Segment {segment_index} timeout - checking recovery",
+                       segment_index=segment_index, details=f"Waited {max_wait}s, checking if ComfyUI completed")
+
+            # Check if ComfyUI actually finished despite the timeout
+            recovery_result = client.check_prompt_completion(prompt_id)
+
+            if recovery_result.get("completed") and recovery_result.get("video_info"):
+                # ComfyUI finished! Recover the segment
+                video_info = recovery_result["video_info"]
+                logger.info(f"[Job {job_id}] RECOVERY: Segment {segment_index} actually completed! Video: {video_info['filename']}")
+                add_job_log(job_id, "INFO", f"Segment {segment_index} recovered after timeout",
+                           segment_index=segment_index, details=f"ComfyUI completed with video: {video_info['filename']}")
+
+                # Build video URL and process
+                video_url = f"{comfyui_url}/view?filename={video_info['filename']}&subfolder={video_info['subfolder']}&type={video_info['type']}"
+
+                # Download and process video (same as normal completion path)
+                video_path = get_segment_video_path(job_id, segment_index)
+                if download_video_from_comfyui(video_url, video_path):
+                    remux_video(video_path)
+                    frame_path = get_segment_frame_path(job_id, segment_index, "last")
+                    if extract_last_frame(video_path, frame_path):
+                        with open(frame_path, "rb") as f:
+                            frame_data = f.read()
+                        uploaded_filename = client.upload_image(frame_data, f"job_{job_id}_seg_{segment_index}_last.jpg")
+                        if uploaded_filename:
+                            end_frame_url = f"{comfyui_url}/view?filename={uploaded_filename}&subfolder=&type=input"
+                            completion_data = recovery_result.get("data", {})
+                            exec_time = client.extract_execution_time_from_data(completion_data)
+                            update_segment_status(
+                                job_id, segment_index, "completed",
+                                video_path=video_path,
+                                end_frame_url=end_frame_url,
+                                execution_time=exec_time
+                            )
+                            update_segment_start_image(job_id, segment_index + 1, end_frame_url)
+                            exec_time_str = f"{exec_time:.1f}s" if exec_time else "unknown"
+                            add_job_log(job_id, "INFO", f"Segment {segment_index} completed (recovered)",
+                                       segment_index=segment_index, details=f"execution_time={exec_time_str}")
+                            progress_tracker.stop_tracking(job_id)
+                            return True
+
+                # Recovery processing failed - fall through to failure
+                logger.error(f"[Job {job_id}] Recovery found completion but failed to process video")
+                add_job_log(job_id, "ERROR", f"Segment {segment_index} recovery failed during processing",
+                           segment_index=segment_index)
+
+            elif recovery_result.get("error"):
+                # ComfyUI had an error
+                error_msg = f"ComfyUI error: {recovery_result['error']}"
+                logger.error(f"[Job {job_id}] Segment {segment_index} failed: {error_msg}")
+                add_job_log(job_id, "ERROR", f"Segment {segment_index} ComfyUI error", segment_index=segment_index, details=error_msg)
+                update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
+                progress_tracker.stop_tracking(job_id)
+                return False
+
+            # Genuine timeout - ComfyUI didn't complete
             error_msg = f"Segment {segment_index} timed out after {max_wait}s waiting for ComfyUI to complete"
             logger.error(f"[Job {job_id}] {error_msg}")
             add_job_log(job_id, "ERROR", f"Segment {segment_index} timed out", segment_index=segment_index,
