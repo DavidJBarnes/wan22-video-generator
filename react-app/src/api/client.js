@@ -543,6 +543,38 @@ class APIClient {
   getUpscaledVideoUrl(filename) {
     return `${this.baseUrl}/upscaled-videos/${encodeURIComponent(filename)}/download`;
   }
+
+  // ============== VR 180 Stereo Images ==============
+
+  async generateVRImage(imagePath, eyeSeparation = 0.03, depthStrength = 1.0) {
+    const formData = new FormData();
+    formData.append('image_path', imagePath);
+    formData.append('eye_separation', eyeSeparation.toString());
+    formData.append('depth_strength', depthStrength.toString());
+
+    return this.request('/vr/generate', {
+      method: 'POST',
+      body: formData
+    });
+  }
+
+  async getVRImageStatus(vrId) {
+    return this.request(`/vr/${vrId}`);
+  }
+
+  async getVRImagesForImage(imagePath) {
+    return this.request(`/vr/for-image?image_path=${encodeURIComponent(imagePath)}`);
+  }
+
+  getVRImageUrl(vrId) {
+    return `${this.baseUrl}/vr/${vrId}/download`;
+  }
+
+  async deleteVRImage(vrId) {
+    return this.request(`/vr/${vrId}`, {
+      method: 'DELETE'
+    });
+  }
 }
 
 export default new APIClient();

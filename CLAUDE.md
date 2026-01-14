@@ -13,7 +13,8 @@ The following environment variables are **required**. The API will refuse to sta
 | Variable | Path on 2070.zero | Validated in |
 |----------|-------------------|--------------|
 | `DATABASE_PATH` | `/home/david/projects/wan22-data/database/queue.db` | `database.py` |
-| `JOB_OUTPUT_PATH` | `/home/david/projects/wan22-data/output` | `video_utils.py` |
+| `JOB_OUTPUT_PATH` | `/home/david/projects/wan22-data/job_output` | `video_utils.py` |
+| `VR_OUTPUT_PATH` | `/home/david/projects/wan22-data/vr_images` | `vr_stereo.py` |
 
 There are **no default fallbacks**. This is intentional to prevent silent misconfiguration.
 
@@ -22,7 +23,8 @@ There are **no default fallbacks**. This is intentional to prevent silent miscon
 `start-api.sh` sets environment variables explicitly:
 ```bash
 export DATABASE_PATH="${DATABASE_PATH:-/home/david/projects/wan22-data/database/queue.db}"
-export JOB_OUTPUT_PATH="${JOB_OUTPUT_PATH:-/home/david/projects/wan22-data/output}"
+export JOB_OUTPUT_PATH="${JOB_OUTPUT_PATH:-/home/david/projects/wan22-data/job_output}"
+export VR_OUTPUT_PATH="${VR_OUTPUT_PATH:-/home/david/projects/wan22-data/vr_images}"
 ```
 
 **NEVER add fallback defaults to `database.py` or `video_utils.py`** - the strict validation prevents the app from silently using wrong paths.

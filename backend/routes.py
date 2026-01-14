@@ -2508,3 +2508,136 @@ async def download_upscaled_video(filename: str):
         filename=filename,
         media_type="video/mp4"
     )
+
+
+# ============== VR 180 Stereo Image Endpoints ==============
+
+VR_OUTPUT_PATH = os.environ.get("VR_OUTPUT_PATH")
+
+
+@router.post("/vr/generate")
+async def generate_vr_image(
+    background_tasks: BackgroundTasks,
+    image_path: str = Form(...),
+    eye_separation: float = Form(0.03),
+    depth_strength: float = Form(1.0)
+):
+    """Start VR 180 stereo image generation for a source image.
+
+    This is an async operation - returns immediately with a VR image ID
+    that can be polled for status.
+    """
+    from database import create_vr_image, update_vr_image_status
+    from vr_stereo import generate_stereo_pair, get_vr_output_path, VR_OUTPUT_PATH as VR_PATH
+
+    if not VR_PATH:
+        raise HTTPException(status_code=400, detail="VR_OUTPUT_PATH not configured")
+
+    # Create database record
+    vr_id = create_vr_image(image_path, eye_separation, depth_strength)
+
+    # Get full path to source image
+    source_path = get_image_repo_path()
+    if not source_path:
+        update_vr_image_status(vr_id, "failed", error_message="Image repository not configured")
+        raise HTTPException(status_code=400, detail="Image repository not configured")
+
+    full_source_path = os.path.join(source_path, image_path)
+    if not os.path.exists(full_source_path):
+        update_vr_image_status(vr_id, "failed", error_message="Source image not found")
+        raise HTTPException(status_code=404, detail="Source image not found")
+
+    # Generate output path
+    output_path = get_vr_output_path(image_path, vr_id)
+
+    # Run generation in background
+    def run_generation():
+        from database import update_vr_image_status
+        try:
+            update_vr_image_status(vr_id, "processing")
+            success, message = generate_stereo_pair(
+                full_source_path,
+                output_path,
+                eye_separation=eye_separation,
+                depth_strength=depth_strength
+            )
+            if success:
+                update_vr_image_status(vr_id, "completed", output_path=output_path)
+            else:
+                update_vr_image_status(vr_id, "failed", error_message=message)
+        except Exception as e:
+            update_vr_image_status(vr_id, "failed", error_message=str(e))
+
+    background_tasks.add_task(run_generation)
+
+    return {"vr_id": vr_id, "status": "pending"}
+
+
+@router.get("/vr/{vr_id}")
+async def get_vr_image_status(vr_id: int):
+    """Get the status of a VR image generation."""
+    from database import get_vr_image
+
+    vr_image = get_vr_image(vr_id)
+    if not vr_image:
+        raise HTTPException(status_code=404, detail="VR image not found")
+
+    return vr_image
+
+
+@router.get("/vr/for-image")
+async def get_vr_images_for_image(image_path: str):
+    """Get all VR images generated from a source image."""
+    from database import get_vr_images_for_source
+
+    vr_images = get_vr_images_for_source(image_path)
+    return {"vr_images": vr_images}
+
+
+@router.get("/vr/{vr_id}/download")
+async def download_vr_image(vr_id: int):
+    """Download a generated VR image."""
+    from database import get_vr_image
+
+    vr_image = get_vr_image(vr_id)
+    if not vr_image:
+        raise HTTPException(status_code=404, detail="VR image not found")
+
+    if vr_image["status"] != "completed":
+        raise HTTPException(status_code=400, detail="VR image not ready")
+
+    output_path = vr_image.get("output_path")
+    if not output_path or not os.path.exists(output_path):
+        raise HTTPException(status_code=404, detail="VR image file not found")
+
+    filename = os.path.basename(output_path)
+    return FileResponse(
+        path=output_path,
+        filename=filename,
+        media_type="image/jpeg"
+    )
+
+
+@router.delete("/vr/{vr_id}")
+async def delete_vr_image_endpoint(vr_id: int):
+    """Delete a VR image record and its file."""
+    from database import get_vr_image, delete_vr_image
+
+    vr_image = get_vr_image(vr_id)
+    if not vr_image:
+        raise HTTPException(status_code=404, detail="VR image not found")
+
+    # Delete the file if it exists
+    file_deleted = False
+    output_path = vr_image.get("output_path")
+    if output_path and os.path.exists(output_path):
+        try:
+            os.remove(output_path)
+            file_deleted = True
+        except Exception as e:
+            print(f"[VR] Failed to delete file {output_path}: {e}")
+
+    # Delete database record
+    delete_vr_image(vr_id)
+
+    return {"deleted": True, "file_deleted": file_deleted}
