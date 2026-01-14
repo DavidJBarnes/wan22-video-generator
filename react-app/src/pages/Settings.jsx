@@ -193,6 +193,7 @@ export default function Settings() {
       <h1>Settings</h1>
 
       <form onSubmit={handleSave}>
+        <div className="settings-container">
         {/* ComfyUI Configuration */}
         <div className="card settings-section">
           <h2>ComfyUI Configuration</h2>
@@ -468,6 +469,7 @@ export default function Settings() {
               This text is automatically prepended to all prompts (job creation and segment prompts)
             </small>
           </div>
+        </div>
         </div>
 
         {/* Save Button */}
