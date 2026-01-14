@@ -2,6 +2,27 @@
 
 A local web application for generating long-form videos using the Wan2.2 image-to-video model via ComfyUI. Since Wan2.2 is limited to ~5-second clips, this app segments longer videos and automatically stitches them together.
 
+## CRITICAL: Runtime Environment
+
+**This application runs on 2070.zero (remote GPU box), NOT locally.**
+
+### Environment Variables
+
+The following environment variables are set in `~/.bashrc` on 2070.zero and MUST be loaded by `start-api.sh`:
+
+- `DATABASE_PATH` - Path to the SQLite database file
+
+**NEVER remove the `source ~/.bashrc` line from `start-api.sh`.** This loads critical environment variables including the database path. Removing it will cause the app to use a wrong/empty database.
+
+### Start Scripts
+
+`start-api.sh` MUST contain:
+```bash
+[ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"
+```
+
+This line loads user environment variables before starting the backend.
+
 ## Tech Stack
 
 - **Backend**: FastAPI (Python 3.11), SQLite database, ffmpeg
