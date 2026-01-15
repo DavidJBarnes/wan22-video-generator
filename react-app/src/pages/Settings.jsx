@@ -30,13 +30,13 @@ export default function Settings() {
   const [promptIdentity, setPromptIdentity] = useState('');
   const [slideshowDelay, setSlideshowDelay] = useState(5);
 
-  // VR 180 stereo settings
-  const [vrEyeSeparation, setVrEyeSeparation] = useState(0.03);
-  const [vrDepthStrength, setVrDepthStrength] = useState(1.0);
+  // VR 180 stereo settings (validated for Quest 3S)
+  const [vrEyeSeparation, setVrEyeSeparation] = useState(0.015);
+  const [vrDepthStrength, setVrDepthStrength] = useState(0.5);
   const [vrOutputWidth, setVrOutputWidth] = useState(4128);
   const [vrOutputHeight, setVrOutputHeight] = useState(2208);
-  const [vrEquirectangular, setVrEquirectangular] = useState(true);
-  const [vrVerticalFov, setVrVerticalFov] = useState(165);
+  const [vrEquirectangular, setVrEquirectangular] = useState(false);
+  const [vrVerticalFov, setVrVerticalFov] = useState(90);
   const [vrDepthSmoothing, setVrDepthSmoothing] = useState(2.0);
   const [vrOutputSharpening, setVrOutputSharpening] = useState(0.3);
 
@@ -75,13 +75,13 @@ export default function Settings() {
       setPromptIdentity(s.prompt_identity || '');
       setSlideshowDelay(parseInt(s.slideshow_delay) || 5);
 
-      // VR settings
-      setVrEyeSeparation(parseFloat(s.vr_eye_separation) || 0.03);
-      setVrDepthStrength(parseFloat(s.vr_depth_strength) || 1.0);
+      // VR settings (validated for Quest 3S)
+      setVrEyeSeparation(parseFloat(s.vr_eye_separation) || 0.015);
+      setVrDepthStrength(parseFloat(s.vr_depth_strength) || 0.5);
       setVrOutputWidth(parseInt(s.vr_output_width) || 4128);
       setVrOutputHeight(parseInt(s.vr_output_height) || 2208);
-      setVrEquirectangular(s.vr_equirectangular !== 'false');
-      setVrVerticalFov(parseInt(s.vr_vertical_fov) || 165);
+      setVrEquirectangular(s.vr_equirectangular === 'true');
+      setVrVerticalFov(parseInt(s.vr_vertical_fov) || 90);
       setVrDepthSmoothing(parseFloat(s.vr_depth_smoothing) || 2.0);
       setVrOutputSharpening(parseFloat(s.vr_output_sharpening) || 0.3);
 
@@ -551,7 +551,7 @@ export default function Settings() {
               <input
                 type="number"
                 value={vrEyeSeparation}
-                onChange={(e) => setVrEyeSeparation(parseFloat(e.target.value) || 0.03)}
+                onChange={(e) => setVrEyeSeparation(parseFloat(e.target.value) || 0.015)}
                 min="0.01"
                 max="0.1"
                 step="0.005"
@@ -565,7 +565,7 @@ export default function Settings() {
               <input
                 type="number"
                 value={vrDepthStrength}
-                onChange={(e) => setVrDepthStrength(parseFloat(e.target.value) || 1.0)}
+                onChange={(e) => setVrDepthStrength(parseFloat(e.target.value) || 0.5)}
                 min="0.1"
                 max="3.0"
                 step="0.1"

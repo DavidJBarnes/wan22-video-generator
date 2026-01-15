@@ -546,7 +546,7 @@ class APIClient {
 
   // ============== VR 180 Stereo Images ==============
 
-  async generateVRImage(imagePath, eyeSeparation = 0.03, depthStrength = 1.0, equirectangular = true, verticalFov = 165, depthSmoothing = 2.0, outputSharpening = 0.3) {
+  async generateVRImage(imagePath, eyeSeparation = 0.015, depthStrength = 0.5, equirectangular = false, verticalFov = 90, depthSmoothing = 2.0, outputSharpening = 0.3, outputWidth = 4128, outputHeight = 2208) {
     const formData = new FormData();
     formData.append('image_path', imagePath);
     formData.append('eye_separation', eyeSeparation.toString());
@@ -555,6 +555,8 @@ class APIClient {
     formData.append('vertical_fov', verticalFov.toString());
     formData.append('depth_smoothing', depthSmoothing.toString());
     formData.append('output_sharpening', outputSharpening.toString());
+    formData.append('output_width', outputWidth.toString());
+    formData.append('output_height', outputHeight.toString());
 
     return this.request('/vr/generate', {
       method: 'POST',
