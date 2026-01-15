@@ -2526,7 +2526,10 @@ async def generate_vr_image(
     depth_smoothing: float = Form(2.0),
     output_sharpening: float = Form(0.3),
     output_width: int = Form(4128),
-    output_height: int = Form(2208)
+    output_height: int = Form(2208),
+    upscale_enabled: bool = Form(True),
+    upscale_factor: int = Form(2),
+    upscale_threshold: int = Form(1500)
 ):
     """Start VR 180 stereo image generation for a source image.
 
@@ -2543,6 +2546,9 @@ async def generate_vr_image(
         output_sharpening: Unsharp mask strength for final output (0 = disabled, default 0.3)
         output_width: Final stereo image width (default 4128 for Quest 3S)
         output_height: Final stereo image height (default 2208 for Quest 3S)
+        upscale_enabled: Enable Real-ESRGAN upscaling for low-res sources (default True)
+        upscale_factor: Upscale factor 2 or 4 (default 2)
+        upscale_threshold: Upscale if source width below this (default 1500)
     """
     from database import create_vr_image, update_vr_image_status
     from vr_stereo import generate_stereo_pair, get_vr_output_path, VR_OUTPUT_PATH as VR_PATH
@@ -2582,7 +2588,10 @@ async def generate_vr_image(
                 depth_smoothing=depth_smoothing,
                 output_sharpening=output_sharpening,
                 output_width=output_width,
-                output_height=output_height
+                output_height=output_height,
+                upscale_enabled=upscale_enabled,
+                upscale_factor=upscale_factor,
+                upscale_threshold=upscale_threshold
             )
             if success:
                 update_vr_image_status(vr_id, "completed", output_path=output_path)
