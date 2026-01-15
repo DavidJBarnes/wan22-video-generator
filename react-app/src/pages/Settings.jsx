@@ -35,6 +35,7 @@ export default function Settings() {
   const [vrDepthStrength, setVrDepthStrength] = useState(1.0);
   const [vrOutputWidth, setVrOutputWidth] = useState(4128);
   const [vrOutputHeight, setVrOutputHeight] = useState(2208);
+  const [vrEquirectangular, setVrEquirectangular] = useState(true);
 
   useEffect(() => {
     loadSettings();
@@ -76,6 +77,7 @@ export default function Settings() {
       setVrDepthStrength(parseFloat(s.vr_depth_strength) || 1.0);
       setVrOutputWidth(parseInt(s.vr_output_width) || 4128);
       setVrOutputHeight(parseInt(s.vr_output_height) || 2208);
+      setVrEquirectangular(s.vr_equirectangular !== 'false');
 
       setLoading(false);
     } catch (error) {
@@ -154,7 +156,8 @@ export default function Settings() {
         vr_eye_separation: String(vrEyeSeparation),
         vr_depth_strength: String(vrDepthStrength),
         vr_output_width: String(vrOutputWidth),
-        vr_output_height: String(vrOutputHeight)
+        vr_output_height: String(vrOutputHeight),
+        vr_equirectangular: String(vrEquirectangular)
       };
 
       await API.updateSettings(settingsPayload);
@@ -590,6 +593,20 @@ export default function Settings() {
                 Height of output image. Default 2208 for Quest 3S.
               </small>
             </div>
+          </div>
+          <div className="form-group" style={{ marginTop: '16px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={vrEquirectangular}
+                onChange={(e) => setVrEquirectangular(e.target.checked)}
+                style={{ width: 'auto', margin: 0 }}
+              />
+              Equirectangular Projection
+            </label>
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+              Apply equirectangular projection for proper VR 180° viewing. Enable for VR headsets (Quest, etc.), disable for flat SBS viewing.
+            </small>
           </div>
         </div>
         </div>

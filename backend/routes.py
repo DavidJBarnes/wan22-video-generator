@@ -2520,12 +2520,19 @@ async def generate_vr_image(
     background_tasks: BackgroundTasks,
     image_path: str = Form(...),
     eye_separation: float = Form(0.03),
-    depth_strength: float = Form(1.0)
+    depth_strength: float = Form(1.0),
+    equirectangular: bool = Form(True)
 ):
     """Start VR 180 stereo image generation for a source image.
 
     This is an async operation - returns immediately with a VR image ID
     that can be polled for status.
+
+    Args:
+        image_path: Path to source image relative to image repository
+        eye_separation: Horizontal displacement factor (0.01-0.1)
+        depth_strength: Multiplier for depth-based displacement (0.1-3.0)
+        equirectangular: Apply equirectangular projection for VR 180 display (default True)
     """
     from database import create_vr_image, update_vr_image_status
     from vr_stereo import generate_stereo_pair, get_vr_output_path, VR_OUTPUT_PATH as VR_PATH
@@ -2559,7 +2566,8 @@ async def generate_vr_image(
                 full_source_path,
                 output_path,
                 eye_separation=eye_separation,
-                depth_strength=depth_strength
+                depth_strength=depth_strength,
+                equirectangular=equirectangular
             )
             if success:
                 update_vr_image_status(vr_id, "completed", output_path=output_path)

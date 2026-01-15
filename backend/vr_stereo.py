@@ -82,6 +82,65 @@ def unload_midas_model():
     print("[VRStereo] MiDaS model unloaded, GPU memory freed")
 
 
+def apply_equirectangular_projection(image: np.ndarray, fov_degrees: float = 180.0) -> np.ndarray:
+    """Apply equirectangular projection to a flat/rectilinear image.
+
+    This pre-warps the image so it displays correctly when mapped to a
+    hemispherical VR display using 180° SBS mode.
+
+    Args:
+        image: Input image (BGR format from OpenCV)
+        fov_degrees: Field of view in degrees (default 180 for VR 180)
+
+    Returns:
+        Equirectangular projected image
+    """
+    import cv2
+
+    height, width = image.shape[:2]
+    fov_rad = np.radians(fov_degrees)
+
+    # Create output coordinate grids
+    # For equirectangular, x maps to longitude (-pi/2 to pi/2 for 180°)
+    # and y maps to latitude (-pi/4 to pi/4 for typical aspect ratio)
+    u = np.linspace(-0.5, 0.5, width).astype(np.float32)
+    v = np.linspace(-0.5, 0.5, height).astype(np.float32)
+    u_grid, v_grid = np.meshgrid(u, v)
+
+    # Convert normalized coordinates to spherical angles
+    # longitude (theta) spans the horizontal FOV
+    # latitude (phi) spans the vertical FOV (adjusted for aspect ratio)
+    theta = u_grid * fov_rad  # -pi/2 to pi/2 for 180°
+    phi = v_grid * fov_rad * (height / width)  # Maintain aspect ratio
+
+    # Convert spherical to 3D Cartesian (on unit sphere)
+    x = np.cos(phi) * np.sin(theta)
+    y = np.sin(phi)
+    z = np.cos(phi) * np.cos(theta)
+
+    # Project back to flat image coordinates (rectilinear projection)
+    # This gives us where to sample from the original image
+    # Using gnomonic (rectilinear) projection formula
+    src_x = x / (z + 1e-10)  # Avoid division by zero
+    src_y = y / (z + 1e-10)
+
+    # Normalize to image coordinates
+    # The source image is assumed to have a certain FOV that we're mapping from
+    # Scale factor based on how much the image should be "zoomed"
+    scale = 0.8  # Adjustable - controls how much of the source is used
+    map_x = ((src_x * scale + 0.5) * width).astype(np.float32)
+    map_y = ((src_y * scale + 0.5) * height).astype(np.float32)
+
+    # Clip to valid range
+    map_x = np.clip(map_x, 0, width - 1)
+    map_y = np.clip(map_y, 0, height - 1)
+
+    # Remap the image
+    result = cv2.remap(image, map_x, map_y, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+
+    return result
+
+
 def estimate_depth(image_path: str) -> np.ndarray:
     """Estimate depth map from an image using MiDaS.
 
@@ -123,7 +182,8 @@ def generate_stereo_pair(
     image_path: str,
     output_path: str,
     eye_separation: float = 0.03,
-    depth_strength: float = 1.0
+    depth_strength: float = 1.0,
+    equirectangular: bool = True
 ) -> Tuple[bool, str]:
     """Generate a VR 180 stereo image from a single image.
 
@@ -132,6 +192,7 @@ def generate_stereo_pair(
         output_path: Path for the output stereo image
         eye_separation: Horizontal displacement factor (default 0.03 = 3% of image width)
         depth_strength: Multiplier for depth-based displacement (default 1.0)
+        equirectangular: Apply equirectangular projection for proper VR 180 display (default True)
 
     Returns:
         Tuple of (success, message)
@@ -184,6 +245,12 @@ def generate_stereo_pair(
             left_eye = cv2.inpaint(left_eye, left_mask, 3, cv2.INPAINT_TELEA)
         if np.any(right_mask):
             right_eye = cv2.inpaint(right_eye, right_mask, 3, cv2.INPAINT_TELEA)
+
+        # Apply equirectangular projection for proper VR 180 display
+        if equirectangular:
+            print("[VRStereo] Applying equirectangular projection...")
+            left_eye = apply_equirectangular_projection(left_eye)
+            right_eye = apply_equirectangular_projection(right_eye)
 
         # Create side-by-side stereo image (left | right)
         stereo = np.hstack([left_eye, right_eye])
