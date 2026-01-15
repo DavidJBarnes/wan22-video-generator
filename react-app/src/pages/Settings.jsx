@@ -37,6 +37,8 @@ export default function Settings() {
   const [vrOutputHeight, setVrOutputHeight] = useState(2208);
   const [vrEquirectangular, setVrEquirectangular] = useState(true);
   const [vrVerticalFov, setVrVerticalFov] = useState(165);
+  const [vrDepthSmoothing, setVrDepthSmoothing] = useState(2.0);
+  const [vrOutputSharpening, setVrOutputSharpening] = useState(0.3);
 
   useEffect(() => {
     loadSettings();
@@ -80,6 +82,8 @@ export default function Settings() {
       setVrOutputHeight(parseInt(s.vr_output_height) || 2208);
       setVrEquirectangular(s.vr_equirectangular !== 'false');
       setVrVerticalFov(parseInt(s.vr_vertical_fov) || 165);
+      setVrDepthSmoothing(parseFloat(s.vr_depth_smoothing) || 2.0);
+      setVrOutputSharpening(parseFloat(s.vr_output_sharpening) || 0.3);
 
       setLoading(false);
     } catch (error) {
@@ -160,7 +164,9 @@ export default function Settings() {
         vr_output_width: String(vrOutputWidth),
         vr_output_height: String(vrOutputHeight),
         vr_equirectangular: String(vrEquirectangular),
-        vr_vertical_fov: String(vrVerticalFov)
+        vr_vertical_fov: String(vrVerticalFov),
+        vr_depth_smoothing: String(vrDepthSmoothing),
+        vr_output_sharpening: String(vrOutputSharpening)
       };
 
       await API.updateSettings(settingsPayload);
@@ -635,6 +641,46 @@ export default function Settings() {
               </small>
             </div>
           )}
+
+          <div className="form-group" style={{ marginTop: '16px' }}>
+            <label>Depth Smoothing: {vrDepthSmoothing}</label>
+            <input
+              type="range"
+              value={vrDepthSmoothing}
+              onChange={(e) => setVrDepthSmoothing(parseFloat(e.target.value))}
+              min="0"
+              max="5"
+              step="0.5"
+              style={{ width: '100%' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#666', fontSize: '11px' }}>
+              <span>0 (off)</span>
+              <span>5 (max blur)</span>
+            </div>
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+              Gaussian blur applied to depth map to smooth harsh stereo transitions. Recommended: 2.0.
+            </small>
+          </div>
+
+          <div className="form-group" style={{ marginTop: '12px' }}>
+            <label>Output Sharpening: {vrOutputSharpening}</label>
+            <input
+              type="range"
+              value={vrOutputSharpening}
+              onChange={(e) => setVrOutputSharpening(parseFloat(e.target.value))}
+              min="0"
+              max="1"
+              step="0.1"
+              style={{ width: '100%' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#666', fontSize: '11px' }}>
+              <span>0 (off)</span>
+              <span>1.0 (strong)</span>
+            </div>
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+              Unsharp mask applied to final output to restore crispness. Recommended: 0.3.
+            </small>
+          </div>
         </div>
         </div>
 

@@ -2522,7 +2522,9 @@ async def generate_vr_image(
     eye_separation: float = Form(0.03),
     depth_strength: float = Form(1.0),
     equirectangular: bool = Form(True),
-    vertical_fov: float = Form(165.0)
+    vertical_fov: float = Form(165.0),
+    depth_smoothing: float = Form(2.0),
+    output_sharpening: float = Form(0.3)
 ):
     """Start VR 180 stereo image generation for a source image.
 
@@ -2535,6 +2537,8 @@ async def generate_vr_image(
         depth_strength: Multiplier for depth-based displacement (0.1-3.0)
         equirectangular: Apply equirectangular projection for VR 180 display (default True)
         vertical_fov: Vertical field of view in degrees (90-180, default 165)
+        depth_smoothing: Gaussian blur sigma for depth map (0 = disabled, default 2.0)
+        output_sharpening: Unsharp mask strength for final output (0 = disabled, default 0.3)
     """
     from database import create_vr_image, update_vr_image_status
     from vr_stereo import generate_stereo_pair, get_vr_output_path, VR_OUTPUT_PATH as VR_PATH
@@ -2570,7 +2574,9 @@ async def generate_vr_image(
                 eye_separation=eye_separation,
                 depth_strength=depth_strength,
                 equirectangular=equirectangular,
-                vertical_fov=vertical_fov
+                vertical_fov=vertical_fov,
+                depth_smoothing=depth_smoothing,
+                output_sharpening=output_sharpening
             )
             if success:
                 update_vr_image_status(vr_id, "completed", output_path=output_path)

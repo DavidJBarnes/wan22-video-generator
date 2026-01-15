@@ -560,7 +560,9 @@ def init_db():
             "vr_output_width": "4128",
             "vr_output_height": "2208",
             "vr_equirectangular": "true",
-            "vr_vertical_fov": "165"
+            "vr_vertical_fov": "165",
+            "vr_depth_smoothing": "2.0",
+            "vr_output_sharpening": "0.3"
         }
 
         for key, value in default_settings.items():
