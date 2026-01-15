@@ -648,6 +648,7 @@ export default function JobDetail() {
       <div className="card" style={{ marginBottom: '24px' }}>
         <h2 style={{ marginTop: 0 }}>Final Output</h2>
         {job.status === 'completed' ? (
+          <>
           <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
             {/* Left side: Video and buttons */}
             <div style={{ flex: '0 0 auto' }}>
@@ -814,6 +815,7 @@ export default function JobDetail() {
               </Typography>
             )}
           </div>
+          </>
         ) : (
           <div className="placeholder-box">
             {job.status === 'running' ? (
