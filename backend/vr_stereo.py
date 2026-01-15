@@ -111,17 +111,15 @@ def apply_equirectangular_projection(
     fov_h_rad = np.radians(fov_horizontal)
     fov_v_rad = np.radians(fov_vertical)
 
-    # Create output coordinate grids
-    # For equirectangular, x maps to longitude and y maps to latitude
-    u = np.linspace(-0.5, 0.5, width).astype(np.float32)
-    v = np.linspace(-0.5, 0.5, height).astype(np.float32)
+    # Create output coordinate grids using -1 to 1 range for proper mapping
+    u = np.linspace(-1.0, 1.0, width).astype(np.float32)
+    v = np.linspace(-1.0, 1.0, height).astype(np.float32)
     u_grid, v_grid = np.meshgrid(u, v)
 
-    # Convert normalized coordinates to spherical angles
-    # theta (longitude) spans the horizontal FOV
-    # phi (latitude) spans the vertical FOV
-    theta = u_grid * fov_h_rad  # horizontal angle
-    phi = v_grid * fov_v_rad    # vertical angle
+    # Convert to spherical angles based on FOV
+    # theta (longitude) spans horizontal FOV, phi (latitude) spans vertical FOV
+    theta = u_grid * (fov_h_rad / 2)  # Half FOV in each direction
+    phi = v_grid * (fov_v_rad / 2)
 
     # Convert spherical to 3D Cartesian (on unit sphere)
     x = np.cos(phi) * np.sin(theta)
@@ -129,22 +127,20 @@ def apply_equirectangular_projection(
     z = np.cos(phi) * np.cos(theta)
 
     # Project back to flat image coordinates (gnomonic/rectilinear projection)
-    # This gives us where to sample from the original image
-    src_x = x / (z + 1e-10)  # Avoid division by zero
+    src_x = x / (z + 1e-10)
     src_y = y / (z + 1e-10)
 
-    # Normalize to image coordinates
-    # Scale factor controls how much of the source is used
-    scale = 0.8
-    map_x = ((src_x * scale + 0.5) * width).astype(np.float32)
-    map_y = ((src_y * scale + 0.5) * height).astype(np.float32)
+    # FOV-dependent scaling - smaller FOV = less stretching at edges
+    # The scale factor determines how the gnomonic projection maps back to image coords
+    scale_x = 1.0 / np.tan(fov_h_rad / 4) if fov_h_rad > 0 else 1.0
+    scale_y = 1.0 / np.tan(fov_v_rad / 4) if fov_v_rad > 0 else 1.0
 
-    # Clip to valid range
-    map_x = np.clip(map_x, 0, width - 1)
-    map_y = np.clip(map_y, 0, height - 1)
+    # Map to image coordinates with FOV-dependent scaling
+    map_x = ((src_x * scale_x * 0.5 + 0.5) * width).astype(np.float32)
+    map_y = ((src_y * scale_y * 0.5 + 0.5) * height).astype(np.float32)
 
-    # Remap the image
-    result = cv2.remap(image, map_x, map_y, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+    # Remap the image with edge replication for cleaner borders
+    result = cv2.remap(image, map_x, map_y, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
 
     return result
 
