@@ -33,7 +33,9 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
     eyeSeparation: 0.03,
     depthStrength: 1.0,
     equirectangular: true,
-    verticalFov: 165
+    verticalFov: 165,
+    depthSmoothing: 2.0,
+    outputSharpening: 0.3
   });
 
   // Lock scroll on .main-content when modal is open
@@ -124,7 +126,9 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
           eyeSeparation: parseFloat(s.vr_eye_separation) || 0.03,
           depthStrength: parseFloat(s.vr_depth_strength) || 1.0,
           equirectangular: s.vr_equirectangular !== 'false',
-          verticalFov: parseInt(s.vr_vertical_fov) || 165
+          verticalFov: parseInt(s.vr_vertical_fov) || 165,
+          depthSmoothing: parseFloat(s.vr_depth_smoothing) || 2.0,
+          outputSharpening: parseFloat(s.vr_output_sharpening) || 0.3
         });
       } catch (error) {
         console.error('Failed to load VR settings:', error);
@@ -255,7 +259,9 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
         vrSettings.eyeSeparation,
         vrSettings.depthStrength,
         vrSettings.equirectangular,
-        vrSettings.verticalFov
+        vrSettings.verticalFov,
+        vrSettings.depthSmoothing,
+        vrSettings.outputSharpening
       );
       const vrId = result.vr_id;
 

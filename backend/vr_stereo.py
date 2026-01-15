@@ -86,6 +86,51 @@ def unload_midas_model():
 DEFAULT_HORIZONTAL_FOV = 180  # degrees
 DEFAULT_VERTICAL_FOV = 180    # degrees (adjustable to reduce edge stretching)
 
+# Quality enhancement defaults
+DEFAULT_DEPTH_SMOOTHING = 2.0   # Gaussian blur sigma for depth map (0 = disabled)
+DEFAULT_OUTPUT_SHARPENING = 0.3  # Unsharp mask strength (0 = disabled, max ~1.0)
+
+
+def smooth_depth_map(depth: np.ndarray, sigma: float = DEFAULT_DEPTH_SMOOTHING) -> np.ndarray:
+    """Apply Gaussian blur to depth map to smooth harsh stereo transitions.
+
+    Args:
+        depth: Depth map as numpy array (0-1 range)
+        sigma: Gaussian blur sigma (0 = no smoothing, higher = more blur)
+
+    Returns:
+        Smoothed depth map
+    """
+    if sigma <= 0:
+        return depth
+
+    from scipy.ndimage import gaussian_filter
+    return gaussian_filter(depth, sigma=sigma)
+
+
+def apply_sharpening(image: np.ndarray, strength: float = DEFAULT_OUTPUT_SHARPENING) -> np.ndarray:
+    """Apply unsharp mask to restore crispness lost during remapping.
+
+    Args:
+        image: Input image (BGR format from OpenCV)
+        strength: Sharpening strength (0 = disabled, 0.3 = moderate, 1.0 = strong)
+
+    Returns:
+        Sharpened image
+    """
+    if strength <= 0:
+        return image
+
+    import cv2
+
+    # Create blurred version for unsharp mask
+    blurred = cv2.GaussianBlur(image, (0, 0), sigmaX=3)
+
+    # Unsharp mask: sharpened = original + strength * (original - blurred)
+    sharpened = cv2.addWeighted(image, 1.0 + strength, blurred, -strength, 0)
+
+    return sharpened
+
 
 def apply_equirectangular_projection(
     image: np.ndarray,
@@ -194,7 +239,9 @@ def generate_stereo_pair(
     eye_separation: float = 0.03,
     depth_strength: float = 1.0,
     equirectangular: bool = True,
-    vertical_fov: float = DEFAULT_VERTICAL_FOV
+    vertical_fov: float = DEFAULT_VERTICAL_FOV,
+    depth_smoothing: float = DEFAULT_DEPTH_SMOOTHING,
+    output_sharpening: float = DEFAULT_OUTPUT_SHARPENING
 ) -> Tuple[bool, str]:
     """Generate a VR 180 stereo image from a single image.
 
@@ -205,6 +252,8 @@ def generate_stereo_pair(
         depth_strength: Multiplier for depth-based displacement (default 1.0)
         equirectangular: Apply equirectangular projection for VR 180 display (default True)
         vertical_fov: Vertical field of view in degrees (90-180, default 180)
+        depth_smoothing: Gaussian blur sigma for depth map (0 = disabled, default 2.0)
+        output_sharpening: Unsharp mask strength for final output (0 = disabled, default 0.3)
 
     Returns:
         Tuple of (success, message)
@@ -227,6 +276,11 @@ def generate_stereo_pair(
         # Estimate depth
         print("[VRStereo] Estimating depth...")
         depth = estimate_depth(image_path)
+
+        # Apply depth smoothing to reduce harsh stereo transitions
+        if depth_smoothing > 0:
+            print(f"[VRStereo] Applying depth smoothing (sigma={depth_smoothing})...")
+            depth = smooth_depth_map(depth, depth_smoothing)
 
         # Calculate pixel displacement based on depth
         # Closer objects (higher depth) should have more displacement
@@ -266,6 +320,11 @@ def generate_stereo_pair(
 
         # Create side-by-side stereo image (left | right)
         stereo = np.hstack([left_eye, right_eye])
+
+        # Apply output sharpening to restore crispness
+        if output_sharpening > 0:
+            print(f"[VRStereo] Applying output sharpening (strength={output_sharpening})...")
+            stereo = apply_sharpening(stereo, output_sharpening)
 
         # Save the stereo image
         print(f"[VRStereo] Saving stereo image: {output_path}")
