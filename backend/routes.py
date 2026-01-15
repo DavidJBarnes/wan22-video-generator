@@ -2519,12 +2519,14 @@ VR_OUTPUT_PATH = os.environ.get("VR_OUTPUT_PATH")
 async def generate_vr_image(
     background_tasks: BackgroundTasks,
     image_path: str = Form(...),
-    eye_separation: float = Form(0.03),
-    depth_strength: float = Form(1.0),
-    equirectangular: bool = Form(True),
-    vertical_fov: float = Form(165.0),
+    eye_separation: float = Form(0.015),
+    depth_strength: float = Form(0.5),
+    equirectangular: bool = Form(False),
+    vertical_fov: float = Form(90.0),
     depth_smoothing: float = Form(2.0),
-    output_sharpening: float = Form(0.3)
+    output_sharpening: float = Form(0.3),
+    output_width: int = Form(4128),
+    output_height: int = Form(2208)
 ):
     """Start VR 180 stereo image generation for a source image.
 
@@ -2533,12 +2535,14 @@ async def generate_vr_image(
 
     Args:
         image_path: Path to source image relative to image repository
-        eye_separation: Horizontal displacement factor (0.01-0.1)
-        depth_strength: Multiplier for depth-based displacement (0.1-3.0)
-        equirectangular: Apply equirectangular projection for VR 180 display (default True)
-        vertical_fov: Vertical field of view in degrees (90-180, default 165)
+        eye_separation: Horizontal displacement factor (default 0.015 for Quest 3S)
+        depth_strength: Multiplier for depth-based displacement (default 0.5)
+        equirectangular: Apply equirectangular projection (default False at 90° FOV)
+        vertical_fov: Vertical field of view in degrees (default 90)
         depth_smoothing: Gaussian blur sigma for depth map (0 = disabled, default 2.0)
         output_sharpening: Unsharp mask strength for final output (0 = disabled, default 0.3)
+        output_width: Final stereo image width (default 4128 for Quest 3S)
+        output_height: Final stereo image height (default 2208 for Quest 3S)
     """
     from database import create_vr_image, update_vr_image_status
     from vr_stereo import generate_stereo_pair, get_vr_output_path, VR_OUTPUT_PATH as VR_PATH
@@ -2576,7 +2580,9 @@ async def generate_vr_image(
                 equirectangular=equirectangular,
                 vertical_fov=vertical_fov,
                 depth_smoothing=depth_smoothing,
-                output_sharpening=output_sharpening
+                output_sharpening=output_sharpening,
+                output_width=output_width,
+                output_height=output_height
             )
             if success:
                 update_vr_image_status(vr_id, "completed", output_path=output_path)

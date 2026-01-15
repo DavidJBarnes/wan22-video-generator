@@ -30,12 +30,14 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
   const [vrImages, setVrImages] = useState([]);
   const [loadingVRImages, setLoadingVRImages] = useState(false);
   const [vrSettings, setVrSettings] = useState({
-    eyeSeparation: 0.03,
-    depthStrength: 1.0,
-    equirectangular: true,
-    verticalFov: 165,
+    eyeSeparation: 0.015,
+    depthStrength: 0.5,
+    equirectangular: false,
+    verticalFov: 90,
     depthSmoothing: 2.0,
-    outputSharpening: 0.3
+    outputSharpening: 0.3,
+    outputWidth: 4128,
+    outputHeight: 2208
   });
 
   // Lock scroll on .main-content when modal is open
@@ -123,12 +125,14 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
         const data = await API.getSettings();
         const s = data.settings || data;
         setVrSettings({
-          eyeSeparation: parseFloat(s.vr_eye_separation) || 0.03,
-          depthStrength: parseFloat(s.vr_depth_strength) || 1.0,
-          equirectangular: s.vr_equirectangular !== 'false',
-          verticalFov: parseInt(s.vr_vertical_fov) || 165,
+          eyeSeparation: parseFloat(s.vr_eye_separation) || 0.015,
+          depthStrength: parseFloat(s.vr_depth_strength) || 0.5,
+          equirectangular: s.vr_equirectangular === 'true',
+          verticalFov: parseInt(s.vr_vertical_fov) || 90,
           depthSmoothing: parseFloat(s.vr_depth_smoothing) || 2.0,
-          outputSharpening: parseFloat(s.vr_output_sharpening) || 0.3
+          outputSharpening: parseFloat(s.vr_output_sharpening) || 0.3,
+          outputWidth: parseInt(s.vr_output_width) || 4128,
+          outputHeight: parseInt(s.vr_output_height) || 2208
         });
       } catch (error) {
         console.error('Failed to load VR settings:', error);
@@ -261,7 +265,9 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
         vrSettings.equirectangular,
         vrSettings.verticalFov,
         vrSettings.depthSmoothing,
-        vrSettings.outputSharpening
+        vrSettings.outputSharpening,
+        vrSettings.outputWidth,
+        vrSettings.outputHeight
       );
       const vrId = result.vr_id;
 

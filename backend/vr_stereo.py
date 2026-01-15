@@ -84,7 +84,14 @@ def unload_midas_model():
 
 # Default FOV values for equirectangular projection
 DEFAULT_HORIZONTAL_FOV = 180  # degrees
-DEFAULT_VERTICAL_FOV = 180    # degrees (adjustable to reduce edge stretching)
+DEFAULT_VERTICAL_FOV = 90     # degrees (90 = no projection correction needed)
+
+# Validated Quest 3S defaults
+DEFAULT_EYE_SEPARATION = 0.015   # Reduced from 0.03 to minimize eye strain
+DEFAULT_DEPTH_STRENGTH = 0.5     # Moderate 3D effect
+DEFAULT_EQUIRECTANGULAR = False  # Disabled - unnecessary at 90° FOV
+DEFAULT_OUTPUT_WIDTH = 4128      # Quest 3S native width (per eye: 2064)
+DEFAULT_OUTPUT_HEIGHT = 2208     # Quest 3S native height
 
 # Quality enhancement defaults
 DEFAULT_DEPTH_SMOOTHING = 2.0   # Gaussian blur sigma for depth map (0 = disabled)
@@ -236,24 +243,28 @@ def estimate_depth(image_path: str) -> np.ndarray:
 def generate_stereo_pair(
     image_path: str,
     output_path: str,
-    eye_separation: float = 0.03,
-    depth_strength: float = 1.0,
-    equirectangular: bool = True,
+    eye_separation: float = DEFAULT_EYE_SEPARATION,
+    depth_strength: float = DEFAULT_DEPTH_STRENGTH,
+    equirectangular: bool = DEFAULT_EQUIRECTANGULAR,
     vertical_fov: float = DEFAULT_VERTICAL_FOV,
     depth_smoothing: float = DEFAULT_DEPTH_SMOOTHING,
-    output_sharpening: float = DEFAULT_OUTPUT_SHARPENING
+    output_sharpening: float = DEFAULT_OUTPUT_SHARPENING,
+    output_width: int = DEFAULT_OUTPUT_WIDTH,
+    output_height: int = DEFAULT_OUTPUT_HEIGHT
 ) -> Tuple[bool, str]:
     """Generate a VR 180 stereo image from a single image.
 
     Args:
         image_path: Path to the input image
         output_path: Path for the output stereo image
-        eye_separation: Horizontal displacement factor (default 0.03 = 3% of image width)
-        depth_strength: Multiplier for depth-based displacement (default 1.0)
-        equirectangular: Apply equirectangular projection for VR 180 display (default True)
-        vertical_fov: Vertical field of view in degrees (90-180, default 180)
+        eye_separation: Horizontal displacement factor (default 0.015)
+        depth_strength: Multiplier for depth-based displacement (default 0.5)
+        equirectangular: Apply equirectangular projection for VR 180 display (default False)
+        vertical_fov: Vertical field of view in degrees (90-180, default 90)
         depth_smoothing: Gaussian blur sigma for depth map (0 = disabled, default 2.0)
         output_sharpening: Unsharp mask strength for final output (0 = disabled, default 0.3)
+        output_width: Final stereo image width (default 4128 for Quest 3S)
+        output_height: Final stereo image height (default 2208 for Quest 3S)
 
     Returns:
         Tuple of (success, message)
@@ -321,7 +332,13 @@ def generate_stereo_pair(
         # Create side-by-side stereo image (left | right)
         stereo = np.hstack([left_eye, right_eye])
 
-        # Apply output sharpening to restore crispness
+        # Resize to target output dimensions (after depth processing, before sharpening)
+        current_height, current_width = stereo.shape[:2]
+        if current_width != output_width or current_height != output_height:
+            print(f"[VRStereo] Resizing from {current_width}x{current_height} to {output_width}x{output_height}...")
+            stereo = cv2.resize(stereo, (output_width, output_height), interpolation=cv2.INTER_LANCZOS4)
+
+        # Apply output sharpening to restore crispness (after resize to counteract upscaling softness)
         if output_sharpening > 0:
             print(f"[VRStereo] Applying output sharpening (strength={output_sharpening})...")
             stereo = apply_sharpening(stereo, output_sharpening)
@@ -330,7 +347,7 @@ def generate_stereo_pair(
         print(f"[VRStereo] Saving stereo image: {output_path}")
         cv2.imwrite(output_path, stereo, [cv2.IMWRITE_JPEG_QUALITY, 95])
 
-        return True, f"Stereo image generated: {width*2}x{height}"
+        return True, f"Stereo image generated: {output_width}x{output_height}"
 
     except Exception as e:
         print(f"[VRStereo] Error: {e}")
