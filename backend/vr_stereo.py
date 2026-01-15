@@ -92,52 +92,58 @@ def apply_equirectangular_projection(
     fov_horizontal: float = DEFAULT_HORIZONTAL_FOV,
     fov_vertical: float = DEFAULT_VERTICAL_FOV
 ) -> np.ndarray:
-    """Apply equirectangular projection to a flat/rectilinear image.
+    """Apply pincushion distortion to pre-warp image for VR 180 viewing.
 
-    This pre-warps the image so it displays correctly when mapped to a
-    hemispherical VR display using 180° SBS mode.
+    When VR players map images to a sphere, they apply barrel distortion.
+    We apply the inverse (pincushion) distortion so the two cancel out,
+    resulting in straight edges in the final VR view.
+
+    Uses radial polynomial model: r' = r * (1 + k * r²)
+    Positive k produces pincushion distortion (edges bow outward).
 
     Args:
         image: Input image (BGR format from OpenCV)
-        fov_horizontal: Horizontal field of view in degrees (default 180)
-        fov_vertical: Vertical field of view in degrees (default 180, reduce to minimize edge stretching)
+        fov_horizontal: Horizontal field of view in degrees (unused, kept for API compatibility)
+        fov_vertical: Vertical field of view in degrees (90-180, controls distortion strength)
 
     Returns:
-        Equirectangular projected image
+        Pre-warped image with pincushion distortion
     """
     import cv2
 
     height, width = image.shape[:2]
-    fov_h_rad = np.radians(fov_horizontal)
-    fov_v_rad = np.radians(fov_vertical)
 
-    # Create output coordinate grids using -1 to 1 range for proper mapping
+    # Scale distortion coefficient based on vertical FOV
+    # 180° = full correction (k=0.3), 90° = no correction (k=0)
+    # Linear interpolation between these extremes
+    k_max = 0.3  # Maximum distortion coefficient at 180°
+    fov_normalized = (fov_vertical - 90.0) / 90.0  # 0 at 90°, 1 at 180°
+    fov_normalized = np.clip(fov_normalized, 0.0, 1.0)
+    k = k_max * fov_normalized
+
+    # Create normalized coordinate grids centered at image center
+    # Range: -1 to 1 from edge to edge
     u = np.linspace(-1.0, 1.0, width).astype(np.float32)
     v = np.linspace(-1.0, 1.0, height).astype(np.float32)
     u_grid, v_grid = np.meshgrid(u, v)
 
-    # Convert to spherical angles based on FOV
-    # theta (longitude) spans horizontal FOV, phi (latitude) spans vertical FOV
-    theta = u_grid * (fov_h_rad / 2)  # Half FOV in each direction
-    phi = v_grid * (fov_v_rad / 2)
+    # Calculate radial distance from center (normalized)
+    r = np.sqrt(u_grid**2 + v_grid**2)
 
-    # Convert spherical to 3D Cartesian (on unit sphere)
-    x = np.cos(phi) * np.sin(theta)
-    y = np.sin(phi)
-    z = np.cos(phi) * np.cos(theta)
+    # Apply pincushion distortion: r' = r * (1 + k * r²)
+    # This pushes pixels outward, making edges bow outward
+    r_distorted = r * (1.0 + k * r**2)
 
-    # Project back to flat image coordinates (gnomonic/rectilinear projection)
-    src_x = x / (z + 1e-10)
-    src_y = y / (z + 1e-10)
+    # Avoid division by zero at center
+    scale = np.where(r > 1e-10, r_distorted / r, 1.0)
 
-    # FOV-dependent scaling - smaller FOV = less stretching at edges
-    # The scale factor determines how the gnomonic projection maps back to image coords
-    scale_x = 1.0 / np.tan(fov_h_rad / 4) if fov_h_rad > 0 else 1.0
-    scale_y = 1.0 / np.tan(fov_v_rad / 4) if fov_v_rad > 0 else 1.0
+    # Apply distortion to coordinates
+    u_distorted = u_grid * scale
+    v_distorted = v_grid * scale
 
-    # Map to image coordinates with FOV-dependent scaling
-    map_x = ((src_x * scale_x * 0.5 + 0.5) * width).astype(np.float32)
-    map_y = ((src_y * scale_y * 0.5 + 0.5) * height).astype(np.float32)
+    # Convert back to pixel coordinates
+    map_x = ((u_distorted + 1.0) * 0.5 * width).astype(np.float32)
+    map_y = ((v_distorted + 1.0) * 0.5 * height).astype(np.float32)
 
     # Remap the image with edge replication for cleaner borders
     result = cv2.remap(image, map_x, map_y, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
