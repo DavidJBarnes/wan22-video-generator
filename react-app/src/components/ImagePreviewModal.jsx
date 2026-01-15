@@ -37,7 +37,10 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
     depthSmoothing: 2.0,
     outputSharpening: 0.3,
     outputWidth: 4128,
-    outputHeight: 2208
+    outputHeight: 2208,
+    upscaleEnabled: true,
+    upscaleFactor: 2,
+    upscaleThreshold: 1500
   });
 
   // Lock scroll on .main-content when modal is open
@@ -132,7 +135,10 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
           depthSmoothing: parseFloat(s.vr_depth_smoothing) || 2.0,
           outputSharpening: parseFloat(s.vr_output_sharpening) || 0.3,
           outputWidth: parseInt(s.vr_output_width) || 4128,
-          outputHeight: parseInt(s.vr_output_height) || 2208
+          outputHeight: parseInt(s.vr_output_height) || 2208,
+          upscaleEnabled: s.vr_upscale_enabled !== 'false',
+          upscaleFactor: parseInt(s.vr_upscale_factor) || 2,
+          upscaleThreshold: parseInt(s.vr_upscale_threshold) || 1500
         });
       } catch (error) {
         console.error('Failed to load VR settings:', error);
@@ -267,7 +273,10 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
         vrSettings.depthSmoothing,
         vrSettings.outputSharpening,
         vrSettings.outputWidth,
-        vrSettings.outputHeight
+        vrSettings.outputHeight,
+        vrSettings.upscaleEnabled,
+        vrSettings.upscaleFactor,
+        vrSettings.upscaleThreshold
       );
       const vrId = result.vr_id;
 

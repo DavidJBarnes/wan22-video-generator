@@ -562,7 +562,11 @@ def init_db():
             "vr_equirectangular": "false",
             "vr_vertical_fov": "90",
             "vr_depth_smoothing": "2.0",
-            "vr_output_sharpening": "0.3"
+            "vr_output_sharpening": "0.3",
+            # Real-ESRGAN upscaling settings
+            "vr_upscale_enabled": "true",
+            "vr_upscale_factor": "2",
+            "vr_upscale_threshold": "1500"
         }
 
         for key, value in default_settings.items():

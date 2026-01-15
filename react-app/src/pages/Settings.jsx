@@ -39,6 +39,9 @@ export default function Settings() {
   const [vrVerticalFov, setVrVerticalFov] = useState(90);
   const [vrDepthSmoothing, setVrDepthSmoothing] = useState(2.0);
   const [vrOutputSharpening, setVrOutputSharpening] = useState(0.3);
+  const [vrUpscaleEnabled, setVrUpscaleEnabled] = useState(true);
+  const [vrUpscaleFactor, setVrUpscaleFactor] = useState(2);
+  const [vrUpscaleThreshold, setVrUpscaleThreshold] = useState(1500);
 
   useEffect(() => {
     loadSettings();
@@ -84,6 +87,9 @@ export default function Settings() {
       setVrVerticalFov(parseInt(s.vr_vertical_fov) || 90);
       setVrDepthSmoothing(parseFloat(s.vr_depth_smoothing) || 2.0);
       setVrOutputSharpening(parseFloat(s.vr_output_sharpening) || 0.3);
+      setVrUpscaleEnabled(s.vr_upscale_enabled !== 'false');
+      setVrUpscaleFactor(parseInt(s.vr_upscale_factor) || 2);
+      setVrUpscaleThreshold(parseInt(s.vr_upscale_threshold) || 1500);
 
       setLoading(false);
     } catch (error) {
@@ -166,7 +172,10 @@ export default function Settings() {
         vr_equirectangular: String(vrEquirectangular),
         vr_vertical_fov: String(vrVerticalFov),
         vr_depth_smoothing: String(vrDepthSmoothing),
-        vr_output_sharpening: String(vrOutputSharpening)
+        vr_output_sharpening: String(vrOutputSharpening),
+        vr_upscale_enabled: String(vrUpscaleEnabled),
+        vr_upscale_factor: String(vrUpscaleFactor),
+        vr_upscale_threshold: String(vrUpscaleThreshold)
       };
 
       await API.updateSettings(settingsPayload);
@@ -680,6 +689,63 @@ export default function Settings() {
             <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
               Unsharp mask applied to final output to restore crispness. Recommended: 0.3.
             </small>
+          </div>
+
+          <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #333' }}>
+            <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>AI Upscaling (Real-ESRGAN)</h3>
+            <div className="form-group">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={vrUpscaleEnabled}
+                  onChange={(e) => setVrUpscaleEnabled(e.target.checked)}
+                  style={{ width: 'auto', margin: 0 }}
+                />
+                Enable AI Upscaling
+              </label>
+              <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                Use Real-ESRGAN to enhance low-resolution source images before VR conversion.
+              </small>
+            </div>
+
+            {vrUpscaleEnabled && (
+              <>
+                <div className="form-group" style={{ marginTop: '12px' }}>
+                  <label>Upscale Factor</label>
+                  <select
+                    value={vrUpscaleFactor}
+                    onChange={(e) => setVrUpscaleFactor(parseInt(e.target.value))}
+                    style={{ width: '100%' }}
+                  >
+                    <option value="2">2x (faster)</option>
+                    <option value="4">4x (higher quality)</option>
+                  </select>
+                  <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                    2x is faster with good quality. 4x produces sharper results but takes longer.
+                  </small>
+                </div>
+
+                <div className="form-group" style={{ marginTop: '12px' }}>
+                  <label>Width Threshold: {vrUpscaleThreshold}px</label>
+                  <input
+                    type="range"
+                    value={vrUpscaleThreshold}
+                    onChange={(e) => setVrUpscaleThreshold(parseInt(e.target.value))}
+                    min="500"
+                    max="3000"
+                    step="100"
+                    style={{ width: '100%' }}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#666', fontSize: '11px' }}>
+                    <span>500px</span>
+                    <span>3000px</span>
+                  </div>
+                  <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                    Only upscale images narrower than this threshold. Recommended: 1500px.
+                  </small>
+                </div>
+              </>
+            )}
           </div>
         </div>
         </div>

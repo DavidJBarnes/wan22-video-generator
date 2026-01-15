@@ -97,6 +97,11 @@ DEFAULT_OUTPUT_HEIGHT = 2208     # Quest 3S native height
 DEFAULT_DEPTH_SMOOTHING = 2.0   # Gaussian blur sigma for depth map (0 = disabled)
 DEFAULT_OUTPUT_SHARPENING = 0.3  # Unsharp mask strength (0 = disabled, max ~1.0)
 
+# Real-ESRGAN upscaling defaults
+DEFAULT_UPSCALE_ENABLED = True   # Enable AI upscaling for low-res sources
+DEFAULT_UPSCALE_FACTOR = 2       # 2x or 4x (2x is faster, 4x is higher quality)
+DEFAULT_UPSCALE_THRESHOLD = 1500 # Upscale if source width is below this
+
 
 def smooth_depth_map(depth: np.ndarray, sigma: float = DEFAULT_DEPTH_SMOOTHING) -> np.ndarray:
     """Apply Gaussian blur to depth map to smooth harsh stereo transitions.
@@ -203,11 +208,11 @@ def apply_equirectangular_projection(
     return result
 
 
-def estimate_depth(image_path: str) -> np.ndarray:
+def estimate_depth(image) -> np.ndarray:
     """Estimate depth map from an image using MiDaS.
 
     Args:
-        image_path: Path to the input image
+        image: Either a file path (str) or a numpy array (BGR format from OpenCV)
 
     Returns:
         Depth map as numpy array (higher values = closer to camera)
@@ -217,9 +222,17 @@ def estimate_depth(image_path: str) -> np.ndarray:
 
     model, transform, device = _load_midas()
 
-    # Load and preprocess image
-    img = cv2.imread(image_path)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    # Handle both file path and numpy array input
+    if isinstance(image, str):
+        img = cv2.imread(image)
+        if img is None:
+            raise ValueError(f"Could not load image: {image}")
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    elif isinstance(image, np.ndarray):
+        # Assume BGR format from OpenCV, convert to RGB
+        img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    else:
+        raise TypeError(f"image must be str or numpy array, got {type(image)}")
 
     input_batch = transform(img).to(device)
 
@@ -250,7 +263,10 @@ def generate_stereo_pair(
     depth_smoothing: float = DEFAULT_DEPTH_SMOOTHING,
     output_sharpening: float = DEFAULT_OUTPUT_SHARPENING,
     output_width: int = DEFAULT_OUTPUT_WIDTH,
-    output_height: int = DEFAULT_OUTPUT_HEIGHT
+    output_height: int = DEFAULT_OUTPUT_HEIGHT,
+    upscale_enabled: bool = DEFAULT_UPSCALE_ENABLED,
+    upscale_factor: int = DEFAULT_UPSCALE_FACTOR,
+    upscale_threshold: int = DEFAULT_UPSCALE_THRESHOLD
 ) -> Tuple[bool, str]:
     """Generate a VR 180 stereo image from a single image.
 
@@ -265,6 +281,9 @@ def generate_stereo_pair(
         output_sharpening: Unsharp mask strength for final output (0 = disabled, default 0.3)
         output_width: Final stereo image width (default 4128 for Quest 3S)
         output_height: Final stereo image height (default 2208 for Quest 3S)
+        upscale_enabled: Enable Real-ESRGAN upscaling for low-res sources (default True)
+        upscale_factor: Upscale factor 2 or 4 (default 2)
+        upscale_threshold: Upscale if source width below this (default 1500)
 
     Returns:
         Tuple of (success, message)
@@ -284,9 +303,26 @@ def generate_stereo_pair(
         height, width = img.shape[:2]
         print(f"[VRStereo] Processing image: {width}x{height}")
 
-        # Estimate depth
+        # AI upscaling for low-resolution sources
+        upscaled = False
+        if upscale_enabled and width < upscale_threshold:
+            try:
+                from upscaler import upscale_image, unload_upscaler
+                print(f"[VRStereo] Source width {width} < threshold {upscale_threshold}, applying Real-ESRGAN {upscale_factor}x upscaling...")
+                img = upscale_image(img, scale=upscale_factor)
+                height, width = img.shape[:2]
+                print(f"[VRStereo] Upscaled to: {width}x{height}")
+                upscaled = True
+                # Unload upscaler to free GPU memory for MiDaS
+                unload_upscaler()
+            except ImportError as e:
+                print(f"[VRStereo] Real-ESRGAN not available, skipping upscale: {e}")
+            except Exception as e:
+                print(f"[VRStereo] Upscaling failed, continuing without: {e}")
+
+        # Estimate depth (pass numpy array if upscaled, otherwise file path)
         print("[VRStereo] Estimating depth...")
-        depth = estimate_depth(image_path)
+        depth = estimate_depth(img if upscaled else image_path)
 
         # Apply depth smoothing to reduce harsh stereo transitions
         if depth_smoothing > 0:
