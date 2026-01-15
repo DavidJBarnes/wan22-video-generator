@@ -2688,7 +2688,10 @@ async def generate_vr_video(
     depth_smoothing: float = Form(2.0),
     output_sharpening: float = Form(0.3),
     output_width: int = Form(4128),
-    output_height: int = Form(2208)
+    output_height: int = Form(2208),
+    upscale_enabled: bool = Form(False),
+    upscale_factor: int = Form(2),
+    upscale_threshold: int = Form(1500)
 ):
     """Start VR 180 stereo video generation for a job's final video.
 
@@ -2721,7 +2724,10 @@ async def generate_vr_video(
         "depth_smoothing": depth_smoothing,
         "output_sharpening": output_sharpening,
         "output_width": output_width,
-        "output_height": output_height
+        "output_height": output_height,
+        "upscale_enabled": upscale_enabled,
+        "upscale_factor": upscale_factor,
+        "upscale_threshold": upscale_threshold
     }
     vr_video_id = create_vr_video(job_id, source_video, settings)
 
@@ -2753,6 +2759,9 @@ async def generate_vr_video(
                 output_sharpening=output_sharpening,
                 output_width=output_width,
                 output_height=output_height,
+                upscale_enabled=upscale_enabled,
+                upscale_factor=upscale_factor,
+                upscale_threshold=upscale_threshold,
                 progress_callback=progress_callback
             )
             if success:

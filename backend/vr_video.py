@@ -213,6 +213,9 @@ def process_frames_to_stereo(
     output_sharpening: float = 0.3,
     output_width: int = 4128,
     output_height: int = 2208,
+    upscale_enabled: bool = False,
+    upscale_factor: int = 2,
+    upscale_threshold: int = 1500,
     progress_callback: Optional[Callable[[int, int, str], None]] = None
 ) -> Tuple[bool, str]:
     """Process all extracted frames to stereo pairs.
@@ -221,6 +224,9 @@ def process_frames_to_stereo(
         input_dir: Directory containing extracted frames
         output_dir: Directory to save stereo frames
         frame_count: Total number of frames to process
+        upscale_enabled: Enable Real-ESRGAN upscaling for low-res frames
+        upscale_factor: Upscale factor 2 or 4
+        upscale_threshold: Upscale if frame width below this
         progress_callback: Optional callback(current_frame, total_frames, stage)
 
     Returns:
@@ -228,6 +234,11 @@ def process_frames_to_stereo(
     """
     import cv2
     from vr_stereo import apply_sharpening, unload_midas_model
+
+    # Lazy import upscaler only if needed
+    upscaler_loaded = False
+    upscale_image = None
+    unload_upscaler = None
 
     try:
         os.makedirs(output_dir, exist_ok=True)
@@ -248,6 +259,27 @@ def process_frames_to_stereo(
                 progress_callback(i + 1, frame_count, "stereo_conversion")
 
             print(f"[VRVideo] Processing frame {i + 1}/{frame_count}...")
+
+            # AI upscaling for low-resolution frames
+            height, width = frame.shape[:2]
+            if upscale_enabled and width < upscale_threshold:
+                try:
+                    if not upscaler_loaded:
+                        from upscaler import upscale_image as _upscale, unload_upscaler as _unload
+                        upscale_image = _upscale
+                        unload_upscaler = _unload
+                        upscaler_loaded = True
+                        print(f"[VRVideo] Frame width {width} < threshold {upscale_threshold}, enabling Real-ESRGAN {upscale_factor}x upscaling")
+                    frame = upscale_image(frame, scale=upscale_factor)
+                    height, width = frame.shape[:2]
+                    if i == 0:
+                        print(f"[VRVideo] Upscaled frame to: {width}x{height}")
+                except ImportError as e:
+                    if i == 0:
+                        print(f"[VRVideo] Real-ESRGAN not available, skipping upscale: {e}")
+                except Exception as e:
+                    if i == 0:
+                        print(f"[VRVideo] Upscaling failed, continuing without: {e}")
 
             # Convert to stereo
             stereo = process_frame_to_stereo(
@@ -272,8 +304,10 @@ def process_frames_to_stereo(
             output_path = os.path.join(output_dir, f"stereo_{i:06d}.png")
             cv2.imwrite(output_path, stereo)
 
-        # Unload MiDaS model to free GPU memory
+        # Unload models to free GPU memory
         unload_midas_model()
+        if upscaler_loaded and unload_upscaler:
+            unload_upscaler()
 
         return True, f"Processed {frame_count} frames"
 
@@ -281,6 +315,8 @@ def process_frames_to_stereo(
         import traceback
         traceback.print_exc()
         unload_midas_model()
+        if upscaler_loaded and unload_upscaler:
+            unload_upscaler()
         return False, str(e)
 
 
@@ -360,6 +396,9 @@ def convert_video_to_vr180(
     output_sharpening: float = 0.3,
     output_width: int = 4128,
     output_height: int = 2208,
+    upscale_enabled: bool = False,
+    upscale_factor: int = 2,
+    upscale_threshold: int = 1500,
     progress_callback: Optional[Callable[[int, int, str], None]] = None
 ) -> Tuple[bool, str]:
     """Main pipeline: Convert a regular video to VR 180 stereo video.
@@ -367,6 +406,9 @@ def convert_video_to_vr180(
     Args:
         video_path: Path to source video
         output_path: Path for output VR video
+        upscale_enabled: Enable Real-ESRGAN upscaling for low-res frames
+        upscale_factor: Upscale factor 2 or 4
+        upscale_threshold: Upscale if frame width below this
         progress_callback: Optional callback(current, total, stage) for progress updates
 
     Returns:
@@ -422,6 +464,9 @@ def convert_video_to_vr180(
             output_sharpening=output_sharpening,
             output_width=output_width,
             output_height=output_height,
+            upscale_enabled=upscale_enabled,
+            upscale_factor=upscale_factor,
+            upscale_threshold=upscale_threshold,
             progress_callback=progress_callback
         )
 

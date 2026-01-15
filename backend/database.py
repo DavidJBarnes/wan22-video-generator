@@ -587,10 +587,12 @@ def init_db():
             "vr_vertical_fov": "90",
             "vr_depth_smoothing": "2.0",
             "vr_output_sharpening": "0.3",
-            # Real-ESRGAN upscaling settings
+            # Real-ESRGAN upscaling settings for VR images
             "vr_upscale_enabled": "true",
             "vr_upscale_factor": "2",
-            "vr_upscale_threshold": "1500"
+            "vr_upscale_threshold": "1500",
+            # Real-ESRGAN upscaling settings for VR videos
+            "vr_video_upscale_enabled": "false"
         }
 
         for key, value in default_settings.items():

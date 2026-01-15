@@ -76,6 +76,19 @@ export default function JobDetail() {
   const [generatingVR, setGeneratingVR] = useState(false);
   const [vrVideos, setVrVideos] = useState([]);
   const [vrProgress, setVrProgress] = useState(null);
+  const [vrSettings, setVrSettings] = useState({
+    eyeSeparation: 0.015,
+    depthStrength: 0.5,
+    equirectangular: false,
+    verticalFov: 90,
+    depthSmoothing: 2.0,
+    outputSharpening: 0.3,
+    outputWidth: 4128,
+    outputHeight: 2208,
+    upscaleEnabled: false,
+    upscaleFactor: 2,
+    upscaleThreshold: 1500
+  });
   const autoFinalizeTriggeredRef = useRef(false);
 
   // Memoize expensive segment calculations - must be before early returns
@@ -259,6 +272,32 @@ export default function JobDetail() {
     return () => clearInterval(interval);
   }, [id]); // Only re-run when job ID changes
 
+  // Load VR settings from API
+  useEffect(() => {
+    async function loadVRSettings() {
+      try {
+        const data = await API.getSettings();
+        const s = data.settings || data;
+        setVrSettings({
+          eyeSeparation: parseFloat(s.vr_eye_separation) || 0.015,
+          depthStrength: parseFloat(s.vr_depth_strength) || 0.5,
+          equirectangular: s.vr_equirectangular === 'true',
+          verticalFov: parseInt(s.vr_vertical_fov) || 90,
+          depthSmoothing: parseFloat(s.vr_depth_smoothing) || 2.0,
+          outputSharpening: parseFloat(s.vr_output_sharpening) || 0.3,
+          outputWidth: parseInt(s.vr_output_width) || 4128,
+          outputHeight: parseInt(s.vr_output_height) || 2208,
+          upscaleEnabled: s.vr_video_upscale_enabled === 'true',
+          upscaleFactor: parseInt(s.vr_upscale_factor) || 2,
+          upscaleThreshold: parseInt(s.vr_upscale_threshold) || 1500
+        });
+      } catch (error) {
+        console.error('Failed to load VR settings:', error);
+      }
+    }
+    loadVRSettings();
+  }, []);
+
   async function loadJobDetail() {
     try {
       const [jobData, segmentsData, logsData] = await Promise.all([
@@ -421,7 +460,20 @@ export default function JobDetail() {
     showToast('Starting VR video generation...', 'info');
 
     try {
-      const result = await API.generateVRVideo(id);
+      const result = await API.generateVRVideo(
+        id,
+        vrSettings.eyeSeparation,
+        vrSettings.depthStrength,
+        vrSettings.equirectangular,
+        vrSettings.verticalFov,
+        vrSettings.depthSmoothing,
+        vrSettings.outputSharpening,
+        vrSettings.outputWidth,
+        vrSettings.outputHeight,
+        vrSettings.upscaleEnabled,
+        vrSettings.upscaleFactor,
+        vrSettings.upscaleThreshold
+      );
       const vrVideoId = result.vr_video_id;
 
       // Poll for completion
