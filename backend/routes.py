@@ -2673,3 +2673,166 @@ async def delete_vr_image_endpoint(vr_id: int):
     delete_vr_image(vr_id)
 
     return {"deleted": True, "file_deleted": file_deleted}
+
+
+# ============== VR Video Endpoints ==============
+
+@router.post("/vr-video/generate")
+async def generate_vr_video(
+    background_tasks: BackgroundTasks,
+    job_id: int = Form(...),
+    eye_separation: float = Form(0.015),
+    depth_strength: float = Form(0.5),
+    equirectangular: bool = Form(False),
+    vertical_fov: float = Form(90.0),
+    depth_smoothing: float = Form(2.0),
+    output_sharpening: float = Form(0.3),
+    output_width: int = Form(4128),
+    output_height: int = Form(2208)
+):
+    """Start VR 180 stereo video generation for a job's final video.
+
+    This is an async operation - returns immediately with a VR video ID
+    that can be polled for status.
+    """
+    from database import get_job, create_vr_video, update_vr_video_status
+    from vr_video import convert_video_to_vr180, get_vr_video_output_path, VR_OUTPUT_PATH as VR_PATH
+    from video_utils import get_final_video_path
+
+    if not VR_PATH:
+        raise HTTPException(status_code=400, detail="VR_OUTPUT_PATH not configured")
+
+    # Get the job
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Get the job's final video path
+    source_video = get_final_video_path(job_id, job.get("name"))
+    if not os.path.exists(source_video):
+        raise HTTPException(status_code=400, detail="Job video not found. Make sure the job is finalized.")
+
+    # Create database record
+    settings = {
+        "eye_separation": eye_separation,
+        "depth_strength": depth_strength,
+        "equirectangular": equirectangular,
+        "vertical_fov": vertical_fov,
+        "depth_smoothing": depth_smoothing,
+        "output_sharpening": output_sharpening,
+        "output_width": output_width,
+        "output_height": output_height
+    }
+    vr_video_id = create_vr_video(job_id, source_video, settings)
+
+    # Generate output path
+    output_path = get_vr_video_output_path(source_video, vr_video_id)
+
+    # Progress callback to update database
+    def progress_callback(current: int, total: int, stage: str):
+        update_vr_video_status(
+            vr_video_id,
+            status="processing",
+            frame_count=total,
+            frames_processed=current,
+            current_stage=stage
+        )
+
+    # Run generation in background
+    def run_generation():
+        try:
+            update_vr_video_status(vr_video_id, "processing", current_stage="starting")
+            success, message = convert_video_to_vr180(
+                source_video,
+                output_path,
+                eye_separation=eye_separation,
+                depth_strength=depth_strength,
+                equirectangular=equirectangular,
+                vertical_fov=vertical_fov,
+                depth_smoothing=depth_smoothing,
+                output_sharpening=output_sharpening,
+                output_width=output_width,
+                output_height=output_height,
+                progress_callback=progress_callback
+            )
+            if success:
+                update_vr_video_status(vr_video_id, "completed", output_path=output_path, current_stage="done")
+            else:
+                update_vr_video_status(vr_video_id, "failed", error_message=message, current_stage="failed")
+        except Exception as e:
+            update_vr_video_status(vr_video_id, "failed", error_message=str(e), current_stage="failed")
+
+    background_tasks.add_task(run_generation)
+
+    return {"vr_video_id": vr_video_id, "status": "pending"}
+
+
+@router.get("/vr-video/{vr_video_id}")
+async def get_vr_video_status(vr_video_id: int):
+    """Get VR video generation status and progress."""
+    from database import get_vr_video
+
+    vr_video = get_vr_video(vr_video_id)
+    if not vr_video:
+        raise HTTPException(status_code=404, detail="VR video not found")
+
+    return vr_video
+
+
+@router.get("/vr-video/for-job/{job_id}")
+async def get_vr_videos_for_job_endpoint(job_id: int):
+    """Get all VR videos generated for a job."""
+    from database import get_vr_videos_for_job
+
+    vr_videos = get_vr_videos_for_job(job_id)
+    return {"vr_videos": vr_videos}
+
+
+@router.get("/vr-video/{vr_video_id}/download")
+async def download_vr_video(vr_video_id: int):
+    """Download a completed VR video."""
+    from database import get_vr_video
+
+    vr_video = get_vr_video(vr_video_id)
+    if not vr_video:
+        raise HTTPException(status_code=404, detail="VR video not found")
+
+    if vr_video["status"] != "completed":
+        raise HTTPException(status_code=400, detail="VR video not ready")
+
+    output_path = vr_video.get("output_path")
+    if not output_path or not os.path.exists(output_path):
+        raise HTTPException(status_code=404, detail="VR video file not found")
+
+    from pathlib import Path
+    filename = Path(output_path).name
+    return FileResponse(
+        output_path,
+        media_type="video/mp4",
+        filename=filename
+    )
+
+
+@router.delete("/vr-video/{vr_video_id}")
+async def delete_vr_video_endpoint(vr_video_id: int):
+    """Delete a VR video record and its file."""
+    from database import get_vr_video, delete_vr_video
+
+    vr_video = get_vr_video(vr_video_id)
+    if not vr_video:
+        raise HTTPException(status_code=404, detail="VR video not found")
+
+    # Delete the file if it exists
+    file_deleted = False
+    output_path = vr_video.get("output_path")
+    if output_path and os.path.exists(output_path):
+        try:
+            os.remove(output_path)
+            file_deleted = True
+        except Exception as e:
+            print(f"[VRVideo] Failed to delete file {output_path}: {e}")
+
+    # Delete database record
+    delete_vr_video(vr_video_id)
+
+    return {"deleted": True, "file_deleted": file_deleted}
