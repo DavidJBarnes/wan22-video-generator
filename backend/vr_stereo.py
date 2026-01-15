@@ -82,7 +82,16 @@ def unload_midas_model():
     print("[VRStereo] MiDaS model unloaded, GPU memory freed")
 
 
-def apply_equirectangular_projection(image: np.ndarray, fov_degrees: float = 180.0) -> np.ndarray:
+# Default FOV values for equirectangular projection
+DEFAULT_HORIZONTAL_FOV = 180  # degrees
+DEFAULT_VERTICAL_FOV = 180    # degrees (adjustable to reduce edge stretching)
+
+
+def apply_equirectangular_projection(
+    image: np.ndarray,
+    fov_horizontal: float = DEFAULT_HORIZONTAL_FOV,
+    fov_vertical: float = DEFAULT_VERTICAL_FOV
+) -> np.ndarray:
     """Apply equirectangular projection to a flat/rectilinear image.
 
     This pre-warps the image so it displays correctly when mapped to a
@@ -90,7 +99,8 @@ def apply_equirectangular_projection(image: np.ndarray, fov_degrees: float = 180
 
     Args:
         image: Input image (BGR format from OpenCV)
-        fov_degrees: Field of view in degrees (default 180 for VR 180)
+        fov_horizontal: Horizontal field of view in degrees (default 180)
+        fov_vertical: Vertical field of view in degrees (default 180, reduce to minimize edge stretching)
 
     Returns:
         Equirectangular projected image
@@ -98,36 +108,34 @@ def apply_equirectangular_projection(image: np.ndarray, fov_degrees: float = 180
     import cv2
 
     height, width = image.shape[:2]
-    fov_rad = np.radians(fov_degrees)
+    fov_h_rad = np.radians(fov_horizontal)
+    fov_v_rad = np.radians(fov_vertical)
 
     # Create output coordinate grids
-    # For equirectangular, x maps to longitude (-pi/2 to pi/2 for 180°)
-    # and y maps to latitude (-pi/4 to pi/4 for typical aspect ratio)
+    # For equirectangular, x maps to longitude and y maps to latitude
     u = np.linspace(-0.5, 0.5, width).astype(np.float32)
     v = np.linspace(-0.5, 0.5, height).astype(np.float32)
     u_grid, v_grid = np.meshgrid(u, v)
 
     # Convert normalized coordinates to spherical angles
-    # longitude (theta) spans the horizontal FOV
-    # latitude (phi) spans the vertical FOV (adjusted for aspect ratio)
-    theta = u_grid * fov_rad  # -pi/2 to pi/2 for 180°
-    phi = v_grid * fov_rad * (height / width)  # Maintain aspect ratio
+    # theta (longitude) spans the horizontal FOV
+    # phi (latitude) spans the vertical FOV
+    theta = u_grid * fov_h_rad  # horizontal angle
+    phi = v_grid * fov_v_rad    # vertical angle
 
     # Convert spherical to 3D Cartesian (on unit sphere)
     x = np.cos(phi) * np.sin(theta)
     y = np.sin(phi)
     z = np.cos(phi) * np.cos(theta)
 
-    # Project back to flat image coordinates (rectilinear projection)
+    # Project back to flat image coordinates (gnomonic/rectilinear projection)
     # This gives us where to sample from the original image
-    # Using gnomonic (rectilinear) projection formula
     src_x = x / (z + 1e-10)  # Avoid division by zero
     src_y = y / (z + 1e-10)
 
     # Normalize to image coordinates
-    # The source image is assumed to have a certain FOV that we're mapping from
-    # Scale factor based on how much the image should be "zoomed"
-    scale = 0.8  # Adjustable - controls how much of the source is used
+    # Scale factor controls how much of the source is used
+    scale = 0.8
     map_x = ((src_x * scale + 0.5) * width).astype(np.float32)
     map_y = ((src_y * scale + 0.5) * height).astype(np.float32)
 
@@ -183,7 +191,8 @@ def generate_stereo_pair(
     output_path: str,
     eye_separation: float = 0.03,
     depth_strength: float = 1.0,
-    equirectangular: bool = True
+    equirectangular: bool = True,
+    vertical_fov: float = DEFAULT_VERTICAL_FOV
 ) -> Tuple[bool, str]:
     """Generate a VR 180 stereo image from a single image.
 
@@ -192,7 +201,8 @@ def generate_stereo_pair(
         output_path: Path for the output stereo image
         eye_separation: Horizontal displacement factor (default 0.03 = 3% of image width)
         depth_strength: Multiplier for depth-based displacement (default 1.0)
-        equirectangular: Apply equirectangular projection for proper VR 180 display (default True)
+        equirectangular: Apply equirectangular projection for VR 180 display (default True)
+        vertical_fov: Vertical field of view in degrees (90-180, default 180)
 
     Returns:
         Tuple of (success, message)
@@ -248,9 +258,9 @@ def generate_stereo_pair(
 
         # Apply equirectangular projection for proper VR 180 display
         if equirectangular:
-            print("[VRStereo] Applying equirectangular projection...")
-            left_eye = apply_equirectangular_projection(left_eye)
-            right_eye = apply_equirectangular_projection(right_eye)
+            print(f"[VRStereo] Applying equirectangular projection (vertical FOV: {vertical_fov}°)...")
+            left_eye = apply_equirectangular_projection(left_eye, DEFAULT_HORIZONTAL_FOV, vertical_fov)
+            right_eye = apply_equirectangular_projection(right_eye, DEFAULT_HORIZONTAL_FOV, vertical_fov)
 
         # Create side-by-side stereo image (left | right)
         stereo = np.hstack([left_eye, right_eye])

@@ -36,6 +36,7 @@ export default function Settings() {
   const [vrOutputWidth, setVrOutputWidth] = useState(4128);
   const [vrOutputHeight, setVrOutputHeight] = useState(2208);
   const [vrEquirectangular, setVrEquirectangular] = useState(true);
+  const [vrVerticalFov, setVrVerticalFov] = useState(165);
 
   useEffect(() => {
     loadSettings();
@@ -78,6 +79,7 @@ export default function Settings() {
       setVrOutputWidth(parseInt(s.vr_output_width) || 4128);
       setVrOutputHeight(parseInt(s.vr_output_height) || 2208);
       setVrEquirectangular(s.vr_equirectangular !== 'false');
+      setVrVerticalFov(parseInt(s.vr_vertical_fov) || 165);
 
       setLoading(false);
     } catch (error) {
@@ -157,7 +159,8 @@ export default function Settings() {
         vr_depth_strength: String(vrDepthStrength),
         vr_output_width: String(vrOutputWidth),
         vr_output_height: String(vrOutputHeight),
-        vr_equirectangular: String(vrEquirectangular)
+        vr_equirectangular: String(vrEquirectangular),
+        vr_vertical_fov: String(vrVerticalFov)
       };
 
       await API.updateSettings(settingsPayload);
@@ -594,6 +597,8 @@ export default function Settings() {
               </small>
             </div>
           </div>
+
+          {/* Equirectangular Projection Settings */}
           <div className="form-group" style={{ marginTop: '16px' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
               <input
@@ -608,6 +613,28 @@ export default function Settings() {
               Apply equirectangular projection for proper VR 180° viewing. Enable for VR headsets (Quest, etc.), disable for flat SBS viewing.
             </small>
           </div>
+
+          {vrEquirectangular && (
+            <div className="form-group" style={{ marginTop: '12px' }}>
+              <label>Vertical FOV: {vrVerticalFov}°</label>
+              <input
+                type="range"
+                value={vrVerticalFov}
+                onChange={(e) => setVrVerticalFov(parseInt(e.target.value))}
+                min="90"
+                max="180"
+                step="5"
+                style={{ width: '100%' }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#666', fontSize: '11px' }}>
+                <span>90° (less stretch)</span>
+                <span>180° (full sphere)</span>
+              </div>
+              <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                Vertical field of view for projection. Lower values reduce edge stretching. Recommended: 165°.
+              </small>
+            </div>
+          )}
         </div>
         </div>
 
