@@ -32,7 +32,8 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
   const [vrSettings, setVrSettings] = useState({
     eyeSeparation: 0.03,
     depthStrength: 1.0,
-    equirectangular: true
+    equirectangular: true,
+    verticalFov: 165
   });
 
   // Lock scroll on .main-content when modal is open
@@ -122,7 +123,8 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
         setVrSettings({
           eyeSeparation: parseFloat(s.vr_eye_separation) || 0.03,
           depthStrength: parseFloat(s.vr_depth_strength) || 1.0,
-          equirectangular: s.vr_equirectangular !== 'false'
+          equirectangular: s.vr_equirectangular !== 'false',
+          verticalFov: parseInt(s.vr_vertical_fov) || 165
         });
       } catch (error) {
         console.error('Failed to load VR settings:', error);
@@ -252,7 +254,8 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
         image.path,
         vrSettings.eyeSeparation,
         vrSettings.depthStrength,
-        vrSettings.equirectangular
+        vrSettings.equirectangular,
+        vrSettings.verticalFov
       );
       const vrId = result.vr_id;
 
