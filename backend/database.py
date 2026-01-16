@@ -517,6 +517,30 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_vr_images_source ON vr_images(source_image_path)
         """)
 
+        # VR 180 stereo videos table - tracks generated VR videos
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS vr_videos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id INTEGER NOT NULL,
+                source_video_path TEXT NOT NULL,
+                output_path TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                error_message TEXT,
+                frame_count INTEGER DEFAULT 0,
+                frames_processed INTEGER DEFAULT 0,
+                current_stage TEXT DEFAULT 'pending',
+                settings TEXT,
+                created_at TEXT NOT NULL,
+                completed_at TEXT,
+                FOREIGN KEY (job_id) REFERENCES jobs(id)
+            )
+        """)
+
+        # Index for fast lookup by job_id
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_vr_videos_job ON vr_videos(job_id)
+        """)
+
         # Migrate from old schema if needed and always drop old tables
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='image_tag_associations'")
         if cursor.fetchone():
@@ -563,10 +587,12 @@ def init_db():
             "vr_vertical_fov": "90",
             "vr_depth_smoothing": "2.0",
             "vr_output_sharpening": "0.3",
-            # Real-ESRGAN upscaling settings
+            # Real-ESRGAN upscaling settings for VR images
             "vr_upscale_enabled": "true",
             "vr_upscale_factor": "2",
-            "vr_upscale_threshold": "1500"
+            "vr_upscale_threshold": "1500",
+            # Real-ESRGAN upscaling settings for VR videos
+            "vr_video_upscale_enabled": "false"
         }
 
         for key, value in default_settings.items():
@@ -2468,4 +2494,134 @@ def delete_vr_image(vr_id: int) -> bool:
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM vr_images WHERE id = ?", (vr_id,))
+        return cursor.rowcount > 0
+
+
+# ============== VR Videos Functions ==============
+
+def create_vr_video(
+    job_id: int,
+    source_video_path: str,
+    settings: Optional[Dict[str, Any]] = None
+) -> int:
+    """Create a new VR video generation record.
+
+    Args:
+        job_id: ID of the job this video belongs to
+        source_video_path: Path to the source video
+        settings: Optional dict of generation settings
+
+    Returns:
+        The ID of the created record
+    """
+    import json
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        settings_json = json.dumps(settings) if settings else None
+        cursor.execute("""
+            INSERT INTO vr_videos (job_id, source_video_path, status, settings, created_at)
+            VALUES (?, ?, 'pending', ?, ?)
+        """, (job_id, source_video_path, settings_json, utc_now_iso()))
+        return cursor.lastrowid
+
+
+def update_vr_video_status(
+    vr_video_id: int,
+    status: str,
+    output_path: Optional[str] = None,
+    error_message: Optional[str] = None,
+    frame_count: Optional[int] = None,
+    frames_processed: Optional[int] = None,
+    current_stage: Optional[str] = None
+):
+    """Update VR video generation status.
+
+    Args:
+        vr_video_id: ID of the VR video record
+        status: New status ('pending', 'processing', 'completed', 'failed')
+        output_path: Path to generated video (for completed status)
+        error_message: Error message (for failed status)
+        frame_count: Total number of frames
+        frames_processed: Number of frames processed so far
+        current_stage: Current processing stage
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        updates = ["status = ?"]
+        values = [status]
+
+        if output_path is not None:
+            updates.append("output_path = ?")
+            values.append(output_path)
+
+        if error_message is not None:
+            updates.append("error_message = ?")
+            values.append(error_message)
+
+        if frame_count is not None:
+            updates.append("frame_count = ?")
+            values.append(frame_count)
+
+        if frames_processed is not None:
+            updates.append("frames_processed = ?")
+            values.append(frames_processed)
+
+        if current_stage is not None:
+            updates.append("current_stage = ?")
+            values.append(current_stage)
+
+        if status == "completed":
+            updates.append("completed_at = ?")
+            values.append(utc_now_iso())
+
+        values.append(vr_video_id)
+        cursor.execute(f"""
+            UPDATE vr_videos
+            SET {", ".join(updates)}
+            WHERE id = ?
+        """, values)
+
+
+def get_vr_video(vr_video_id: int) -> Optional[Dict[str, Any]]:
+    """Get a VR video record by ID.
+
+    Returns:
+        VR video record as dict, or None if not found
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM vr_videos WHERE id = ?", (vr_video_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_vr_videos_for_job(job_id: int) -> List[Dict[str, Any]]:
+    """Get all VR videos generated for a job.
+
+    Args:
+        job_id: ID of the job
+
+    Returns:
+        List of VR video records, ordered by creation date descending
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM vr_videos
+            WHERE job_id = ?
+            ORDER BY created_at DESC
+        """, (job_id,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def delete_vr_video(vr_video_id: int) -> bool:
+    """Delete a VR video record.
+
+    Note: This only deletes the database record, not the file itself.
+    Returns True if deleted, False if not found.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM vr_videos WHERE id = ?", (vr_video_id,))
         return cursor.rowcount > 0

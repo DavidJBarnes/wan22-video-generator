@@ -42,6 +42,7 @@ export default function Settings() {
   const [vrUpscaleEnabled, setVrUpscaleEnabled] = useState(true);
   const [vrUpscaleFactor, setVrUpscaleFactor] = useState(2);
   const [vrUpscaleThreshold, setVrUpscaleThreshold] = useState(1500);
+  const [vrVideoUpscaleEnabled, setVrVideoUpscaleEnabled] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -90,6 +91,7 @@ export default function Settings() {
       setVrUpscaleEnabled(s.vr_upscale_enabled !== 'false');
       setVrUpscaleFactor(parseInt(s.vr_upscale_factor) || 2);
       setVrUpscaleThreshold(parseInt(s.vr_upscale_threshold) || 1500);
+      setVrVideoUpscaleEnabled(s.vr_video_upscale_enabled === 'true');
 
       setLoading(false);
     } catch (error) {
@@ -175,7 +177,8 @@ export default function Settings() {
         vr_output_sharpening: String(vrOutputSharpening),
         vr_upscale_enabled: String(vrUpscaleEnabled),
         vr_upscale_factor: String(vrUpscaleFactor),
-        vr_upscale_threshold: String(vrUpscaleThreshold)
+        vr_upscale_threshold: String(vrUpscaleThreshold),
+        vr_video_upscale_enabled: String(vrVideoUpscaleEnabled)
       };
 
       await API.updateSettings(settingsPayload);
@@ -701,10 +704,24 @@ export default function Settings() {
                   onChange={(e) => setVrUpscaleEnabled(e.target.checked)}
                   style={{ width: 'auto', margin: 0 }}
                 />
-                Enable AI Upscaling
+                Enable AI upscaling for VR image generation
               </label>
               <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
                 Use Real-ESRGAN to enhance low-resolution source images before VR conversion.
+              </small>
+            </div>
+            <div className="form-group" style={{ marginTop: '12px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={vrVideoUpscaleEnabled}
+                  onChange={(e) => setVrVideoUpscaleEnabled(e.target.checked)}
+                  style={{ width: 'auto', margin: 0 }}
+                />
+                Enable AI upscaling for VR video generation
+              </label>
+              <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                Upscale each video frame before VR conversion. Warning: significantly increases processing time.
               </small>
             </div>
 
