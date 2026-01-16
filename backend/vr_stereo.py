@@ -1,9 +1,9 @@
-"""VR 180 Stereo Image Generation using MiDaS depth estimation."""
+"""VR 180 Stereo Image Generation using depth estimation (MiDaS or Depth Anything V2)."""
 
 import os
 import sys
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Literal
 import numpy as np
 
 # Check for required environment variable
@@ -17,43 +17,86 @@ else:
         VR_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         print(f"[VRStereo] Created output directory: {VR_OUTPUT_DIR}")
 
-# Lazy-load heavy dependencies
+# Supported depth estimation models
+DEPTH_MODEL_MIDAS = "midas"
+DEPTH_MODEL_DEPTH_ANYTHING = "depth_anything_v2"
+DEFAULT_DEPTH_MODEL = DEPTH_MODEL_DEPTH_ANYTHING  # Depth Anything V2 is recommended
+
+# Lazy-load heavy dependencies - MiDaS
 _midas_model = None
 _midas_transform = None
-_device = None
+_midas_device = None
+
+# Lazy-load heavy dependencies - Depth Anything V2
+_depth_anything_model = None
+_depth_anything_processor = None
+_depth_anything_device = None
+
+# Track which model is currently loaded
+_current_depth_model = None
 
 
 def _load_midas():
     """Lazy load MiDaS model on first use."""
-    global _midas_model, _midas_transform, _device
+    global _midas_model, _midas_transform, _midas_device, _current_depth_model
 
     if _midas_model is not None:
-        return _midas_model, _midas_transform, _device
+        return _midas_model, _midas_transform, _midas_device
+
+    # Unload other model if loaded
+    if _current_depth_model == DEPTH_MODEL_DEPTH_ANYTHING:
+        _unload_depth_anything()
 
     import torch
 
-    _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[VRStereo] Loading MiDaS model on {_device}...")
+    _midas_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"[VRStereo] Loading MiDaS model on {_midas_device}...")
 
     # Use MiDaS v3.1 DPT-Large for best quality
     _midas_model = torch.hub.load("intel-isl/MiDaS", "DPT_Large")
-    _midas_model.to(_device)
+    _midas_model.to(_midas_device)
     _midas_model.eval()
 
     midas_transforms = torch.hub.load("intel-isl/MiDaS", "transforms")
     _midas_transform = midas_transforms.dpt_transform
 
+    _current_depth_model = DEPTH_MODEL_MIDAS
     print("[VRStereo] MiDaS model loaded successfully")
-    return _midas_model, _midas_transform, _device
+    return _midas_model, _midas_transform, _midas_device
 
 
-def unload_midas_model():
-    """Unload MiDaS model from GPU memory to free VRAM.
+def _load_depth_anything():
+    """Lazy load Depth Anything V2 model on first use."""
+    global _depth_anything_model, _depth_anything_processor, _depth_anything_device, _current_depth_model
 
-    This should be called after VR generation is complete to release
-    GPU memory for other tasks (like video generation).
-    """
-    global _midas_model, _midas_transform, _device
+    if _depth_anything_model is not None:
+        return _depth_anything_model, _depth_anything_processor, _depth_anything_device
+
+    # Unload other model if loaded
+    if _current_depth_model == DEPTH_MODEL_MIDAS:
+        _unload_midas()
+
+    import torch
+    from transformers import AutoImageProcessor, AutoModelForDepthEstimation
+
+    _depth_anything_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"[VRStereo] Loading Depth Anything V2 model on {_depth_anything_device}...")
+
+    # Use Depth Anything V2 Large for best quality
+    model_name = "depth-anything/Depth-Anything-V2-Large-hf"
+    _depth_anything_processor = AutoImageProcessor.from_pretrained(model_name)
+    _depth_anything_model = AutoModelForDepthEstimation.from_pretrained(model_name)
+    _depth_anything_model.to(_depth_anything_device)
+    _depth_anything_model.eval()
+
+    _current_depth_model = DEPTH_MODEL_DEPTH_ANYTHING
+    print("[VRStereo] Depth Anything V2 model loaded successfully")
+    return _depth_anything_model, _depth_anything_processor, _depth_anything_device
+
+
+def _unload_midas():
+    """Unload MiDaS model from GPU memory."""
+    global _midas_model, _midas_transform, _midas_device, _current_depth_model
 
     if _midas_model is None:
         return
@@ -63,23 +106,59 @@ def unload_midas_model():
 
     print("[VRStereo] Unloading MiDaS model...")
 
-    # Move model to CPU first (releases GPU memory)
     _midas_model.to("cpu")
-
-    # Clear references
     _midas_model = None
     _midas_transform = None
-    _device = None
+    _midas_device = None
 
-    # Force garbage collection
+    if _current_depth_model == DEPTH_MODEL_MIDAS:
+        _current_depth_model = None
+
     gc.collect()
-
-    # Clear CUDA cache if available
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
 
-    print("[VRStereo] MiDaS model unloaded, GPU memory freed")
+    print("[VRStereo] MiDaS model unloaded")
+
+
+def _unload_depth_anything():
+    """Unload Depth Anything V2 model from GPU memory."""
+    global _depth_anything_model, _depth_anything_processor, _depth_anything_device, _current_depth_model
+
+    if _depth_anything_model is None:
+        return
+
+    import torch
+    import gc
+
+    print("[VRStereo] Unloading Depth Anything V2 model...")
+
+    _depth_anything_model.to("cpu")
+    _depth_anything_model = None
+    _depth_anything_processor = None
+    _depth_anything_device = None
+
+    if _current_depth_model == DEPTH_MODEL_DEPTH_ANYTHING:
+        _current_depth_model = None
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+
+    print("[VRStereo] Depth Anything V2 model unloaded")
+
+
+def unload_midas_model():
+    """Unload depth estimation model from GPU memory to free VRAM.
+
+    This should be called after VR generation is complete to release
+    GPU memory for other tasks (like video generation).
+    """
+    _unload_midas()
+    _unload_depth_anything()
+    print("[VRStereo] Depth models unloaded, GPU memory freed")
 
 
 # Default FOV values for equirectangular projection
@@ -208,11 +287,12 @@ def apply_equirectangular_projection(
     return result
 
 
-def estimate_depth(image) -> np.ndarray:
-    """Estimate depth map from an image using MiDaS.
+def estimate_depth(image, depth_model: str = DEFAULT_DEPTH_MODEL) -> np.ndarray:
+    """Estimate depth map from an image using specified model.
 
     Args:
         image: Either a file path (str) or a numpy array (BGR format from OpenCV)
+        depth_model: Which depth model to use ("midas" or "depth_anything_v2")
 
     Returns:
         Depth map as numpy array (higher values = closer to camera)
@@ -220,30 +300,77 @@ def estimate_depth(image) -> np.ndarray:
     import torch
     import cv2
 
-    model, transform, device = _load_midas()
-
     # Handle both file path and numpy array input
     if isinstance(image, str):
         img = cv2.imread(image)
         if img is None:
             raise ValueError(f"Could not load image: {image}")
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     elif isinstance(image, np.ndarray):
         # Assume BGR format from OpenCV, convert to RGB
-        img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     else:
         raise TypeError(f"image must be str or numpy array, got {type(image)}")
 
-    input_batch = transform(img).to(device)
+    if depth_model == DEPTH_MODEL_MIDAS:
+        depth = _estimate_depth_midas(img_rgb)
+    elif depth_model == DEPTH_MODEL_DEPTH_ANYTHING:
+        depth = _estimate_depth_anything(img_rgb)
+    else:
+        raise ValueError(f"Unknown depth model: {depth_model}. Use '{DEPTH_MODEL_MIDAS}' or '{DEPTH_MODEL_DEPTH_ANYTHING}'")
+
+    return depth
+
+
+def _estimate_depth_midas(img_rgb: np.ndarray) -> np.ndarray:
+    """Estimate depth using MiDaS model."""
+    import torch
+
+    model, transform, device = _load_midas()
+
+    input_batch = transform(img_rgb).to(device)
 
     with torch.no_grad():
         prediction = model(input_batch)
         prediction = torch.nn.functional.interpolate(
             prediction.unsqueeze(1),
-            size=img.shape[:2],
+            size=img_rgb.shape[:2],
             mode="bicubic",
             align_corners=False,
         ).squeeze()
+
+    depth = prediction.cpu().numpy()
+
+    # Normalize depth to 0-1 range
+    depth = (depth - depth.min()) / (depth.max() - depth.min() + 1e-8)
+
+    return depth
+
+
+def _estimate_depth_anything(img_rgb: np.ndarray) -> np.ndarray:
+    """Estimate depth using Depth Anything V2 model."""
+    import torch
+    from PIL import Image
+
+    model, processor, device = _load_depth_anything()
+
+    # Convert numpy array to PIL Image
+    pil_image = Image.fromarray(img_rgb)
+
+    # Process image
+    inputs = processor(images=pil_image, return_tensors="pt").to(device)
+
+    with torch.no_grad():
+        outputs = model(**inputs)
+        predicted_depth = outputs.predicted_depth
+
+    # Interpolate to original size
+    prediction = torch.nn.functional.interpolate(
+        predicted_depth.unsqueeze(1),
+        size=img_rgb.shape[:2],
+        mode="bicubic",
+        align_corners=False,
+    ).squeeze()
 
     depth = prediction.cpu().numpy()
 
@@ -266,7 +393,8 @@ def generate_stereo_pair(
     output_height: int = DEFAULT_OUTPUT_HEIGHT,
     upscale_enabled: bool = DEFAULT_UPSCALE_ENABLED,
     upscale_factor: int = DEFAULT_UPSCALE_FACTOR,
-    upscale_threshold: int = DEFAULT_UPSCALE_THRESHOLD
+    upscale_threshold: int = DEFAULT_UPSCALE_THRESHOLD,
+    depth_model: str = DEFAULT_DEPTH_MODEL
 ) -> Tuple[bool, str]:
     """Generate a VR 180 stereo image from a single image.
 
@@ -284,6 +412,7 @@ def generate_stereo_pair(
         upscale_enabled: Enable Real-ESRGAN upscaling for low-res sources (default True)
         upscale_factor: Upscale factor 2 or 4 (default 2)
         upscale_threshold: Upscale if source width below this (default 1500)
+        depth_model: Depth estimation model ("midas" or "depth_anything_v2", default "depth_anything_v2")
 
     Returns:
         Tuple of (success, message)
@@ -321,8 +450,8 @@ def generate_stereo_pair(
                 print(f"[VRStereo] Upscaling failed, continuing without: {e}")
 
         # Estimate depth (pass numpy array if upscaled, otherwise file path)
-        print("[VRStereo] Estimating depth...")
-        depth = estimate_depth(img if upscaled else image_path)
+        print(f"[VRStereo] Estimating depth using {depth_model}...")
+        depth = estimate_depth(img if upscaled else image_path, depth_model=depth_model)
 
         # Apply depth smoothing to reduce harsh stereo transitions
         if depth_smoothing > 0:

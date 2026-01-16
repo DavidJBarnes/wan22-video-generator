@@ -2529,7 +2529,8 @@ async def generate_vr_image(
     output_height: int = Form(2208),
     upscale_enabled: bool = Form(True),
     upscale_factor: int = Form(2),
-    upscale_threshold: int = Form(1500)
+    upscale_threshold: int = Form(1500),
+    depth_model: str = Form("depth_anything_v2")
 ):
     """Start VR 180 stereo image generation for a source image.
 
@@ -2591,7 +2592,8 @@ async def generate_vr_image(
                 output_height=output_height,
                 upscale_enabled=upscale_enabled,
                 upscale_factor=upscale_factor,
-                upscale_threshold=upscale_threshold
+                upscale_threshold=upscale_threshold,
+                depth_model=depth_model
             )
             if success:
                 update_vr_image_status(vr_id, "completed", output_path=output_path)
@@ -2691,7 +2693,9 @@ async def generate_vr_video(
     output_height: int = Form(2208),
     upscale_enabled: bool = Form(False),
     upscale_factor: int = Form(2),
-    upscale_threshold: int = Form(1500)
+    upscale_threshold: int = Form(1500),
+    depth_model: str = Form("depth_anything_v2"),
+    encoding_preset: str = Form("balanced")
 ):
     """Start VR 180 stereo video generation for a job's final video.
 
@@ -2727,7 +2731,9 @@ async def generate_vr_video(
         "output_height": output_height,
         "upscale_enabled": upscale_enabled,
         "upscale_factor": upscale_factor,
-        "upscale_threshold": upscale_threshold
+        "upscale_threshold": upscale_threshold,
+        "depth_model": depth_model,
+        "encoding_preset": encoding_preset
     }
     vr_video_id = create_vr_video(job_id, source_video, settings)
 
@@ -2762,6 +2768,8 @@ async def generate_vr_video(
                 upscale_enabled=upscale_enabled,
                 upscale_factor=upscale_factor,
                 upscale_threshold=upscale_threshold,
+                depth_model=depth_model,
+                encoding_preset=encoding_preset,
                 progress_callback=progress_callback
             )
             if success:

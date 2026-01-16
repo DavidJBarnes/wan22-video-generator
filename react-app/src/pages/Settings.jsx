@@ -43,6 +43,8 @@ export default function Settings() {
   const [vrUpscaleFactor, setVrUpscaleFactor] = useState(2);
   const [vrUpscaleThreshold, setVrUpscaleThreshold] = useState(1500);
   const [vrVideoUpscaleEnabled, setVrVideoUpscaleEnabled] = useState(false);
+  const [vrDepthModel, setVrDepthModel] = useState('depth_anything_v2');
+  const [vrEncodingPreset, setVrEncodingPreset] = useState('balanced');
 
   useEffect(() => {
     loadSettings();
@@ -92,6 +94,8 @@ export default function Settings() {
       setVrUpscaleFactor(parseInt(s.vr_upscale_factor) || 2);
       setVrUpscaleThreshold(parseInt(s.vr_upscale_threshold) || 1500);
       setVrVideoUpscaleEnabled(s.vr_video_upscale_enabled === 'true');
+      setVrDepthModel(s.vr_depth_model || 'depth_anything_v2');
+      setVrEncodingPreset(s.vr_encoding_preset || 'balanced');
 
       setLoading(false);
     } catch (error) {
@@ -178,7 +182,9 @@ export default function Settings() {
         vr_upscale_enabled: String(vrUpscaleEnabled),
         vr_upscale_factor: String(vrUpscaleFactor),
         vr_upscale_threshold: String(vrUpscaleThreshold),
-        vr_video_upscale_enabled: String(vrVideoUpscaleEnabled)
+        vr_video_upscale_enabled: String(vrVideoUpscaleEnabled),
+        vr_depth_model: vrDepthModel,
+        vr_encoding_preset: vrEncodingPreset
       };
 
       await API.updateSettings(settingsPayload);
@@ -516,6 +522,7 @@ export default function Settings() {
               >
                 <option value={30}>30 fps</option>
                 <option value={60}>60 fps</option>
+                <option value={90}>90 fps (Quest 3S)</option>
               </select>
             </div>
           </div>
@@ -554,9 +561,44 @@ export default function Settings() {
         <div className="card settings-section">
           <h2>VR 180 Stereo</h2>
           <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
-            Settings for generating VR 180° stereoscopic images using MiDaS depth estimation.
+            Settings for generating VR 180° stereoscopic images and videos.
             Optimized for Meta Quest 3S.
           </p>
+
+          {/* Depth Model Selection */}
+          <div className="form-group" style={{ marginBottom: '20px' }}>
+            <label>Depth Estimation Model</label>
+            <select
+              value={vrDepthModel}
+              onChange={(e) => setVrDepthModel(e.target.value)}
+              style={{ width: '100%' }}
+            >
+              <option value="depth_anything_v2">Depth Anything V2 Large (recommended)</option>
+              <option value="midas">MiDaS DPT-Large (legacy)</option>
+            </select>
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+              Depth Anything V2 produces more accurate depth maps with better edge detection. MiDaS is the legacy option.
+            </small>
+          </div>
+
+          {/* Video Encoding Preset */}
+          <div className="form-group" style={{ marginBottom: '20px' }}>
+            <label>Video Encoding Preset</label>
+            <select
+              value={vrEncodingPreset}
+              onChange={(e) => setVrEncodingPreset(e.target.value)}
+              style={{ width: '100%' }}
+            >
+              <option value="high_quality">High Quality (H.265 CRF 17)</option>
+              <option value="balanced">Balanced (H.265 CRF 18) - recommended</option>
+              <option value="fast">Fast Encode (H.265 CRF 20)</option>
+              <option value="legacy_h264">Legacy H.264 (CRF 18)</option>
+            </select>
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+              H.265/HEVC offers better quality at smaller file sizes. Use Legacy H.264 for maximum compatibility with older devices.
+            </small>
+          </div>
+
           <div className="settings-grid">
             <div className="form-group">
               <label>Eye Separation</label>

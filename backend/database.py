@@ -592,7 +592,13 @@ def init_db():
             "vr_upscale_factor": "2",
             "vr_upscale_threshold": "1500",
             # Real-ESRGAN upscaling settings for VR videos
-            "vr_video_upscale_enabled": "false"
+            "vr_video_upscale_enabled": "false",
+            # Depth estimation model selection
+            "vr_depth_model": "depth_anything_v2",
+            # VR video encoding preset
+            "vr_encoding_preset": "balanced",
+            # VR video target FPS (30, 60, or 90)
+            "vr_target_fps": "60"
         }
 
         for key, value in default_settings.items():

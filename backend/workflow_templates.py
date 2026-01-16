@@ -205,14 +205,14 @@ def calculate_generation_params(target_fps: int, duration_sec: float) -> Dict[st
     """Calculate internal generation parameters from user-facing target fps.
 
     Args:
-        target_fps: User-selected output fps (30 or 60)
+        target_fps: User-selected output fps (30, 60, or 90)
         duration_sec: Video duration in seconds
 
     Returns:
         Dict with:
         - generation_fps: Base fps before interpolation (always 15)
         - wan_frames: Number of frames for WanImageToVideo node
-        - rife_multiplier: RIFE interpolation factor (2 for 30fps, 4 for 60fps)
+        - rife_multiplier: RIFE interpolation factor (2 for 30fps, 4 for 60fps, 6 for 90fps)
         - output_fps: Final output fps (same as target_fps)
     """
     # Calculate RIFE multiplier to reach target fps from 15fps base
@@ -255,7 +255,7 @@ def build_wan_i2v_workflow(
         width: Video width in pixels
         height: Video height in pixels
         duration_sec: Video duration in seconds (default 5.0)
-        target_fps: Output fps - 30 or 60 (uses RIFE 2x or 4x interpolation)
+        target_fps: Output fps - 30, 60, or 90 (uses RIFE 2x, 4x, or 6x interpolation)
         start_image_filename: Filename of the uploaded start image
         high_noise_model: UNET model for high noise pass
         low_noise_model: UNET model for low noise pass

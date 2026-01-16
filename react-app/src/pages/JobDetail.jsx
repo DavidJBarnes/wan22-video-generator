@@ -87,7 +87,9 @@ export default function JobDetail() {
     outputHeight: 2208,
     upscaleEnabled: false,
     upscaleFactor: 2,
-    upscaleThreshold: 1500
+    upscaleThreshold: 1500,
+    depthModel: 'depth_anything_v2',
+    encodingPreset: 'balanced'
   });
   const autoFinalizeTriggeredRef = useRef(false);
 
@@ -289,7 +291,9 @@ export default function JobDetail() {
           outputHeight: parseInt(s.vr_output_height) || 2208,
           upscaleEnabled: s.vr_video_upscale_enabled === 'true',
           upscaleFactor: parseInt(s.vr_upscale_factor) || 2,
-          upscaleThreshold: parseInt(s.vr_upscale_threshold) || 1500
+          upscaleThreshold: parseInt(s.vr_upscale_threshold) || 1500,
+          depthModel: s.vr_depth_model || 'depth_anything_v2',
+          encodingPreset: s.vr_encoding_preset || 'balanced'
         });
       } catch (error) {
         console.error('Failed to load VR settings:', error);
@@ -472,7 +476,9 @@ export default function JobDetail() {
         vrSettings.outputHeight,
         vrSettings.upscaleEnabled,
         vrSettings.upscaleFactor,
-        vrSettings.upscaleThreshold
+        vrSettings.upscaleThreshold,
+        vrSettings.depthModel,
+        vrSettings.encodingPreset
       );
       const vrVideoId = result.vr_video_id;
 
