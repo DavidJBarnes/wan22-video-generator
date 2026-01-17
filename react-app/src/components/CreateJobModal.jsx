@@ -210,6 +210,33 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
     }
   }
 
+  // Try to parse prefix/description from cloned job name
+  useEffect(() => {
+    if (!cloneData?.name) return;
+    if (namePrefixes.length === 0 && nameDescriptions.length === 0) return;
+
+    // Remove " (Copy)" suffix if present, then parse
+    const originalName = cloneData.name.replace(/ \(Copy\)$/, '');
+
+    // Job name format: "prefix-description-5s-30fps" or "description-5s-30fps" or just "name"
+    const parts = originalName.split('-');
+    if (parts.length >= 3) {
+      // Check if first part matches a known prefix
+      const potentialPrefix = parts[0];
+      if (namePrefixes.includes(potentialPrefix)) {
+        setSelectedPrefix(potentialPrefix);
+        // Check if second part matches a known description
+        const potentialDesc = parts[1];
+        if (nameDescriptions.includes(potentialDesc)) {
+          setSelectedDescription(potentialDesc);
+        }
+      } else if (nameDescriptions.includes(potentialPrefix)) {
+        // First part is actually a description (no prefix)
+        setSelectedDescription(potentialPrefix);
+      }
+    }
+  }, [namePrefixes, nameDescriptions, cloneData]);
+
   // Auto-populate prompt when first LoRA is selected (only if prompt is empty)
   useEffect(() => {
     const firstLora = selectedLoras[0].lora;
