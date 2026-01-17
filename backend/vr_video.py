@@ -1,4 +1,4 @@
-"""VR 180 Stereo Video Conversion using MiDaS depth estimation."""
+"""VR 180 Stereo Video Conversion using depth estimation."""
 
 import os
 import sys
@@ -7,8 +7,60 @@ import subprocess
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Optional, Tuple, Callable
+from typing import Optional, Tuple, Callable, Dict, Any
 import numpy as np
+
+# Video encoding presets for VR output
+# Based on Quest 3S requirements and quality/speed tradeoffs
+ENCODING_PRESETS: Dict[str, Dict[str, Any]] = {
+    "high_quality": {
+        "name": "High Quality",
+        "description": "Best quality, larger file size. H.265/HEVC CRF 17.",
+        "codec": "libx265",
+        "crf": "17",
+        "preset": "medium",
+        "extra_args": ["-tag:v", "hvc1"],  # Apple/Quest compatibility tag
+    },
+    "balanced": {
+        "name": "Balanced",
+        "description": "Good quality with reasonable file size. H.265/HEVC CRF 18.",
+        "codec": "libx265",
+        "crf": "18",
+        "preset": "medium",
+        "extra_args": ["-tag:v", "hvc1"],
+    },
+    "fast": {
+        "name": "Fast Encode",
+        "description": "Faster encoding, slightly lower quality. H.265/HEVC CRF 20.",
+        "codec": "libx265",
+        "crf": "20",
+        "preset": "fast",
+        "extra_args": ["-tag:v", "hvc1"],
+    },
+    "legacy_h264": {
+        "name": "Legacy H.264",
+        "description": "Maximum compatibility. H.264/AVC CRF 18.",
+        "codec": "libx264",
+        "crf": "18",
+        "preset": "medium",
+        "extra_args": [],
+    },
+}
+
+DEFAULT_ENCODING_PRESET = "balanced"
+
+
+def get_encoding_preset(preset_name: str) -> Dict[str, Any]:
+    """Get encoding preset configuration by name.
+
+    Args:
+        preset_name: Name of the preset (high_quality, balanced, fast, legacy_h264)
+
+    Returns:
+        Preset configuration dict, or balanced preset if name not found.
+    """
+    return ENCODING_PRESETS.get(preset_name, ENCODING_PRESETS[DEFAULT_ENCODING_PRESET])
+
 
 # Check for required environment variable
 VR_OUTPUT_PATH = os.environ.get("VR_OUTPUT_PATH")
@@ -132,7 +184,8 @@ def process_frame_to_stereo(
     depth_strength: float = 0.5,
     equirectangular: bool = False,
     vertical_fov: float = 90,
-    depth_smoothing: float = 2.0
+    depth_smoothing: float = 2.0,
+    depth_model: str = "depth_anything_v2"
 ) -> np.ndarray:
     """Convert a single frame to stereo pair.
 
@@ -143,6 +196,7 @@ def process_frame_to_stereo(
         equirectangular: Apply equirectangular projection
         vertical_fov: Vertical field of view in degrees
         depth_smoothing: Gaussian blur sigma for depth map
+        depth_model: Depth estimation model ("midas" or "depth_anything_v2")
 
     Returns:
         Stereo pair as numpy array (side-by-side)
@@ -156,7 +210,7 @@ def process_frame_to_stereo(
     height, width = frame.shape[:2]
 
     # Estimate depth from frame
-    depth = estimate_depth(frame)
+    depth = estimate_depth(frame, depth_model=depth_model)
 
     # Apply depth smoothing
     if depth_smoothing > 0:
@@ -216,6 +270,7 @@ def process_frames_to_stereo(
     upscale_enabled: bool = False,
     upscale_factor: int = 2,
     upscale_threshold: int = 1500,
+    depth_model: str = "depth_anything_v2",
     progress_callback: Optional[Callable[[int, int, str], None]] = None
 ) -> Tuple[bool, str]:
     """Process all extracted frames to stereo pairs.
@@ -227,6 +282,7 @@ def process_frames_to_stereo(
         upscale_enabled: Enable Real-ESRGAN upscaling for low-res frames
         upscale_factor: Upscale factor 2 or 4
         upscale_threshold: Upscale if frame width below this
+        depth_model: Depth estimation model ("midas" or "depth_anything_v2")
         progress_callback: Optional callback(current_frame, total_frames, stage)
 
     Returns:
@@ -288,7 +344,8 @@ def process_frames_to_stereo(
                 depth_strength=depth_strength,
                 equirectangular=equirectangular,
                 vertical_fov=vertical_fov,
-                depth_smoothing=depth_smoothing
+                depth_smoothing=depth_smoothing,
+                depth_model=depth_model
             )
 
             # Resize to output dimensions
@@ -324,7 +381,8 @@ def reassemble_video(
     frames_dir: str,
     output_path: str,
     fps: float,
-    source_video: Optional[str] = None
+    source_video: Optional[str] = None,
+    encoding_preset: str = DEFAULT_ENCODING_PRESET
 ) -> Tuple[bool, str]:
     """Reassemble stereo frames into a video, optionally with audio from source.
 
@@ -333,11 +391,21 @@ def reassemble_video(
         output_path: Path for output video
         fps: Frame rate for output video
         source_video: Optional source video to copy audio from
+        encoding_preset: Encoding preset name (high_quality, balanced, fast, legacy_h264)
 
     Returns:
         Tuple of (success, message)
     """
     try:
+        # Get encoding preset configuration
+        preset = get_encoding_preset(encoding_preset)
+        codec = preset["codec"]
+        crf = preset["crf"]
+        speed_preset = preset["preset"]
+        extra_args = preset["extra_args"]
+
+        print(f"[VRVideo] Using encoding preset: {preset['name']} ({codec} CRF {crf})")
+
         # Build ffmpeg command
         cmd = [
             "ffmpeg",
@@ -347,24 +415,28 @@ def reassemble_video(
         ]
 
         # Add audio from source if available
+        has_audio = False
         if source_video:
             # Check if source has audio
             info = get_video_info(source_video)
             if info and info.get("has_audio"):
+                has_audio = True
                 cmd.extend(["-i", source_video, "-map", "0:v", "-map", "1:a", "-shortest"])
 
+        # Video encoding settings
         cmd.extend([
-            "-c:v", "libx264",
-            "-preset", "medium",
-            "-crf", "18",
+            "-c:v", codec,
+            "-preset", speed_preset,
+            "-crf", crf,
             "-pix_fmt", "yuv420p",
         ])
 
-        # Copy audio codec if we have audio
-        if source_video:
-            info = get_video_info(source_video)
-            if info and info.get("has_audio"):
-                cmd.extend(["-c:a", "aac", "-b:a", "192k"])
+        # Add codec-specific extra arguments (e.g., hvc1 tag for HEVC)
+        cmd.extend(extra_args)
+
+        # Audio encoding if we have audio
+        if has_audio:
+            cmd.extend(["-c:a", "aac", "-b:a", "192k"])
 
         cmd.append(output_path)
 
@@ -399,6 +471,8 @@ def convert_video_to_vr180(
     upscale_enabled: bool = False,
     upscale_factor: int = 2,
     upscale_threshold: int = 1500,
+    depth_model: str = "depth_anything_v2",
+    encoding_preset: str = DEFAULT_ENCODING_PRESET,
     progress_callback: Optional[Callable[[int, int, str], None]] = None
 ) -> Tuple[bool, str]:
     """Main pipeline: Convert a regular video to VR 180 stereo video.
@@ -409,6 +483,8 @@ def convert_video_to_vr180(
         upscale_enabled: Enable Real-ESRGAN upscaling for low-res frames
         upscale_factor: Upscale factor 2 or 4
         upscale_threshold: Upscale if frame width below this
+        depth_model: Depth estimation model ("midas" or "depth_anything_v2")
+        encoding_preset: Video encoding preset (high_quality, balanced, fast, legacy_h264)
         progress_callback: Optional callback(current, total, stage) for progress updates
 
     Returns:
@@ -467,6 +543,7 @@ def convert_video_to_vr180(
             upscale_enabled=upscale_enabled,
             upscale_factor=upscale_factor,
             upscale_threshold=upscale_threshold,
+            depth_model=depth_model,
             progress_callback=progress_callback
         )
 
@@ -478,7 +555,7 @@ def convert_video_to_vr180(
         if progress_callback:
             progress_callback(frame_count, frame_count, "reassembling")
 
-        success, message = reassemble_video(stereo_dir, output_path, fps, video_path)
+        success, message = reassemble_video(stereo_dir, output_path, fps, video_path, encoding_preset)
         if not success:
             return False, f"Video reassembly failed: {message}"
 

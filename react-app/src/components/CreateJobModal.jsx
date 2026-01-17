@@ -468,11 +468,12 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                 <MenuItem value={10}>10 sec</MenuItem>
               </Select>
             </FormControl>
-            <FormControl variant="outlined" size="small" sx={{ width: '120px' }}>
+            <FormControl variant="outlined" size="small" sx={{ width: '140px' }}>
               <InputLabel>Output FPS</InputLabel>
               <Select value={targetFps} onChange={(e) => setTargetFps(parseInt(e.target.value))} label="Output FPS">
                 <MenuItem value={30}>30 fps</MenuItem>
                 <MenuItem value={60}>60 fps</MenuItem>
+                <MenuItem value={90}>90 fps</MenuItem>
               </Select>
             </FormControl>
           </div>

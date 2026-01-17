@@ -546,7 +546,7 @@ class APIClient {
 
   // ============== VR 180 Stereo Images ==============
 
-  async generateVRImage(imagePath, eyeSeparation = 0.015, depthStrength = 0.5, equirectangular = false, verticalFov = 90, depthSmoothing = 2.0, outputSharpening = 0.3, outputWidth = 4128, outputHeight = 2208, upscaleEnabled = true, upscaleFactor = 2, upscaleThreshold = 1500) {
+  async generateVRImage(imagePath, eyeSeparation = 0.015, depthStrength = 0.5, equirectangular = false, verticalFov = 90, depthSmoothing = 2.0, outputSharpening = 0.3, outputWidth = 4128, outputHeight = 2208, upscaleEnabled = true, upscaleFactor = 2, upscaleThreshold = 1500, depthModel = 'depth_anything_v2') {
     const formData = new FormData();
     formData.append('image_path', imagePath);
     formData.append('eye_separation', eyeSeparation.toString());
@@ -560,6 +560,7 @@ class APIClient {
     formData.append('upscale_enabled', upscaleEnabled.toString());
     formData.append('upscale_factor', upscaleFactor.toString());
     formData.append('upscale_threshold', upscaleThreshold.toString());
+    formData.append('depth_model', depthModel);
 
     return this.request('/vr/generate', {
       method: 'POST',
@@ -587,7 +588,7 @@ class APIClient {
 
   // ============== VR 180 Stereo Videos ==============
 
-  async generateVRVideo(jobId, eyeSeparation = 0.015, depthStrength = 0.5, equirectangular = false, verticalFov = 90, depthSmoothing = 2.0, outputSharpening = 0.3, outputWidth = 4128, outputHeight = 2208, upscaleEnabled = false, upscaleFactor = 2, upscaleThreshold = 1500) {
+  async generateVRVideo(jobId, eyeSeparation = 0.015, depthStrength = 0.5, equirectangular = false, verticalFov = 90, depthSmoothing = 2.0, outputSharpening = 0.3, outputWidth = 4128, outputHeight = 2208, upscaleEnabled = false, upscaleFactor = 2, upscaleThreshold = 1500, depthModel = 'depth_anything_v2', encodingPreset = 'balanced') {
     const formData = new FormData();
     formData.append('job_id', jobId.toString());
     formData.append('eye_separation', eyeSeparation.toString());
@@ -601,6 +602,8 @@ class APIClient {
     formData.append('upscale_enabled', upscaleEnabled.toString());
     formData.append('upscale_factor', upscaleFactor.toString());
     formData.append('upscale_threshold', upscaleThreshold.toString());
+    formData.append('depth_model', depthModel);
+    formData.append('encoding_preset', encodingPreset);
 
     return this.request('/vr-video/generate', {
       method: 'POST',
