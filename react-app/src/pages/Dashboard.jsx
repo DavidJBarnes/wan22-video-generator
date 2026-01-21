@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   FormControl,
   InputLabel,
@@ -7,16 +6,8 @@ import {
   MenuItem,
   Checkbox,
   ListItemText,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
   CircularProgress
 } from '@mui/material';
-import PaginationControl from '../components/PaginationControl';
 import MemoryIcon from '@mui/icons-material/Memory';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
@@ -26,24 +17,20 @@ import ScheduleIcon from '@mui/icons-material/Schedule';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import API from '../api/client';
 import { useJobs } from '../contexts/JobsContext';
-import { formatDate, getFaceswapName } from '../utils/helpers';
+import JobTable from '../components/JobTable';
 import StatusChip from '../components/StatusChip';
 import './Dashboard.css';
 
 export default function Dashboard() {
-  const navigate = useNavigate();
-  // Use centralized jobs context instead of local polling
   const { jobs: allJobs, comfyStatus, loading, stats, avgRunTime } = useJobs();
 
   const [runningJobProgress, setRunningJobProgress] = useState(null);
 
-  // Find the currently running job
   const runningJob = useMemo(() =>
     allJobs.find(job => job.status === 'running'),
     [allJobs]
   );
 
-  // Poll progress for running job
   useEffect(() => {
     if (!runningJob) {
       setRunningJobProgress(null);
@@ -64,7 +51,6 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [runningJob?.id]);
 
-  // Calculate ETA for next job completion
   const nextJobEta = useMemo(() => {
     if (!runningJob || !runningJobProgress?.started_at_ts || !avgRunTime) {
       return null;
@@ -74,16 +60,10 @@ export default function Dashboard() {
     return Math.round(remaining);
   }, [runningJob, runningJobProgress?.started_at_ts, avgRunTime]);
 
-  // Calculate total queue completion time (running job remaining + all pending jobs)
   const totalQueueTime = useMemo(() => {
     if (!avgRunTime) return null;
-
-    // Time for pending jobs
     const pendingTime = stats.pendingCount * avgRunTime;
-
-    // Add remaining time for currently running job
     const runningRemaining = nextJobEta || 0;
-
     return Math.round(pendingTime + runningRemaining);
   }, [stats.pendingCount, avgRunTime, nextJobEta]);
 
@@ -92,37 +72,29 @@ export default function Dashboard() {
     if (saved) {
       try {
         let parsed = JSON.parse(saved);
-        // Migrate old 'cancelled' status to 'paused'
         parsed = parsed.map(s => s === 'cancelled' ? 'paused' : s);
-        // Remove duplicates
         parsed = [...new Set(parsed)];
         return parsed;
       } catch { /* fall through */ }
     }
     return ['running', 'pending', 'awaiting_prompt'];
   });
-  const [page, setPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const allStatuses = ['pending', 'running', 'awaiting_prompt', 'completed', 'failed', 'paused'];
 
-  // Memoize filtered and sorted jobs
   const filteredJobs = useMemo(() => {
     let filtered = statusFilter.length === 0
       ? allJobs
       : allJobs.filter(job => statusFilter.includes(job.status));
 
-    // Sort: by status priority first, then by last_segment_run within each status group
-    // NULL last_segment_run values appear last within their status group
     filtered.sort((a, b) => {
-      // Priority order for statuses
       const statusPriority = {
         'awaiting_prompt': 1,
         'running': 2,
         'pending': 3,
         'completed': 4,
-        'failed': 4,  // Same priority as completed
-        'paused': 4  // Same priority as completed
+        'failed': 4,
+        'paused': 4
       };
 
       const priorityA = statusPriority[a.status] || 99;
@@ -132,16 +104,14 @@ export default function Dashboard() {
         return priorityA - priorityB;
       }
 
-      // Within same status group, sort by last_segment_run (newest first, NULL last)
       const dateA = a.last_segment_run ? new Date(a.last_segment_run) : null;
       const dateB = b.last_segment_run ? new Date(b.last_segment_run) : null;
 
-      // Handle NULL values - they go last
       if (dateA === null && dateB === null) return 0;
-      if (dateA === null) return 1;  // A (null) goes after B
-      if (dateB === null) return -1; // B (null) goes after A
+      if (dateA === null) return 1;
+      if (dateB === null) return -1;
 
-      return dateB - dateA; // Descending (newest first)
+      return dateB - dateA;
     });
 
     return filtered;
@@ -151,25 +121,12 @@ export default function Dashboard() {
     const value = event.target.value;
     setStatusFilter(value);
     localStorage.setItem('dashboardStatusFilter', JSON.stringify(value));
-    setPage(1);
-  }
-
-  function handleChangePage(event, newPage) {
-    setPage(newPage);
-  }
-
-  function handleChangeRowsPerPage(newPageSize) {
-    setRowsPerPage(newPageSize);
-    setPage(1);
   }
 
   function getComfyStatusClass() {
     if (!comfyStatus.reachable) return 'red';
-
     const queueRunning = comfyStatus.queue?.queue_running?.length || 0;
     const queuePending = comfyStatus.queue?.queue_pending?.length || 0;
-
-    // Show blue (running) if ComfyUI queue has items OR our app has running jobs
     if (queueRunning > 0 || queuePending > 0 || stats.runningCount > 0) {
       return 'blue';
     }
@@ -178,11 +135,8 @@ export default function Dashboard() {
 
   function getComfyStatusText() {
     if (!comfyStatus.reachable) return 'Not Connected';
-
     const queueRunning = comfyStatus.queue?.queue_running?.length || 0;
     const queuePending = comfyStatus.queue?.queue_pending?.length || 0;
-
-    // Show "Running" if ComfyUI queue has items OR our app has running jobs
     if (queueRunning > 0 || queuePending > 0 || stats.runningCount > 0) {
       return 'Connected - Running...';
     }
@@ -341,73 +295,11 @@ export default function Dashboard() {
         </FormControl>
       </div>
 
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell style={{fontWeight:'bold'}}></TableCell>
-              <TableCell style={{fontWeight:'bold'}}>Job Name</TableCell>
-              <TableCell style={{fontWeight:'bold'}}>Faceswap</TableCell>
-              <TableCell style={{fontWeight:'bold'}}>Status</TableCell>
-              <TableCell style={{fontWeight:'bold'}}>Segments</TableCell>
-              <TableCell style={{fontWeight:'bold'}}>Segment Run</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {filteredJobs.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ color: '#999' }}>
-                  No jobs match the filter
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredJobs
-                .slice((page - 1) * rowsPerPage, page * rowsPerPage)
-                .map(job => (
-                  <TableRow
-                    key={job.id}
-                    hover
-                    sx={{ cursor: 'pointer' }}
-                    onClick={() => navigate(`/job/${job.id}`)}
-                  >
-                    <TableCell>
-                      <img
-                        className="thumbnail"
-                        src={API.getJobThumbnail(job.id)}
-                        onError={(e) => e.target.style.display = 'none'}
-                        alt=""
-                      />
-                    </TableCell>
-                    <TableCell>{job.name}</TableCell>
-                    <TableCell sx={{ color: getFaceswapName(job) ? 'inherit' : '#999' }}>
-                      {getFaceswapName(job) || 'N/A'}
-                    </TableCell>
-                    <TableCell>
-                      <StatusChip status={job.status} />
-                    </TableCell>
-                    <TableCell>
-                      {job.completed_segments ?? 0} completed
-                      {(job.deleted_segments ?? 0) > 0 && (
-                        <span style={{ color: '#d32f2f', marginLeft: '8px' }}>
-                          + {job.deleted_segments} deleted
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>{job.last_segment_run ? formatDate(job.last_segment_run) : '-'}</TableCell>
-                  </TableRow>
-                ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-      <PaginationControl
-        count={filteredJobs.length}
-        page={page}
-        pageSize={rowsPerPage}
-        onPageChange={handleChangePage}
-        onPageSizeChange={handleChangeRowsPerPage}
-        showPageSize={true}
-        itemLabel="jobs"
+      <JobTable
+        jobs={filteredJobs}
+        showPriorityControls={false}
+        storageKey="dashboardTable"
+        emptyMessage="No jobs match the filter"
       />
     </div>
   );
