@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { FormControl, InputLabel, Select, MenuItem, Pagination, Box, CircularProgress, Button, Checkbox } from '@mui/material';
+import { FormControl, InputLabel, Select, MenuItem, Box, CircularProgress, Button, Checkbox } from '@mui/material';
+import PaginationControl from '../components/PaginationControl';
 import LazyImage from '../components/LazyImage';
 
 const FOLDERS_PER_PAGE = 24;
@@ -265,15 +266,27 @@ export default function ImageRepo() {
     setShowPreviewModal(false);
     setSelectedImage(null);
     setSelectedImageIndex(-1);
-    // Reload directory to reflect any rating changes, then restore scroll
-    loadDirectory(currentPath).then(() => {
-      requestAnimationFrame(() => {
-        const mainContent = document.querySelector('.main-content');
-        if (mainContent) {
-          mainContent.scrollTop = scrollToRestore;
-        }
-      });
+    // Restore scroll position
+    requestAnimationFrame(() => {
+      const mainContent = document.querySelector('.main-content');
+      if (mainContent) {
+        mainContent.scrollTop = scrollToRestore;
+      }
     });
+  }
+
+  function handleRatingChange(imagePath, newRating) {
+    // Update rating in local state without reloading
+    setAllImages(prev => prev.map(img =>
+      img.path === imagePath ? { ...img, rating: newRating } : img
+    ));
+    setImages(prev => prev.map(img =>
+      img.path === imagePath ? { ...img, rating: newRating } : img
+    ));
+    // Also update selected image if it's the same one
+    if (selectedImage && selectedImage.path === imagePath) {
+      setSelectedImage(prev => ({ ...prev, rating: newRating }));
+    }
   }
 
   function handleCreateJobFromPreview(imageUrl, dimensions) {
@@ -894,33 +907,22 @@ export default function ImageRepo() {
           )}
 
           {isRootLevel && folderPageCount > 1 && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, mb: 2 }}>
-              <Pagination
-                count={folderPageCount}
-                page={folderPage}
-                onChange={handleFolderPageChange}
-                color="primary"
-                showFirstButton
-                showLastButton
-              />
-            </Box>
+            <PaginationControl
+              count={folders.length}
+              page={folderPage}
+              pageSize={FOLDERS_PER_PAGE}
+              onPageChange={handleFolderPageChange}
+              itemLabel="folders"
+            />
           )}
 
-          {imagePageCount > 1 && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mt: 3, mb: 2 }}>
-              <span style={{ color: '#666', fontSize: '14px' }}>
-                {images.length} images
-              </span>
-              <Pagination
-                count={imagePageCount}
-                page={imagePage}
-                onChange={handleImagePageChange}
-                color="primary"
-                showFirstButton
-                showLastButton
-              />
-            </Box>
-          )}
+          <PaginationControl
+            count={images.length}
+            page={imagePage}
+            pageSize={IMAGES_PER_PAGE}
+            onPageChange={handleImagePageChange}
+            itemLabel="images"
+          />
         </>
       )}
 
@@ -933,6 +935,7 @@ export default function ImageRepo() {
           onCreateJob={handleCreateJobFromPreview}
           onDelete={handleDeleteImage}
           onNavigate={handleNavigateImage}
+          onRatingChange={handleRatingChange}
           defaultWidth={defaultWidth}
           defaultHeight={defaultHeight}
         />

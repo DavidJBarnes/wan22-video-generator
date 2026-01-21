@@ -15,10 +15,10 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TablePagination,
   Paper,
   CircularProgress
 } from '@mui/material';
+import PaginationControl from '../components/PaginationControl';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp';
@@ -50,7 +50,7 @@ export default function Queue() {
     return ['pending', 'running', 'awaiting_prompt', 'completed', 'failed', 'paused'];
   });
   const [showModal, setShowModal] = useState(false);
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const allStatuses = ['pending', 'running', 'awaiting_prompt', 'completed', 'failed', 'paused'];
@@ -105,9 +105,9 @@ export default function Queue() {
     setPage(newPage);
   }
 
-  function handleChangeRowsPerPage(event) {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
+  function handleChangeRowsPerPage(newPageSize) {
+    setRowsPerPage(newPageSize);
+    setPage(1);
   }
 
   function getQueuePosition(job) {
@@ -267,7 +267,7 @@ export default function Queue() {
               </TableRow>
             ) : (
               jobs
-                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                .slice((page - 1) * rowsPerPage, page * rowsPerPage)
                 .map(job => {
                   const position = getQueuePosition(job);
                   const pendingJobs = jobs.filter(j => j.status === 'pending');
@@ -364,16 +364,16 @@ export default function Queue() {
             )}
           </TableBody>
         </Table>
-        <TablePagination
-          component="div"
-          count={jobs.length}
-          page={page}
-          onPageChange={handleChangePage}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-          rowsPerPageOptions={[10, 25, 50, 100]}
-        />
       </TableContainer>
+      <PaginationControl
+        count={jobs.length}
+        page={page}
+        pageSize={rowsPerPage}
+        onPageChange={handleChangePage}
+        onPageSizeChange={handleChangeRowsPerPage}
+        showPageSize={true}
+        itemLabel="jobs"
+      />
 
       {showModal && (
         <CreateJobModal

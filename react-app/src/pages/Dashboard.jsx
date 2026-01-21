@@ -13,10 +13,10 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TablePagination,
   Paper,
   CircularProgress
 } from '@mui/material';
+import PaginationControl from '../components/PaginationControl';
 import MemoryIcon from '@mui/icons-material/Memory';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
@@ -101,7 +101,7 @@ export default function Dashboard() {
     }
     return ['running', 'pending', 'awaiting_prompt'];
   });
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const allStatuses = ['pending', 'running', 'awaiting_prompt', 'completed', 'failed', 'paused'];
@@ -151,16 +151,16 @@ export default function Dashboard() {
     const value = event.target.value;
     setStatusFilter(value);
     localStorage.setItem('dashboardStatusFilter', JSON.stringify(value));
-    setPage(0);
+    setPage(1);
   }
 
   function handleChangePage(event, newPage) {
     setPage(newPage);
   }
 
-  function handleChangeRowsPerPage(event) {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
+  function handleChangeRowsPerPage(newPageSize) {
+    setRowsPerPage(newPageSize);
+    setPage(1);
   }
 
   function getComfyStatusClass() {
@@ -362,7 +362,7 @@ export default function Dashboard() {
               </TableRow>
             ) : (
               filteredJobs
-                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                .slice((page - 1) * rowsPerPage, page * rowsPerPage)
                 .map(job => (
                   <TableRow
                     key={job.id}
@@ -399,16 +399,16 @@ export default function Dashboard() {
             )}
           </TableBody>
         </Table>
-        <TablePagination
-          component="div"
-          count={filteredJobs.length}
-          page={page}
-          onPageChange={handleChangePage}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-          rowsPerPageOptions={[10, 25, 50, 100]}
-        />
       </TableContainer>
+      <PaginationControl
+        count={filteredJobs.length}
+        page={page}
+        pageSize={rowsPerPage}
+        onPageChange={handleChangePage}
+        onPageSizeChange={handleChangeRowsPerPage}
+        showPageSize={true}
+        itemLabel="jobs"
+      />
     </div>
   );
 }
