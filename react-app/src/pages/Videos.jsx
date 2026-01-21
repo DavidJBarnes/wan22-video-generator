@@ -11,10 +11,10 @@ import {
   Tooltip,
   Modal,
   TextField,
-  Pagination,
   Button,
   CircularProgress
 } from '@mui/material';
+import PaginationControl from '../components/PaginationControl';
 import API from '../api/client';
 import { formatDate } from '../utils/helpers';
 import './Videos.css';
@@ -270,18 +270,13 @@ export default function Videos() {
             ))}
           </Grid>
 
-          {pageCount > 1 && (
-            <Box className="videos-pagination">
-              <Pagination
-                count={pageCount}
-                page={page}
-                onChange={handlePageChange}
-                color="primary"
-                showFirstButton
-                showLastButton
-              />
-            </Box>
-          )}
+          <PaginationControl
+            count={filteredVideos.length}
+            page={page}
+            pageSize={VIDEOS_PER_PAGE}
+            onPageChange={handlePageChange}
+            itemLabel="videos"
+          />
         </>
       )}
 
