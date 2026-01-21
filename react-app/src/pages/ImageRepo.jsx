@@ -265,15 +265,27 @@ export default function ImageRepo() {
     setShowPreviewModal(false);
     setSelectedImage(null);
     setSelectedImageIndex(-1);
-    // Reload directory to reflect any rating changes, then restore scroll
-    loadDirectory(currentPath).then(() => {
-      requestAnimationFrame(() => {
-        const mainContent = document.querySelector('.main-content');
-        if (mainContent) {
-          mainContent.scrollTop = scrollToRestore;
-        }
-      });
+    // Restore scroll position
+    requestAnimationFrame(() => {
+      const mainContent = document.querySelector('.main-content');
+      if (mainContent) {
+        mainContent.scrollTop = scrollToRestore;
+      }
     });
+  }
+
+  function handleRatingChange(imagePath, newRating) {
+    // Update rating in local state without reloading
+    setAllImages(prev => prev.map(img =>
+      img.path === imagePath ? { ...img, rating: newRating } : img
+    ));
+    setImages(prev => prev.map(img =>
+      img.path === imagePath ? { ...img, rating: newRating } : img
+    ));
+    // Also update selected image if it's the same one
+    if (selectedImage && selectedImage.path === imagePath) {
+      setSelectedImage(prev => ({ ...prev, rating: newRating }));
+    }
   }
 
   function handleCreateJobFromPreview(imageUrl, dimensions) {
@@ -933,6 +945,7 @@ export default function ImageRepo() {
           onCreateJob={handleCreateJobFromPreview}
           onDelete={handleDeleteImage}
           onNavigate={handleNavigateImage}
+          onRatingChange={handleRatingChange}
           defaultWidth={defaultWidth}
           defaultHeight={defaultHeight}
         />

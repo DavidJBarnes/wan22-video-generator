@@ -5,7 +5,7 @@ import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import './CreateJobModal.css';
 
-export default function ImagePreviewModal({ image, images, currentIndex, onClose, onCreateJob, onDelete, onNavigate, defaultWidth = 1280, defaultHeight = 720 }) {
+export default function ImagePreviewModal({ image, images, currentIndex, onClose, onCreateJob, onDelete, onNavigate, onRatingChange, defaultWidth = 1280, defaultHeight = 720 }) {
   const [deleting, setDeleting] = useState(false);
   const [creatingJob, setCreatingJob] = useState(false);
   const [rating, setRating] = useState(image.rating || null);
@@ -255,6 +255,10 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
     setRating(newValue);
     try {
       await API.setImageRating(image.path, newValue);
+      // Notify parent to update local state without reloading
+      if (onRatingChange) {
+        onRatingChange(image.path, newValue);
+      }
     } catch (error) {
       console.error('Failed to set rating:', error);
       showToast('Failed to save rating', 'error');
