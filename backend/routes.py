@@ -1117,12 +1117,13 @@ async def get_segment_frames_endpoint(job_id: int):
     frames = []
 
     # Add the job's original input image as the first option
-    if job.input_image:
+    input_image = job.get('input_image')
+    if input_image:
         comfyui_url = get_setting("comfyui_url", COMFYUI_SERVER_URL)
-        if job.input_image.startswith("http"):
-            input_image_url = job.input_image
+        if input_image.startswith("http"):
+            input_image_url = input_image
         else:
-            input_image_url = f"{comfyui_url}/view?filename={job.input_image}&subfolder=&type=input"
+            input_image_url = f"{comfyui_url}/view?filename={input_image}&subfolder=&type=input"
         frames.append({
             'segment_index': -1,  # Special index for original input
             'segment_display': 0,
