@@ -70,7 +70,7 @@
   border-top: 1px solid #e0e0e0;
 }
 
-.lora-grid {
+.modal-lora-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
@@ -78,7 +78,7 @@
   width: 100%;
 }
 
-.lora-slot {
+.modal-lora-slot {
   padding: 12px;
   background: #fafafa;
   border: 1px solid #e0e0e0;
@@ -87,28 +87,28 @@
   overflow: hidden;
 }
 
-.lora-slot .MuiAutocomplete-root {
+.modal-lora-slot .MuiAutocomplete-root {
   width: 100%;
 }
 
-.lora-slot .MuiAutocomplete-input {
+.modal-lora-slot .MuiAutocomplete-input {
   min-width: 0 !important;
 }
 
-.lora-slot-header {
+.modal-lora-slot-header {
   font-size: 13px;
   font-weight: 500;
   color: #666;
   margin-bottom: 8px;
 }
 
-.lora-weights {
+.modal-lora-weights {
   display: flex;
   gap: 8px;
   margin-top: 8px;
 }
 
-.lora-weights .MuiTextField-root {
+.modal-lora-weights .MuiTextField-root {
   flex: 1;
 }
 
