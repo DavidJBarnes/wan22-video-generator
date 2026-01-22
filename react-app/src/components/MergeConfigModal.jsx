@@ -131,7 +131,7 @@ export default function MergeConfigModal({ open, onClose, jobId, segments, onFin
   const handleIncrement = (segmentIndex) => {
     const segIdx = segmentIndex.toString();
     const info = segmentInfo[segmentIndex] || { frameCount: 120 };
-    const maxOffset = Math.floor(info.frameCount * 0.5);
+    const maxOffset = info.frameCount - 1; // Allow up to all but 1 frame
     const currentOffset = offsets[segIdx] || 0;
     if (currentOffset < maxOffset) {
       handleOffsetChange(segmentIndex, currentOffset + 1);
@@ -237,7 +237,7 @@ export default function MergeConfigModal({ open, onClose, jobId, segments, onFin
               const segIdx = segment.segment_index;
               const offset = offsets[segIdx.toString()] || 0;
               const info = segmentInfo[segIdx] || { frameCount: 120, fps: 24 };
-              const maxOffset = Math.floor(info.frameCount * 0.5);
+              const maxOffset = info.frameCount - 1; // Allow up to all but 1 frame
 
               return (
                 <Box
