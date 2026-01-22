@@ -75,6 +75,7 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   margin-bottom: 16px;
+  width: 100%;
 }
 
 .lora-slot {
@@ -82,6 +83,16 @@
   background: #fafafa;
   border: 1px solid #e0e0e0;
   border-radius: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.lora-slot .MuiAutocomplete-root {
+  width: 100%;
+}
+
+.lora-slot .MuiAutocomplete-input {
+  min-width: 0 !important;
 }
 
 .lora-slot-header {
