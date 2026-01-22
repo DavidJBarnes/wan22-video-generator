@@ -494,7 +494,7 @@ export default function SubmitPromptModal({
                     onClick={() => setFaceswapSourceType('segment')}
                     disabled={segmentFrames.length === 0}
                   >
-                    From Segment {segmentFrames.length === 0 ? '(none available)' : ''}
+                    From Frame {segmentFrames.length === 0 ? '(loading...)' : ''}
                   </Button>
                 </div>
 
@@ -520,7 +520,7 @@ export default function SubmitPromptModal({
                 {faceswapSourceType === 'segment' && segmentFrames.length > 0 && (
                   <div style={{ marginTop: '8px', marginBottom: '16px' }}>
                     <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
-                      Select a frame from a previous segment:
+                      Select a frame:
                     </div>
                     <div className="segment-frame-container">
                       {segmentFrames.map((frame) => {
