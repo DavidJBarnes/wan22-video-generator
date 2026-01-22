@@ -128,9 +128,21 @@ class APIClient {
     });
   }
 
-  async finalizeJob(jobId) {
+  async finalizeJob(jobId, offsets = null) {
     return this.request(`/jobs/${jobId}/finalize`, {
-      method: 'POST'
+      method: 'POST',
+      body: offsets ? { offsets } : {}
+    });
+  }
+
+  async getMergeOffsets(jobId) {
+    return this.request(`/jobs/${jobId}/merge-offsets`);
+  }
+
+  async saveMergeOffsets(jobId, offsets) {
+    return this.request(`/jobs/${jobId}/merge-offsets`, {
+      method: 'PUT',
+      body: { offsets }
     });
   }
 
@@ -241,8 +253,8 @@ class APIClient {
     return `${this.baseUrl}/jobs/${jobId}/thumbnail`;
   }
 
-  getSegmentFrame(jobId, segmentIndex) {
-    return `${this.baseUrl}/jobs/${jobId}/segments/${segmentIndex}/frame`;
+  getSegmentFrame(jobId, segmentIndex, frame = 0) {
+    return `${this.baseUrl}/jobs/${jobId}/segments/${segmentIndex}/frame?frame=${frame}`;
   }
 
   getJobVideo(jobId) {

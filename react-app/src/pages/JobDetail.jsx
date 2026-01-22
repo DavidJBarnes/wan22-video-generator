@@ -16,6 +16,7 @@ import CreateJobModal from '../components/CreateJobModal';
 import EditJobModal from '../components/EditJobModal';
 import LoraEditModal from '../components/LoraEditModal';
 import SegmentNotesModal from '../components/SegmentNotesModal';
+import MergeConfigModal from '../components/MergeConfigModal';
 import StatusChip from '../components/StatusChip';
 import './JobDetail.css';
 
@@ -71,6 +72,7 @@ export default function JobDetail() {
   const [progress, setProgress] = useState(null);
   const [elapsedTime, setElapsedTime] = useState(null);
   const [finalizing, setFinalizing] = useState(false);
+  const [showMergeConfigModal, setShowMergeConfigModal] = useState(false);
   const [upscaling, setUpscaling] = useState(false);
   const [upscaledVideos, setUpscaledVideos] = useState([]);
   const [generatingVR, setGeneratingVR] = useState(false);
@@ -397,12 +399,23 @@ export default function JobDetail() {
     }
   }
 
-  async function handleFinalizeJob() {
+  function handleFinalizeClick() {
+    // For single segment jobs, skip the modal and finalize directly
+    const completedSegments = segments.filter(s => s.status === 'completed' && !s.deleted_at);
+    if (completedSegments.length <= 1) {
+      handleFinalizeJob(null);
+    } else {
+      setShowMergeConfigModal(true);
+    }
+  }
+
+  async function handleFinalizeJob(offsets) {
+    setShowMergeConfigModal(false);
     setFinalizing(true);
     showToast('Finalizing video... You can navigate away.', 'info');
 
     // Run finalization in background - don't await
-    API.finalizeJob(id)
+    API.finalizeJob(id, offsets)
       .then(() => {
         showToast('Video finalized successfully!', 'success');
         // Reload if still on this page
@@ -1517,7 +1530,7 @@ export default function JobDetail() {
                   <div style={{ color: '#666', fontWeight: 500 }}>OR</div>
                   <Button
                     variant="contained"
-                    onClick={handleFinalizeJob}
+                    onClick={handleFinalizeClick}
                     disabled={finalizing}
                     sx={{ flex: 1, bgcolor: '#4caf50', '&:hover': { bgcolor: '#388e3c' } }}
                   >
@@ -1707,6 +1720,16 @@ export default function JobDetail() {
           segments={segments}
           onClose={() => setShowNotesModal(false)}
           onUpdate={() => loadJobDetail()}
+        />
+      )}
+
+      {showMergeConfigModal && (
+        <MergeConfigModal
+          open={showMergeConfigModal}
+          onClose={() => setShowMergeConfigModal(false)}
+          jobId={id}
+          segments={segments}
+          onFinalize={handleFinalizeJob}
         />
       )}
 

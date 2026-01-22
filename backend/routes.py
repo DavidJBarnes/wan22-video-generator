@@ -1,7 +1,7 @@
 """API routes for the ComfyUI Queue Manager."""
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks
-from fastapi.responses import RedirectResponse, FileResponse
+from fastapi.responses import RedirectResponse, FileResponse, Response
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import base64
@@ -13,7 +13,7 @@ import tempfile
 import httpx
 from pathlib import Path
 
-from video_utils import get_segment_video_path, optimize_video_for_web, OUTPUT_DIR
+from video_utils import get_segment_video_path, optimize_video_for_web, OUTPUT_DIR, extract_frame, get_video_info
 
 from database import (
     get_all_jobs,
@@ -65,7 +65,9 @@ from database import (
     create_upscaled_video as db_create_upscaled_video,
     get_upscaled_videos_for_job as db_get_upscaled_videos_for_job,
     get_upscaled_video_by_id as db_get_upscaled_video_by_id,
-    delete_upscaled_video as db_delete_upscaled_video
+    delete_upscaled_video as db_delete_upscaled_video,
+    get_job_merge_offsets,
+    update_job_merge_offsets
 )
 from comfyui_client import ComfyUIClient
 from queue_manager import queue_manager
@@ -776,9 +778,74 @@ async def retry_job(job_id: int):
     }
 
 
+@router.get("/jobs/{job_id}/merge-offsets")
+async def get_merge_offsets(job_id: int):
+    """Get the merge offsets configuration for a job.
+
+    Returns the frame offsets to apply when merging segments.
+    """
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    offsets = get_job_merge_offsets(job_id)
+    return {"offsets": offsets or {}}
+
+
+class MergeOffsetsRequest(BaseModel):
+    offsets: Dict[str, int]  # Maps segment index (as string) to frame offset
+
+
+@router.put("/jobs/{job_id}/merge-offsets")
+async def save_merge_offsets(job_id: int, request: MergeOffsetsRequest):
+    """Save merge offsets configuration for a job.
+
+    Args:
+        offsets: Dictionary mapping segment index (as string) to frame offset.
+                Example: {"0": 0, "1": 5, "2": 10}
+    """
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Validate offsets
+    segments = db_get_job_segments(job_id)
+    completed_segments = [s for s in segments if s.get("status") == "completed" and not s.get("deleted_at")]
+
+    for seg_idx_str, offset in request.offsets.items():
+        if offset < 0:
+            raise HTTPException(status_code=400, detail=f"Offset for segment {seg_idx_str} cannot be negative")
+
+        # Find the segment to validate offset against frame count
+        seg_idx = int(seg_idx_str)
+        segment = next((s for s in completed_segments if s.get("segment_index") == seg_idx), None)
+        if segment:
+            video_path = segment.get("video_path")
+            if video_path and os.path.exists(video_path):
+                video_info = get_video_info(video_path)
+                if video_info:
+                    frame_count = video_info.get("frame_count", 0)
+                    max_offset = int(frame_count * 0.5)  # Max 50% of segment
+                    if offset > max_offset:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Offset {offset} for segment {seg_idx} exceeds 50% of frames ({max_offset})"
+                        )
+
+    update_job_merge_offsets(job_id, request.offsets)
+    return {"status": "saved", "offsets": request.offsets}
+
+
+class FinalizeRequest(BaseModel):
+    offsets: Optional[Dict[str, int]] = None  # Optional merge offsets
+
+
 @router.post("/jobs/{job_id}/finalize")
-async def finalize_job(job_id: int):
-    """Finalize a job and merge all completed (non-deleted) segments into final video."""
+async def finalize_job(job_id: int, request: Optional[FinalizeRequest] = None):
+    """Finalize a job and merge all completed (non-deleted) segments into final video.
+
+    Optionally accepts merge offsets to trim frames from the start of each segment.
+    """
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -789,6 +856,10 @@ async def finalize_job(job_id: int):
 
     if len(completed_segments) == 0:
         raise HTTPException(status_code=400, detail="No completed segments to finalize (deleted segments are excluded)")
+
+    # Save offsets if provided
+    if request and request.offsets:
+        update_job_merge_offsets(job_id, request.offsets)
 
     # Update job status to 'running' and trigger finalization through queue manager
     update_job_status(job_id, "running")
@@ -960,6 +1031,55 @@ async def get_segment_video(job_id: int, segment_index: int):
             "Expires": "0",
             "ETag": f'"{file_mtime}"',
             "Content-Disposition": "inline"
+        }
+    )
+
+
+@router.get("/jobs/{job_id}/segments/{segment_index}/frame")
+async def get_segment_frame(job_id: int, segment_index: int, frame: int = 0):
+    """Extract a specific frame from a segment video as JPEG.
+
+    Args:
+        job_id: The job ID
+        segment_index: The segment index
+        frame: 0-indexed frame number to extract (default: 0)
+
+    Returns:
+        JPEG image of the requested frame
+    """
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    segment = get_segment(job_id, segment_index)
+    if not segment:
+        raise HTTPException(status_code=404, detail="Segment not found")
+
+    video_path = segment.get("video_path")
+    if not video_path or not os.path.exists(video_path):
+        raise HTTPException(status_code=404, detail="Segment video not found")
+
+    # Get video info to validate frame number
+    video_info = get_video_info(video_path)
+    if video_info:
+        frame_count = video_info.get("frame_count", 0)
+        if frame < 0 or frame >= frame_count:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Frame {frame} out of range (video has {frame_count} frames)"
+            )
+
+    # Extract the frame
+    frame_bytes = extract_frame(video_path, frame)
+    if not frame_bytes:
+        raise HTTPException(status_code=500, detail="Failed to extract frame")
+
+    return Response(
+        content=frame_bytes,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "public, max-age=3600",
+            "Content-Disposition": f"inline; filename=segment_{segment_index}_frame_{frame}.jpg"
         }
     )
 
