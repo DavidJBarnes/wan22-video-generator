@@ -524,39 +524,35 @@ export default function SubmitPromptModal({
                     <div style={{
                       display: 'flex',
                       flexWrap: 'wrap',
-                      gap: '8px',
+                      gap: '6px',
                       maxHeight: '200px',
                       overflowY: 'auto',
                       padding: '4px'
                     }}>
-                      {segmentFrames.map((frame) => (
-                        <div
-                          key={`${frame.segment_index}-${frame.frame_type}`}
-                          onClick={() => setFaceswapSourceImage(frame.url)}
-                          style={{
-                            cursor: 'pointer',
-                            border: faceswapSourceImage === frame.url ? '2px solid #1976d2' : '2px solid transparent',
-                            borderRadius: '4px',
-                            padding: '4px',
-                            background: faceswapSourceImage === frame.url ? '#e3f2fd' : 'white'
-                          }}
-                        >
-                          <img
-                            src={`${API.baseUrl}${frame.url}`}
-                            alt={frame.label}
-                            style={{
-                              width: '80px',
-                              height: '80px',
-                              objectFit: 'cover',
-                              borderRadius: '2px'
-                            }}
-                            onError={(e) => { e.target.style.display = 'none'; }}
-                          />
-                          <div style={{ fontSize: '10px', textAlign: 'center', marginTop: '2px' }}>
-                            {frame.label}
-                          </div>
-                        </div>
-                      ))}
+                      {segmentFrames.map((frame) => {
+                        // Start frames use relative API URLs, end frames use full ComfyUI URLs
+                        const imgUrl = frame.url.startsWith('/api/')
+                          ? `${API.baseUrl}${frame.url}`
+                          : frame.url;
+                        const isSelected = faceswapSourceImage === frame.url;
+                        return (
+                          <Tooltip key={`${frame.segment_index}-${frame.frame_type}`} title={frame.label}>
+                            <img
+                              src={imgUrl}
+                              alt={frame.label}
+                              onClick={() => setFaceswapSourceImage(frame.url)}
+                              className="image-thumbnail-hover"
+                              style={{
+                                width: '50px',
+                                height: '50px',
+                                border: isSelected ? '2px solid #1976d2' : '1px solid #ccc',
+                                background: isSelected ? '#e3f2fd' : 'white'
+                              }}
+                              onError={(e) => { e.target.style.display = 'none'; }}
+                            />
+                          </Tooltip>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
