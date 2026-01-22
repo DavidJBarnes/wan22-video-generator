@@ -1116,6 +1116,21 @@ async def get_segment_frames_endpoint(job_id: int):
     segments = db_get_job_segments(job_id)
     frames = []
 
+    # Add the job's original input image as the first option
+    if job.input_image:
+        comfyui_url = get_setting("comfyui_url", COMFYUI_SERVER_URL)
+        if job.input_image.startswith("http"):
+            input_image_url = job.input_image
+        else:
+            input_image_url = f"{comfyui_url}/view?filename={job.input_image}&subfolder=&type=input"
+        frames.append({
+            'segment_index': -1,  # Special index for original input
+            'segment_display': 0,
+            'frame_type': 'input',
+            'label': 'Original Start Image',
+            'url': input_image_url
+        })
+
     for segment in segments:
         # Only include completed segments with video files
         if segment.get('status') != 'completed' or segment.get('deleted_at'):
