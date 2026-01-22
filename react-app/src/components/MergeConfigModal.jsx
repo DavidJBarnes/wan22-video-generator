@@ -250,21 +250,21 @@ export default function MergeConfigModal({ open, onClose, jobId, segments, onFin
                   }}
                 >
                   <Typography variant="subtitle2" sx={{ mb: 2 }}>
-                    Transition: Segment {prevSegment.segment_index} → Segment {segIdx}
+                    Transition: Segment {prevSegment.segment_index + 1} → Segment {segIdx + 1}
                   </Typography>
 
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                     {/* Previous segment end frame */}
                     <Box sx={{ textAlign: 'center' }}>
                       <Typography variant="caption" color="text.secondary">
-                        Seg {prevSegment.segment_index} End
+                        Seg {prevSegment.segment_index + 1} End
                       </Typography>
                       <Box sx={thumbnailContainerStyle}>
                         {prevSegment.end_frame_url ? (
                           <Box
                             component="img"
                             src={prevSegment.end_frame_url}
-                            alt={`Segment ${prevSegment.segment_index} end`}
+                            alt={`Segment ${prevSegment.segment_index + 1} end`}
                             sx={thumbnailImageStyle}
                             onError={(e) => {
                               e.target.style.display = 'none';
@@ -285,14 +285,14 @@ export default function MergeConfigModal({ open, onClose, jobId, segments, onFin
                     {/* Current segment start frame (with offset) */}
                     <Box sx={{ textAlign: 'center' }}>
                       <Typography variant="caption" color="text.secondary">
-                        Seg {segIdx} Start {offset > 0 ? `(+${offset} frames)` : ''}
+                        Seg {segIdx + 1} Start {offset > 0 ? `(+${offset} frames)` : ''}
                       </Typography>
                       <Box sx={thumbnailContainerStyle}>
                         <Box
                           component="img"
                           key={`${segIdx}-${offset}`}
                           src={API.getSegmentFrame(jobId, segIdx, offset)}
-                          alt={`Segment ${segIdx} start`}
+                          alt={`Segment ${segIdx + 1} start`}
                           sx={thumbnailImageStyle}
                           onError={(e) => {
                             e.target.style.display = 'none';
