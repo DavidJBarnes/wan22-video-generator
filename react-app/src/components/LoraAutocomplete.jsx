@@ -97,6 +97,7 @@ function LoraAutocomplete({ label, value, onChange, loras }) {
 
   return (
     <Autocomplete
+      fullWidth
       value={value}
       onChange={handleChange}
       options={loras}
