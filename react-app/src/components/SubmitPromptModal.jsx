@@ -55,6 +55,11 @@ export default function SubmitPromptModal({
   const [faceswapImage, setFaceswapImage] = useState(defaultFaceswap?.image || FACESWAP_FACES[0]?.value || '');
   const [faceswapFacesOrder, setFaceswapFacesOrder] = useState(defaultFaceswap?.facesOrder || 'left-right');
   const [faceswapFacesIndex, setFaceswapFacesIndex] = useState(defaultFaceswap?.facesIndex || '0');
+  // Faceswap source selection: 'preset' for static face images, 'segment' for segment frames
+  const [faceswapSourceType, setFaceswapSourceType] = useState(defaultFaceswap?.sourceImage ? 'segment' : 'preset');
+  const [faceswapSourceImage, setFaceswapSourceImage] = useState(defaultFaceswap?.sourceImage || '');
+  const [segmentFrames, setSegmentFrames] = useState([]);
+  const [hoverPreview, setHoverPreview] = useState(null);  // {url, x, y} for hover preview
 
   // Custom start image state (only for segments > 0)
   const [customStartImage, setCustomStartImage] = useState(defaultCustomStartImage);  // Path in image repo
@@ -154,6 +159,22 @@ export default function SubmitPromptModal({
     }
   }, [loras, defaultLoras]);
 
+  // Load segment frames for faceswap source selection
+  useEffect(() => {
+    if (!faceswapEnabled || !jobId) return;
+
+    async function loadFrames() {
+      try {
+        const data = await API.getSegmentFrames(jobId);
+        setSegmentFrames(data.frames || []);
+      } catch (error) {
+        console.error('Failed to load segment frames:', error);
+      }
+    }
+
+    loadFrames();
+  }, [faceswapEnabled, jobId]);
+
   // Helper to populate prompt from LoRA if prompt is empty
   function populatePromptFromLora(lora) {
     if (prompt.trim() || !lora) return;
@@ -212,9 +233,11 @@ export default function SubmitPromptModal({
       // Build faceswap options
       const faceswapOptions = {
         enabled: faceswapEnabled,
-        image: faceswapEnabled ? faceswapImage : '',
+        image: faceswapEnabled && faceswapSourceType === 'preset' ? faceswapImage : '',
         facesOrder: faceswapEnabled ? faceswapFacesOrder : 'left-right',
-        facesIndex: faceswapEnabled ? faceswapFacesIndex : '0'
+        facesIndex: faceswapEnabled ? faceswapFacesIndex : '0',
+        // Include segment frame source if selected
+        sourceImage: faceswapEnabled && faceswapSourceType === 'segment' ? faceswapSourceImage : ''
       };
 
       await API.submitSegmentPrompt(
@@ -456,20 +479,94 @@ export default function SubmitPromptModal({
             />
             {faceswapEnabled && (
               <>
-                <FormControl fullWidth variant="outlined" size="small" sx={{ mt: 1 }}>
-                  <InputLabel>Face</InputLabel>
-                  <Select
-                    value={faceswapImage}
-                    onChange={(e) => setFaceswapImage(e.target.value)}
-                    label="Face"
+                {/* Source type selector */}
+                <div style={{ display: 'flex', gap: '8px', marginTop: '8px', marginBottom: '8px' }}>
+                  <Button
+                    variant={faceswapSourceType === 'preset' ? 'contained' : 'outlined'}
+                    size="small"
+                    onClick={() => setFaceswapSourceType('preset')}
                   >
-                    {FACESWAP_FACES.map((face) => (
-                      <MenuItem key={face.value} value={face.value}>
-                        {face.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                    Preset Face
+                  </Button>
+                  <Button
+                    variant={faceswapSourceType === 'segment' ? 'contained' : 'outlined'}
+                    size="small"
+                    onClick={() => setFaceswapSourceType('segment')}
+                    disabled={segmentFrames.length === 0}
+                  >
+                    From Segment {segmentFrames.length === 0 ? '(none available)' : ''}
+                  </Button>
+                </div>
+
+                {/* Preset face selector */}
+                {faceswapSourceType === 'preset' && (
+                  <FormControl fullWidth variant="outlined" size="small" sx={{ mt: 1 }}>
+                    <InputLabel>Face</InputLabel>
+                    <Select
+                      value={faceswapImage}
+                      onChange={(e) => setFaceswapImage(e.target.value)}
+                      label="Face"
+                    >
+                      {FACESWAP_FACES.map((face) => (
+                        <MenuItem key={face.value} value={face.value}>
+                          {face.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                )}
+
+                {/* Segment frame picker */}
+                {faceswapSourceType === 'segment' && segmentFrames.length > 0 && (
+                  <div style={{ marginTop: '8px', marginBottom: '16px' }}>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
+                      Select a frame from a previous segment:
+                    </div>
+                    <div className="segment-frame-container">
+                      {segmentFrames.map((frame) => {
+                        // Start frames use relative API URLs, end frames use full ComfyUI URLs
+                        const imgUrl = frame.url.startsWith('/api/')
+                          ? `${API.baseUrl}${frame.url}`
+                          : frame.url;
+                        const isSelected = faceswapSourceImage === frame.url;
+                        return (
+                          <Tooltip key={`${frame.segment_index}-${frame.frame_type}`} title={frame.label}>
+                            <img
+                              src={imgUrl}
+                              alt={frame.label}
+                              onClick={() => setFaceswapSourceImage(frame.url)}
+                              onMouseEnter={(e) => {
+                                const rect = e.target.getBoundingClientRect();
+                                setHoverPreview({ url: imgUrl, x: rect.right + 10, y: rect.top });
+                              }}
+                              onMouseLeave={() => setHoverPreview(null)}
+                              className="segment-frame-thumb"
+                              style={{
+                                border: isSelected ? '2px solid #1976d2' : '1px solid #ccc',
+                                background: isSelected ? '#e3f2fd' : 'white'
+                              }}
+                              onError={(e) => { e.target.style.display = 'none'; }}
+                            />
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
+                    {/* Fixed position hover preview */}
+                    {hoverPreview && (
+                      <img
+                        src={hoverPreview.url}
+                        alt="Preview"
+                        className="segment-frame-preview"
+                        style={{
+                          display: 'block',
+                          left: hoverPreview.x,
+                          top: hoverPreview.y
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
                   <FormControl variant="outlined" size="small" sx={{ flex: 1 }}>
                     <InputLabel>Faces Order</InputLabel>

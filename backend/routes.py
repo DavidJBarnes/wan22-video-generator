@@ -1097,6 +1097,55 @@ async def get_job_segments_endpoint(job_id: int):
     return segments
 
 
+@router.get("/jobs/{job_id}/segment-frames")
+async def get_segment_frames_endpoint(job_id: int):
+    """Get available segment frames for faceswap source selection.
+
+    Returns a list of frames from completed segments that can be used as
+    faceswap source images. Each frame includes:
+    - segment_index: The segment index (0-based internal)
+    - segment_display: The segment number for display (1-based)
+    - frame_type: 'start' or 'end'
+    - label: Human-readable label (e.g., "Segment 1 Start", "Segment 2 End")
+    - url: URL to fetch the frame image
+    """
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    segments = db_get_job_segments(job_id)
+    frames = []
+
+    for segment in segments:
+        # Only include completed segments with video files
+        if segment.get('status') != 'completed' or segment.get('deleted_at'):
+            continue
+
+        seg_idx = segment.get('segment_index', 0)
+        seg_display = seg_idx + 1  # 1-indexed for display
+
+        # Start frame (frame 0)
+        frames.append({
+            'segment_index': seg_idx,
+            'segment_display': seg_display,
+            'frame_type': 'start',
+            'label': f'Segment {seg_display} Start',
+            'url': f'/api/jobs/{job_id}/segments/{seg_idx}/frame?frame=0'
+        })
+
+        # End frame (use end_frame_url if available, otherwise last frame)
+        if segment.get('end_frame_url'):
+            frames.append({
+                'segment_index': seg_idx,
+                'segment_display': seg_display,
+                'frame_type': 'end',
+                'label': f'Segment {seg_display} End',
+                'url': segment['end_frame_url']
+            })
+
+    return {'frames': frames}
+
+
 @router.post("/jobs/{job_id}/segments/{segment_index}/prompt")
 async def update_segment_prompt_endpoint(
     job_id: int,
@@ -1108,6 +1157,7 @@ async def update_segment_prompt_endpoint(
     faceswap_image: Optional[str] = Form(None),  # Face image filename
     faceswap_faces_order: Optional[str] = Form("left-right"),  # Faces order
     faceswap_faces_index: Optional[str] = Form("0"),  # Faces index
+    faceswap_source_image: Optional[str] = Form(None),  # Segment frame URL to use as faceswap source
     fade_to_black: Optional[bool] = Form(False),  # Apply fade-to-black transition at segment end
     custom_start_image: Optional[str] = Form(None)  # Custom start image path from image repo
 ):
@@ -1121,6 +1171,7 @@ async def update_segment_prompt_endpoint(
         faceswap_image: Filename of the face image to swap in (in ComfyUI input folder).
         faceswap_faces_order: Order to process faces (left-right, right-left, etc.).
         faceswap_faces_index: Which face indices to process (e.g., "0", "0,1").
+        faceswap_source_image: URL to segment frame to use as faceswap source (overrides faceswap_image).
         fade_to_black: Apply fade-to-black transition at the end of this segment.
         custom_start_image: Path to custom start image from image repo (overrides default).
     """
@@ -1203,6 +1254,7 @@ async def update_segment_prompt_endpoint(
             faceswap_image=faceswap_image or "",
             faceswap_faces_order=faceswap_faces_order or "left-right",
             faceswap_faces_index=faceswap_faces_index or "0",
+            faceswap_source_image=faceswap_source_image,
             fade_to_black=fade_to_black or False,
             custom_start_image=custom_start_image
         )
@@ -1216,6 +1268,7 @@ async def update_segment_prompt_endpoint(
             faceswap_image=faceswap_image,
             faceswap_faces_order=faceswap_faces_order,
             faceswap_faces_index=faceswap_faces_index,
+            faceswap_source_image=faceswap_source_image,
             fade_to_black=fade_to_black,
             custom_start_image=custom_start_image
         )

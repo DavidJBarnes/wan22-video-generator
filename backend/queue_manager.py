@@ -614,8 +614,54 @@ class QueueManager:
         # Get faceswap settings from segment (per-segment faceswap)
         faceswap_enabled = bool(segment.get("faceswap_enabled", 0))
         faceswap_image = segment.get("faceswap_image", "") or ""
+        faceswap_source_image = segment.get("faceswap_source_image", "") or ""
         faceswap_faces_order = segment.get("faceswap_faces_order", "left-right") or "left-right"
         faceswap_faces_index = segment.get("faceswap_faces_index", "0") or "0"
+
+        # If faceswap_source_image is set (a URL to a segment frame), extract the frame
+        # and save it as a temp file to use as the faceswap source
+        if faceswap_enabled and faceswap_source_image:
+            try:
+                # Parse the URL to get job_id, segment_index, and frame number
+                # URL format: /api/jobs/{job_id}/segments/{segment_index}/frame?frame=0
+                import re
+                match = re.search(r'/jobs/(\d+)/segments/(\d+)/frame\?frame=(\d+)', faceswap_source_image)
+                if match:
+                    src_job_id = int(match.group(1))
+                    src_seg_idx = int(match.group(2))
+                    src_frame = int(match.group(3))
+
+                    # Get the segment video path
+                    src_segment = get_segment(src_job_id, src_seg_idx)
+                    if src_segment and src_segment.get('video_path'):
+                        video_path = src_segment['video_path']
+                        if os.path.exists(video_path):
+                            # Extract frame and save to ComfyUI input folder
+                            from video_utils import extract_frame
+                            frame_bytes = extract_frame(video_path, src_frame)
+                            if frame_bytes:
+                                # Save to a temp file in ComfyUI input folder
+                                temp_filename = f"faceswap_source_{job_id}_{segment_index}.jpg"
+                                comfyui_input_path = Path(get_setting("comfyui_input_path", "/home/david/StabilityMatrix-linux-x64/Data/Packages/ComfyUI/input"))
+                                temp_path = comfyui_input_path / temp_filename
+                                with open(temp_path, 'wb') as f:
+                                    f.write(frame_bytes)
+                                logger.info(f"[Job {job_id}] Saved faceswap source frame to {temp_path}")
+                                faceswap_image = temp_filename  # Override with temp file
+                else:
+                    # Check if it's an end_frame_url (ComfyUI URL)
+                    # Format: http://localhost:8188/view?filename=xxx&subfolder=&type=output
+                    if 'filename=' in faceswap_source_image:
+                        import urllib.parse
+                        parsed = urllib.parse.urlparse(faceswap_source_image)
+                        params = urllib.parse.parse_qs(parsed.query)
+                        filename = params.get('filename', [''])[0]
+                        if filename:
+                            # Use the filename directly (it's already in ComfyUI)
+                            faceswap_image = filename
+                            logger.info(f"[Job {job_id}] Using ComfyUI image as faceswap source: {filename}")
+            except Exception as e:
+                logger.error(f"[Job {job_id}] Failed to process faceswap_source_image: {e}")
 
         # Use the job's seed for all segments (fixed seed per job)
         job_seed = job.get("seed")
