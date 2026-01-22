@@ -15,6 +15,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import TimerIcon from '@mui/icons-material/Timer';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import API from '../api/client';
 import { useJobs } from '../contexts/JobsContext';
 import JobTable from '../components/JobTable';
@@ -233,6 +234,27 @@ export default function Dashboard() {
             <div className="value">{stats.awaitingPromptCount}</div>
           </div>
         </div>
+
+        {stats.failedCount > 0 && (
+          <div className="stat-card failed-card">
+            <div className="stat-card-header failed">
+              <ErrorOutlineIcon />
+              Failed Jobs
+            </div>
+            <div className="stat-card-body">
+              <div className="value">{stats.failedCount}</div>
+              <button
+                className="action-button"
+                onClick={() => {
+                  setStatusFilter(['failed']);
+                  localStorage.setItem('dashboardStatusFilter', JSON.stringify(['failed']));
+                }}
+              >
+                View Failed Jobs
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="stat-card">
           <div className="stat-card-header avgtime">

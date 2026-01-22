@@ -41,9 +41,33 @@
 .stat-card-header.running { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
 .stat-card-header.pending { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
 .stat-card-header.awaiting { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+.stat-card-header.failed { background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); }
 .stat-card-header.avgtime { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
 .stat-card-header.eta { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); color: #333; }
 .stat-card-header.totalqueue { background: linear-gradient(135deg, #5f72bd 0%, #9b23ea 100%); }
+
+/* Failed card styling */
+.stat-card.failed-card {
+  border: 2px solid #f45c43;
+}
+
+.stat-card .action-button {
+  margin-top: 8px;
+  padding: 6px 16px;
+  background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.stat-card .action-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(244, 92, 67, 0.4);
+}
 
 /* Status indicator */
 .status-indicator {
