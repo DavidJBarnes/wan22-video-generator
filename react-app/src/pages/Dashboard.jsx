@@ -104,6 +104,11 @@ export default function Dashboard() {
         return priorityA - priorityB;
       }
 
+      // Sort pending jobs by their queue priority
+      if (a.status === 'pending') {
+        return (a.priority || 0) - (b.priority || 0);
+      }
+
       const dateA = a.last_segment_run ? new Date(a.last_segment_run) : null;
       const dateB = b.last_segment_run ? new Date(b.last_segment_run) : null;
 
