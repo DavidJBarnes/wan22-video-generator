@@ -236,6 +236,9 @@ export default function JobDetail() {
 
     // Auto-refresh based on job status
     const interval = setInterval(async () => {
+      // Skip polling when merge config modal is open to prevent flickering
+      if (showMergeConfigModal) return;
+
       try {
         const jobData = await API.getJob(id);
 
@@ -274,7 +277,7 @@ export default function JobDetail() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [id]); // Only re-run when job ID changes
+  }, [id, showMergeConfigModal]); // Re-run when job ID or modal state changes
 
   // Load VR settings from API
   useEffect(() => {
