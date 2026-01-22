@@ -652,7 +652,6 @@ class QueueManager:
                     # Check if it's an end_frame_url (ComfyUI URL)
                     # Format: http://localhost:8188/view?filename=xxx&subfolder=&type=output
                     if 'filename=' in faceswap_source_image:
-                        import urllib.parse
                         parsed = urllib.parse.urlparse(faceswap_source_image)
                         params = urllib.parse.parse_qs(parsed.query)
                         filename = params.get('filename', [''])[0]
