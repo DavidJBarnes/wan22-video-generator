@@ -44,8 +44,6 @@ export default function ImageRepo() {
   const [folderPage, setFolderPage] = useState(1);
   const [imagePage, setImagePage] = useState(1);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
-  const [defaultWidth, setDefaultWidth] = useState(1280);
-  const [defaultHeight, setDefaultHeight] = useState(720);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedImages, setSelectedImages] = useState(new Set());
 
@@ -936,8 +934,6 @@ export default function ImageRepo() {
           onDelete={handleDeleteImage}
           onNavigate={handleNavigateImage}
           onRatingChange={handleRatingChange}
-          defaultWidth={defaultWidth}
-          defaultHeight={defaultHeight}
         />
       )}
 

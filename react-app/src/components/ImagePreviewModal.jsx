@@ -5,7 +5,7 @@ import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import './CreateJobModal.css';
 
-export default function ImagePreviewModal({ image, images, currentIndex, onClose, onCreateJob, onDelete, onNavigate, onRatingChange, defaultWidth = 1280, defaultHeight = 720 }) {
+export default function ImagePreviewModal({ image, images, currentIndex, onClose, onCreateJob, onDelete, onNavigate, onRatingChange }) {
   const [deleting, setDeleting] = useState(false);
   const [creatingJob, setCreatingJob] = useState(false);
   const [rating, setRating] = useState(image.rating || null);
@@ -224,24 +224,14 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
       const data = await API.selectImageFromRepo(image.path);
       showToast('Image uploaded successfully!', 'success');
 
-      // Get dimensions from the already-displayed image element, using settings defaults
-      let dimensions = { width: defaultWidth, height: defaultHeight }; // Default to landscape from settings
+      // Get actual dimensions from the image element
+      let dimensions = null;
       if (imageRef.current) {
         const naturalW = imageRef.current.naturalWidth;
         const naturalH = imageRef.current.naturalHeight;
-        console.log('[ImagePreviewModal] Image natural dimensions:', naturalW, 'x', naturalH);
         if (naturalW && naturalH) {
-          const isLandscape = naturalW > naturalH;
-          // Use settings defaults, swapping for portrait orientation
-          dimensions = isLandscape
-            ? { width: defaultWidth, height: defaultHeight }
-            : { width: defaultHeight, height: defaultWidth };
-          console.log('[ImagePreviewModal] Setting dimensions:', dimensions, 'isLandscape:', isLandscape);
-        } else {
-          console.log('[ImagePreviewModal] naturalWidth/Height not available, using defaults');
+          dimensions = { width: naturalW, height: naturalH };
         }
-      } else {
-        console.log('[ImagePreviewModal] imageRef.current is null');
       }
       onCreateJob(data.image_url, dimensions);
     } catch (error) {
