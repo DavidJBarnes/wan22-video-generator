@@ -27,7 +27,8 @@ from database import (
     get_last_active_segment_before,
     parse_loras,
     add_job_log,
-    get_segment_queue_time
+    get_segment_queue_time,
+    get_job_merge_offsets
 )
 from comfyui_client import ComfyUIClient
 from progress_tracker import progress_tracker
@@ -987,6 +988,11 @@ class QueueManager:
         job = get_job(job_id)
         job_name = job.get("name", f"job_{job_id}")
 
+        # Get merge offsets if configured
+        merge_offsets = get_job_merge_offsets(job_id)
+        if merge_offsets:
+            print(f"[QueueManager] Using merge offsets: {merge_offsets}")
+
         # Get all completed segments (excluding deleted ones)
         segments = get_job_segments(job_id)
         completed_segments = [s for s in segments if s.get("status") == "completed" and not s.get("deleted_at")]
@@ -995,12 +1001,15 @@ class QueueManager:
 
         # Collect all segment video paths and metadata for fade effects
         # Use the video_path stored in the database (actual location) not regenerated paths
+        # Also build a mapping from list index to segment_index for offsets
         video_paths = []
         segment_info = []
-        for segment in completed_segments:
+        index_to_segment = {}  # Maps video_paths index to segment_index
+        for i, segment in enumerate(completed_segments):
             segment_index = segment["segment_index"]
             video_path = segment.get("video_path")
             if video_path and os.path.exists(video_path):
+                index_to_segment[len(video_paths)] = segment_index
                 video_paths.append(video_path)
                 # Include segment metadata for fade-to-black effect
                 segment_info.append({
@@ -1015,9 +1024,19 @@ class QueueManager:
             self._notify_update(job_id, "failed")
             return
 
+        # Convert merge_offsets from segment_index keys to video_paths index keys
+        # This handles cases where some segments might be deleted
+        stitch_offsets = None
+        if merge_offsets:
+            stitch_offsets = {}
+            for idx, seg_idx in index_to_segment.items():
+                seg_idx_str = str(seg_idx)
+                if seg_idx_str in merge_offsets:
+                    stitch_offsets[str(idx)] = merge_offsets[seg_idx_str]
+
         # Stitch videos together with descriptive filename
         final_video_path = get_final_video_path(job_id, job_name)
-        if stitch_videos(video_paths, final_video_path, segment_info=segment_info):
+        if stitch_videos(video_paths, final_video_path, segment_info=segment_info, offsets=stitch_offsets):
             # Update job with final video path
             update_job_status(job_id, "completed", output_images=[final_video_path])
             self._notify_update(job_id, "completed")

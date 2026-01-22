@@ -357,6 +357,12 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Add merge_offsets column to store frame offset configuration for segment merging
+        try:
+            cursor.execute("ALTER TABLE jobs ADD COLUMN merge_offsets TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Settings table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS settings (
@@ -1130,6 +1136,39 @@ def update_job_parameters(
         return cursor.rowcount > 0
 
 
+def get_job_merge_offsets(job_id: int) -> Optional[Dict[str, int]]:
+    """Get the merge offsets for a job.
+
+    Returns:
+        Dictionary mapping segment indices to frame offsets, or None if not set.
+        Example: {"0": 5, "1": 10} means trim 5 frames from start of segment 0,
+                 10 frames from start of segment 1.
+    """
+    job = get_job(job_id)
+    if job:
+        return job.get("merge_offsets")
+    return None
+
+
+def update_job_merge_offsets(job_id: int, offsets: Dict[str, int]) -> bool:
+    """Update the merge offsets for a job.
+
+    Args:
+        job_id: The job ID
+        offsets: Dictionary mapping segment indices to frame offsets
+
+    Returns:
+        True if update was successful
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE jobs SET merge_offsets = ? WHERE id = ?",
+            (json.dumps(offsets), job_id)
+        )
+        return cursor.rowcount > 0
+
+
 def delete_job(job_id: int) -> bool:
     """Delete a job by ID."""
     with get_connection() as conn:
@@ -1146,6 +1185,8 @@ def _row_to_job_dict(row: sqlite3.Row) -> Dict[str, Any]:
         job["parameters"] = json.loads(job["parameters"])
     if job.get("output_images"):
         job["output_images"] = json.loads(job["output_images"])
+    if job.get("merge_offsets"):
+        job["merge_offsets"] = json.loads(job["merge_offsets"])
     return job
 
 

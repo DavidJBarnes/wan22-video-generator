@@ -277,6 +277,39 @@ def get_video_durations(video_paths: List[str]) -> List[Optional[float]]:
         return list(executor.map(get_video_duration, video_paths))
 
 
+def extract_frame(video_path: str, frame_number: int) -> Optional[bytes]:
+    """Extract a specific frame from a video as JPEG bytes.
+
+    Args:
+        video_path: Path to the input video file
+        frame_number: 0-indexed frame number to extract
+
+    Returns:
+        JPEG image bytes, or None if extraction fails
+    """
+    try:
+        # Use select filter to pick exactly the frame we want
+        cmd = [
+            "ffmpeg",
+            "-v", "error",
+            "-i", video_path,
+            "-vf", f"select=eq(n\\,{frame_number})",
+            "-vframes", "1",
+            "-f", "image2",
+            "-c:v", "mjpeg",
+            "-q:v", "2",  # High quality JPEG
+            "pipe:1"
+        ]
+        result = subprocess.run(cmd, capture_output=True)
+        if result.returncode == 0 and result.stdout:
+            return result.stdout
+        print(f"[VideoUtils] Frame extraction failed: {result.stderr.decode()}")
+        return None
+    except Exception as e:
+        print(f"[VideoUtils] Error extracting frame {frame_number} from {video_path}: {e}")
+        return None
+
+
 def get_video_info(video_path: str) -> Optional[dict]:
     """Get video metadata including duration, frame count, and fps.
 
@@ -395,11 +428,12 @@ def apply_fade_effects(input_path: str, output_path: str, fade_in: bool = False,
 
 
 def stitch_videos(video_paths: List[str], output_path: str, segment_info: Optional[List[dict]] = None,
-                  high_quality: bool = False) -> bool:
+                  high_quality: bool = False, offsets: Optional[dict] = None) -> bool:
     """Stitch multiple videos together using ffmpeg filter_complex.
 
-    Drops the first frame from segments 1+ to eliminate duplicate frames at boundaries
+    By default, drops the first frame from segments 1+ to eliminate duplicate frames at boundaries
     (since each segment's first frame is identical to the previous segment's last frame).
+    Custom offsets can be provided to trim more frames from the start of each segment.
 
     Args:
         video_paths: List of paths to video files to concatenate
@@ -409,6 +443,10 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
                      - fade_to_black: bool - whether to apply fade-to-black transition after this segment
         high_quality: If True, use slower but higher quality VP9 encoding settings.
                      Recommended for final exports. Default False for fast previews.
+        offsets: Optional dict mapping segment index (as string) to frame offset.
+                Example: {"0": 0, "1": 5, "2": 10} trims 0 frames from segment 0,
+                5 frames from segment 1, 10 frames from segment 2.
+                If not provided, defaults to 0 for first segment, 1 for others.
 
     Returns:
         True if stitching was successful, False otherwise
@@ -501,18 +539,22 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
                 print(f"[VideoUtils] ffmpeg error: {result.stderr}")
                 return False
 
-        # Multiple segments: use filter_complex to drop first frame from segments 1+
-        # This eliminates the duplicate frame at segment boundaries
+        # Multiple segments: use filter_complex to trim frames based on offsets
+        # By default, drops first frame from segments 1+ to eliminate duplicate boundary frames
         filter_parts = []
         concat_inputs = []
 
         for i in range(len(processed_paths)):
-            if i == 0:
-                # First segment: use all frames
-                filter_parts.append(f"[{i}:v]setpts=PTS-STARTPTS[v{i}]")
+            # Get offset for this segment (default: 0 for first, 1 for others)
+            if offsets and str(i) in offsets:
+                offset = offsets[str(i)]
             else:
-                # Subsequent segments: drop first frame (it's a duplicate of previous segment's last frame)
-                filter_parts.append(f"[{i}:v]trim=start_frame=1,setpts=PTS-STARTPTS[v{i}]")
+                offset = 0 if i == 0 else 1
+
+            if offset > 0:
+                filter_parts.append(f"[{i}:v]trim=start_frame={offset},setpts=PTS-STARTPTS[v{i}]")
+            else:
+                filter_parts.append(f"[{i}:v]setpts=PTS-STARTPTS[v{i}]")
             concat_inputs.append(f"[v{i}]")
 
         # Concatenate all processed streams
