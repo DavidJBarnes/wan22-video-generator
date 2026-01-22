@@ -1503,19 +1503,6 @@ export default function JobDetail() {
         {job.status === 'awaiting_prompt' && (
           <div className="next-segment-prompt">
             <h3>Next Step</h3>
-            {lastCompletedSegment && (
-              <div style={{ marginBottom: '12px' }}>
-                <p style={{ color: '#666', marginBottom: '8px' }}>
-                  Last completed frame (this will be the start of your next segment):
-                </p>
-                <img
-                  src={API.getSegmentFrame(id, lastCompletedSegment.segment_index)}
-                  alt="Last frame"
-                  style={{ maxWidth: '300px', borderRadius: '4px', border: '1px solid #ddd' }}
-                  onError={(e) => e.target.style.display = 'none'}
-                />
-              </div>
-            )}
 
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '12px' }}>
               <Button

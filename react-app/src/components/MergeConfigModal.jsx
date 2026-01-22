@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -18,7 +18,8 @@ import { showToast } from '../utils/helpers';
 
 /**
  * Modal for configuring segment merge offsets before finalizing a job.
- * Shows transition cards with thumbnails and offset controls for each segment.
+ * Shows N-1 transition cards for N segments, with offset controls for each transition.
+ * Segment 0 has no offset (nothing before it to trim).
  */
 export default function MergeConfigModal({ open, onClose, jobId, segments, onFinalize }) {
   const [offsets, setOffsets] = useState({});
@@ -32,6 +33,10 @@ export default function MergeConfigModal({ open, onClose, jobId, segments, onFin
     s => s.status === 'completed' && !s.deleted_at
   );
 
+  // Default segment duration and FPS
+  const DEFAULT_FPS = 24;
+  const DEFAULT_SEGMENT_DURATION = 5; // seconds
+
   // Load segment info (frame counts) and existing offsets
   useEffect(() => {
     if (!open || !jobId) return;
@@ -43,29 +48,26 @@ export default function MergeConfigModal({ open, onClose, jobId, segments, onFin
         const offsetData = await API.getMergeOffsets(jobId);
         const existingOffsets = offsetData.offsets || {};
 
-        // Initialize offsets for all segments
-        // Default: 0 for first segment, 1 for others (to remove duplicate frame)
+        // Initialize offsets for segments 1+ only (segment 0 has no offset)
+        // Default: 1 frame offset to remove duplicate frame at transitions
         const initialOffsets = {};
         completedSegments.forEach((seg, idx) => {
+          if (idx === 0) return; // Skip segment 0 - no offset needed
           const segIdx = seg.segment_index.toString();
           if (segIdx in existingOffsets) {
             initialOffsets[segIdx] = existingOffsets[segIdx];
           } else {
-            initialOffsets[segIdx] = idx === 0 ? 0 : 1;
+            initialOffsets[segIdx] = 1; // Default 1 frame to remove duplicate
           }
         });
         setOffsets(initialOffsets);
 
-        // Load segment info (we'll get frame counts from the API response)
+        // Load segment info
         const infoMap = {};
         for (const seg of completedSegments) {
-          // For now, estimate frame count from segment duration
-          // Assuming 24 fps for wan2.2 segments
-          const fps = 24;
-          const duration = 5; // default segment duration
           infoMap[seg.segment_index] = {
-            frameCount: fps * duration,
-            fps
+            frameCount: DEFAULT_FPS * DEFAULT_SEGMENT_DURATION,
+            fps: DEFAULT_FPS
           };
         }
         setSegmentInfo(infoMap);
@@ -79,6 +81,31 @@ export default function MergeConfigModal({ open, onClose, jobId, segments, onFin
 
     loadData();
   }, [open, jobId, segments]);
+
+  // Calculate total duration based on offsets
+  const durationInfo = useMemo(() => {
+    if (completedSegments.length === 0) return null;
+
+    const fps = DEFAULT_FPS;
+    const originalDuration = completedSegments.length * DEFAULT_SEGMENT_DURATION;
+
+    // Calculate total frames trimmed
+    let totalFramesTrimmed = 0;
+    completedSegments.forEach((seg, idx) => {
+      if (idx === 0) return; // Segment 0 has no offset
+      const segIdx = seg.segment_index.toString();
+      totalFramesTrimmed += offsets[segIdx] || 0;
+    });
+
+    const secondsTrimmed = totalFramesTrimmed / fps;
+    const finalDuration = originalDuration - secondsTrimmed;
+
+    return {
+      original: originalDuration,
+      final: finalDuration,
+      trimmed: secondsTrimmed
+    };
+  }, [completedSegments, offsets]);
 
   // Debounced offset change handler
   const handleOffsetChange = useCallback((segmentIndex, newOffset) => {
@@ -122,7 +149,9 @@ export default function MergeConfigModal({ open, onClose, jobId, segments, onFin
   const handleFinalize = async () => {
     setFinalizing(true);
     try {
-      await onFinalize(offsets);
+      // Include segment 0 with offset 0 for completeness
+      const allOffsets = { '0': 0, ...offsets };
+      await onFinalize(allOffsets);
       onClose();
     } catch (error) {
       console.error('Failed to finalize:', error);
@@ -141,6 +170,24 @@ export default function MergeConfigModal({ open, onClose, jobId, segments, onFin
     return `${seconds.toFixed(2)}s`;
   };
 
+  // Thumbnail container style for aspect ratio preservation
+  const thumbnailContainerStyle = {
+    width: 160,
+    height: 160,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 1,
+    overflow: 'hidden'
+  };
+
+  const thumbnailImageStyle = {
+    maxWidth: '100%',
+    maxHeight: '100%',
+    objectFit: 'contain'
+  };
+
   if (!open) return null;
 
   return (
@@ -156,6 +203,16 @@ export default function MergeConfigModal({ open, onClose, jobId, segments, onFin
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
           Adjust frame offsets to trim artifacts from segment starts. Higher offset = more frames trimmed.
         </Typography>
+        {durationInfo && (
+          <Typography variant="body2" sx={{ mt: 1, fontWeight: 500 }}>
+            Total duration: ~{durationInfo.final.toFixed(2)}s
+            {durationInfo.trimmed > 0 && (
+              <span style={{ color: '#888', fontWeight: 400 }}>
+                {' '}(was {durationInfo.original.toFixed(2)}s)
+              </span>
+            )}
+          </Typography>
+        )}
       </DialogTitle>
 
       <DialogContent dividers>
@@ -174,12 +231,13 @@ export default function MergeConfigModal({ open, onClose, jobId, segments, onFin
           </Box>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {completedSegments.map((segment, idx) => {
+            {/* Show N-1 transition cards for N segments (skip segment 0) */}
+            {completedSegments.slice(1).map((segment, idx) => {
+              const prevSegment = completedSegments[idx]; // Previous segment
               const segIdx = segment.segment_index;
               const offset = offsets[segIdx.toString()] || 0;
               const info = segmentInfo[segIdx] || { frameCount: 120, fps: 24 };
               const maxOffset = Math.floor(info.frameCount * 0.5);
-              const prevSegment = idx > 0 ? completedSegments[idx - 1] : null;
 
               return (
                 <Box
@@ -192,63 +250,55 @@ export default function MergeConfigModal({ open, onClose, jobId, segments, onFin
                   }}
                 >
                   <Typography variant="subtitle2" sx={{ mb: 2 }}>
-                    Segment {segIdx} {idx === 0 ? '(First)' : ''}
+                    Transition: Segment {prevSegment.segment_index} → Segment {segIdx}
                   </Typography>
 
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    {/* Previous segment end frame (if not first) */}
-                    {prevSegment && (
-                      <>
-                        <Box sx={{ textAlign: 'center' }}>
-                          <Typography variant="caption" color="text.secondary">
-                            Seg {prevSegment.segment_index} End
-                          </Typography>
+                    {/* Previous segment end frame */}
+                    <Box sx={{ textAlign: 'center' }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Seg {prevSegment.segment_index} End
+                      </Typography>
+                      <Box sx={thumbnailContainerStyle}>
+                        {prevSegment.end_frame_url ? (
                           <Box
                             component="img"
-                            src={API.getSegmentFrame(jobId, prevSegment.segment_index, -1)}
+                            src={prevSegment.end_frame_url}
                             alt={`Segment ${prevSegment.segment_index} end`}
-                            sx={{
-                              width: 160,
-                              height: 90,
-                              objectFit: 'cover',
-                              borderRadius: 1,
-                              border: '1px solid',
-                              borderColor: 'divider'
-                            }}
+                            sx={thumbnailImageStyle}
                             onError={(e) => {
                               e.target.style.display = 'none';
                             }}
                           />
-                        </Box>
+                        ) : (
+                          <Typography variant="caption" color="text.secondary">
+                            No preview
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
 
-                        <Typography sx={{ mx: 1 }} color="text.secondary">
-                          →
-                        </Typography>
-                      </>
-                    )}
+                    <Typography sx={{ mx: 1 }} color="text.secondary">
+                      →
+                    </Typography>
 
                     {/* Current segment start frame (with offset) */}
                     <Box sx={{ textAlign: 'center' }}>
                       <Typography variant="caption" color="text.secondary">
                         Seg {segIdx} Start {offset > 0 ? `(+${offset} frames)` : ''}
                       </Typography>
-                      <Box
-                        component="img"
-                        key={`${segIdx}-${offset}`}
-                        src={API.getSegmentFrame(jobId, segIdx, offset)}
-                        alt={`Segment ${segIdx} start`}
-                        sx={{
-                          width: 160,
-                          height: 90,
-                          objectFit: 'cover',
-                          borderRadius: 1,
-                          border: '2px solid',
-                          borderColor: offset > 0 ? 'primary.main' : 'divider'
-                        }}
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                        }}
-                      />
+                      <Box sx={thumbnailContainerStyle}>
+                        <Box
+                          component="img"
+                          key={`${segIdx}-${offset}`}
+                          src={API.getSegmentFrame(jobId, segIdx, offset)}
+                          alt={`Segment ${segIdx} start`}
+                          sx={thumbnailImageStyle}
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                          }}
+                        />
+                      </Box>
                     </Box>
 
                     {/* Offset controls */}
@@ -292,12 +342,6 @@ export default function MergeConfigModal({ open, onClose, jobId, segments, onFin
                       </Typography>
                     </Box>
                   </Box>
-
-                  {idx === 0 && offset === 0 && (
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                      First segment typically doesn't need trimming
-                    </Typography>
-                  )}
                 </Box>
               );
             })}
