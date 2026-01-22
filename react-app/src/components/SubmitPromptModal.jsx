@@ -392,10 +392,10 @@ export default function SubmitPromptModal({
           </div>
 
           {/* LoRAs - 3 columns */}
-          <div className="lora-grid">
+          <div className="modal-lora-grid">
             {[0, 1, 2].map((idx) => (
-              <div key={idx} className="lora-slot">
-                <div className="lora-slot-header">LoRA {idx + 1} (optional)</div>
+              <div key={idx} className="modal-lora-slot">
+                <div className="modal-lora-slot-header">LoRA {idx + 1} (optional)</div>
                 <LoraAutocomplete
                   label=""
                   value={selectedLoras[idx].lora}
@@ -411,7 +411,7 @@ export default function SubmitPromptModal({
                   }}
                   loras={loras}
                 />
-                <div className="lora-weights">
+                <div className="modal-lora-weights">
                   <TextField
                     type="number"
                     label="High"
