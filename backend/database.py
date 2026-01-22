@@ -1953,16 +1953,24 @@ def delete_lora(lora_id: int):
         cursor.execute("DELETE FROM lora_library WHERE id = ?", (lora_id,))
 
 
-def _get_existing_filenames(cursor) -> set:
-    """Get all filenames currently in the lora_library (both high and low)."""
+def _get_existing_filenames(cursor) -> tuple:
+    """Get all filenames currently in the lora_library (both high and low).
+
+    Returns a tuple of (exact_filenames_set, lowercase_map) where:
+    - exact_filenames_set: set of exact filenames for quick lookup
+    - lowercase_map: dict mapping lowercase filename to exact filename for case-insensitive matching
+    """
     cursor.execute("SELECT high_file, low_file FROM lora_library")
-    existing = set()
+    exact_set = set()
+    lowercase_map = {}
     for row in cursor.fetchall():
         if row['high_file']:
-            existing.add(row['high_file'])
+            exact_set.add(row['high_file'])
+            lowercase_map[row['high_file'].lower()] = row['high_file']
         if row['low_file']:
-            existing.add(row['low_file'])
-    return existing
+            exact_set.add(row['low_file'])
+            lowercase_map[row['low_file'].lower()] = row['low_file']
+    return exact_set, lowercase_map
 
 
 def bulk_upsert_loras(lora_filenames: List[str]) -> int:
@@ -1981,10 +1989,11 @@ def bulk_upsert_loras(lora_filenames: List[str]) -> int:
         cursor = conn.cursor()
 
         # Get all filenames already in the database for deduplication
-        existing_filenames = _get_existing_filenames(cursor)
+        existing_exact, existing_lowercase = _get_existing_filenames(cursor)
 
         # Group files by base name, skipping files already in the database
         groups: Dict[str, Dict[str, Optional[str]]] = {}
+        skipped_count = 0
 
         for filename in lora_filenames:
             # Skip hidden files
@@ -1995,8 +2004,10 @@ def bulk_upsert_loras(lora_filenames: List[str]) -> int:
             if '_t2v_' in filename.lower():
                 continue
 
-            # Skip files that already exist in the database (dedup by actual filename)
-            if filename in existing_filenames:
+            # Skip files that already exist in the database (case-insensitive check)
+            # This prevents creating duplicates when ComfyUI returns filenames with different casing
+            if filename in existing_exact or filename.lower() in existing_lowercase:
+                skipped_count += 1
                 continue
 
             base_name, lora_type = _get_lora_base_and_type(filename)
@@ -2014,6 +2025,8 @@ def bulk_upsert_loras(lora_filenames: List[str]) -> int:
 
         # Upsert each group
         now = utc_now_iso()
+        inserted_count = 0
+        updated_count = 0
 
         for base_name, files in groups.items():
             # Check if exists by base_name
@@ -2022,6 +2035,7 @@ def bulk_upsert_loras(lora_filenames: List[str]) -> int:
 
             if existing:
                 # Update: only update file paths if new ones are provided
+                # Preserves all other metadata (preview_image_url, friendly_name, etc.)
                 new_high = files['high_file'] or existing['high_file']
                 new_low = files['low_file'] or existing['low_file']
                 cursor.execute("""
@@ -2029,14 +2043,19 @@ def bulk_upsert_loras(lora_filenames: List[str]) -> int:
                     SET high_file = ?, low_file = ?, updated_at = ?
                     WHERE id = ?
                 """, (new_high, new_low, now, existing['id']))
+                updated_count += 1
+                print(f"[LoRA] Updated existing entry id={existing['id']} base_name={base_name}")
             else:
                 # Insert new
                 cursor.execute("""
                     INSERT INTO lora_library (base_name, high_file, low_file, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?)
                 """, (base_name, files['high_file'], files['low_file'], now, now))
+                inserted_count += 1
+                print(f"[LoRA] Inserted new entry base_name={base_name}")
 
         conn.commit()
+        print(f"[LoRA] Fetch complete: {skipped_count} skipped (already exist), {inserted_count} inserted, {updated_count} updated")
 
     return len(groups)
 

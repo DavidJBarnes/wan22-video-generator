@@ -209,7 +209,7 @@ export default function Settings() {
 
     try {
       const result = await API.fetchAndCacheLoras();
-      showToast(`Successfully cached ${result.count} LoRAs`, 'success');
+      showToast(result.message || `Fetched ${result.file_count} files, grouped into ${result.grouped_count} LoRAs`, 'success');
       setFetchingLoras(false);
     } catch (error) {
       console.error('Failed to fetch LoRAs:', error);
