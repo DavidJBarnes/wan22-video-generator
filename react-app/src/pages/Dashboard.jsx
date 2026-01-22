@@ -22,7 +22,7 @@ import StatusChip from '../components/StatusChip';
 import './Dashboard.css';
 
 export default function Dashboard() {
-  const { jobs: allJobs, comfyStatus, loading, stats, avgRunTime } = useJobs();
+  const { jobs: allJobs, comfyStatus, loading, stats, avgRunTime, refreshJobs } = useJobs();
 
   const [runningJobProgress, setRunningJobProgress] = useState(null);
 
@@ -297,7 +297,8 @@ export default function Dashboard() {
 
       <JobTable
         jobs={filteredJobs}
-        showPriorityControls={false}
+        showPriorityControls={true}
+        onRefresh={refreshJobs}
         storageKey="dashboardTable"
         emptyMessage="No jobs match the filter"
       />
