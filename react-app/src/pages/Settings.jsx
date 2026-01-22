@@ -19,8 +19,6 @@ export default function Settings() {
   const [apiUrl, setApiUrl] = useState('');
   const [comfyuiUrl, setComfyuiUrl] = useState('');
   const [imageRepoPath, setImageRepoPath] = useState('');
-  const [defaultWidth, setDefaultWidth] = useState(640);
-  const [defaultHeight, setDefaultHeight] = useState(640);
   const [defaultTargetFps, setDefaultTargetFps] = useState(30);
   const [defaultNegativePrompt, setDefaultNegativePrompt] = useState('');
   const [queueWaitTimeout, setQueueWaitTimeout] = useState(30);
@@ -63,8 +61,6 @@ export default function Settings() {
       setApiUrl(API.getBaseUrl() === '/api' ? '' : API.getBaseUrl());
       setComfyuiUrl(s.comfyui_url || 'http://localhost:8188');
       setImageRepoPath(s.image_repo_path || '');
-      setDefaultWidth(parseInt(s.default_width) || 640);
-      setDefaultHeight(parseInt(s.default_height) || 640);
       setDefaultTargetFps(parseInt(s.default_target_fps) || 30);
       setDefaultNegativePrompt(s.default_negative_prompt || 'blurry, low quality, distorted');
       setQueueWaitTimeout(Math.round((parseInt(s.queue_wait_timeout) || 1800) / 60)); // Convert seconds to minutes
@@ -162,8 +158,6 @@ export default function Settings() {
       const settingsPayload = {
         comfyui_url: comfyuiUrl || 'http://localhost:8188',
         image_repo_path: imageRepoPath,
-        default_width: String(defaultWidth),
-        default_height: String(defaultHeight),
         default_target_fps: String(defaultTargetFps),
         default_negative_prompt: defaultNegativePrompt,
         queue_wait_timeout: String(queueWaitTimeout * 60), // Convert minutes to seconds
@@ -501,26 +495,6 @@ export default function Settings() {
           <h2>Default Parameters</h2>
           <div className="settings-grid">
             <div className="form-group">
-              <label>Width</label>
-              <input
-                type="number"
-                value={defaultWidth}
-                onChange={(e) => setDefaultWidth(parseInt(e.target.value))}
-                min="64"
-                step="8"
-              />
-            </div>
-            <div className="form-group">
-              <label>Height</label>
-              <input
-                type="number"
-                value={defaultHeight}
-                onChange={(e) => setDefaultHeight(parseInt(e.target.value))}
-                min="64"
-                step="8"
-              />
-            </div>
-            <div className="form-group">
               <label>Output FPS</label>
               <select
                 value={defaultTargetFps}
@@ -530,6 +504,9 @@ export default function Settings() {
                 <option value={60}>60 fps</option>
                 <option value={90}>90 fps (Quest 3S)</option>
               </select>
+              <small style={{ color: '#666', fontSize: '12px' }}>
+                Video dimensions are automatically set from the input image
+              </small>
             </div>
           </div>
           <div className="form-group">

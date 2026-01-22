@@ -182,16 +182,10 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   async function loadSettings() {
     try {
       const data = await API.getSettings();
-      console.log('[CreateJobModal] API.getSettings() returned:', data);
       const s = data.settings || data;
-      console.log('[CreateJobModal] Parsed settings:', s);
       setSettings(s);
-      const newWidth = parseInt(s.default_width) || 640;
-      const newHeight = parseInt(s.default_height) || 640;
+      // Only load target FPS from settings - dimensions come from image
       const newTargetFps = parseInt(s.default_target_fps) || 30;
-      console.log('[CreateJobModal] Setting width:', newWidth, 'height:', newHeight, 'targetFps:', newTargetFps);
-      setWidth(newWidth);
-      setHeight(newHeight);
       setTargetFps(newTargetFps);
 
       // Parse job naming presets
@@ -311,7 +305,16 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
     if (file) {
       setImageFile(file);
       const reader = new FileReader();
-      reader.onload = (e) => setImagePreview(e.target.result);
+      reader.onload = (e) => {
+        setImagePreview(e.target.result);
+        // Extract dimensions from the loaded image
+        const img = new Image();
+        img.onload = () => {
+          setWidth(img.width);
+          setHeight(img.height);
+        };
+        img.src = e.target.result;
+      };
       reader.readAsDataURL(file);
     }
   }
