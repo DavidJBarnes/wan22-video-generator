@@ -257,6 +257,10 @@ class APIClient {
     return `${this.baseUrl}/jobs/${jobId}/segments/${segmentIndex}/frame?frame=${frame}`;
   }
 
+  async getSegmentFrames(jobId) {
+    return this.request(`/jobs/${jobId}/segment-frames`);
+  }
+
   getJobVideo(jobId) {
     return `${this.baseUrl}/jobs/${jobId}/video`;
   }
@@ -298,6 +302,10 @@ class APIClient {
       formData.append('faceswap_image', faceswapOptions.image || '');
       formData.append('faceswap_faces_order', faceswapOptions.facesOrder || 'left-right');
       formData.append('faceswap_faces_index', faceswapOptions.facesIndex || '0');
+      // Source image from segment frame (overrides faceswap_image)
+      if (faceswapOptions.sourceImage) {
+        formData.append('faceswap_source_image', faceswapOptions.sourceImage);
+      }
     }
 
     // Custom start image (overrides default previous segment's last frame)
