@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button, Chip, TextField, IconButton, CircularProgress } from '@mui/material';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
+import { useLoras } from '../contexts/LoraContext';
 import './Settings.css';
 
 export default function Settings() {
@@ -12,6 +13,7 @@ export default function Settings() {
   const [cleaningLoras, setCleaningLoras] = useState(false);
   const [hiddenLoras, setHiddenLoras] = useState([]);
   const [loadingHidden, setLoadingHidden] = useState(false);
+  const { refreshLoras } = useLoras();
 
   // Form fields
   const [apiUrl, setApiUrl] = useState('');
@@ -210,6 +212,8 @@ export default function Settings() {
     try {
       const result = await API.fetchAndCacheLoras();
       showToast(result.message || `Fetched ${result.file_count} files, grouped into ${result.grouped_count} LoRAs`, 'success');
+      // Refresh the LoRA context cache so new LoRAs appear immediately
+      await refreshLoras();
       setFetchingLoras(false);
     } catch (error) {
       console.error('Failed to fetch LoRAs:', error);
@@ -224,6 +228,8 @@ export default function Settings() {
     try {
       const result = await API.cleanupDuplicateLoras();
       showToast(result.message, 'success');
+      // Refresh the LoRA context cache after cleanup
+      await refreshLoras();
       setCleaningLoras(false);
     } catch (error) {
       console.error('Failed to cleanup LoRAs:', error);
