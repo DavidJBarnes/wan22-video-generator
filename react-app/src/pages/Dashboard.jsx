@@ -235,14 +235,14 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {stats.failedCount > 0 && (
-          <div className="stat-card failed-card">
-            <div className="stat-card-header failed">
-              <ErrorOutlineIcon />
-              Failed Jobs
-            </div>
-            <div className="stat-card-body">
-              <div className="value">{stats.failedCount}</div>
+        <div className={`stat-card${stats.failedCount > 0 ? ' failed-card' : ''}`}>
+          <div className="stat-card-header failed">
+            <ErrorOutlineIcon />
+            Failed Jobs
+          </div>
+          <div className="stat-card-body">
+            <div className="value">{stats.failedCount}</div>
+            {stats.failedCount > 0 && (
               <button
                 className="action-button"
                 onClick={() => {
@@ -252,9 +252,9 @@ export default function Dashboard() {
               >
                 View Failed Jobs
               </button>
-            </div>
+            )}
           </div>
-        )}
+        </div>
 
         <div className="stat-card">
           <div className="stat-card-header avgtime">
