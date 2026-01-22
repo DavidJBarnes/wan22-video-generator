@@ -1,15 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Button, Rating, CircularProgress } from '@mui/material';
+import { Button, Rating, CircularProgress, IconButton } from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import LinkIcon from '@mui/icons-material/Link';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import LoraEditModal from '../components/LoraEditModal';
 import './LoraLibrary.css';
-
-// Clean up base_name by removing {TYPE} placeholder
-function cleanBaseName(baseName) {
-  if (!baseName) return '';
-  return baseName.replace(/\{type\}/gi, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
-}
 
 export default function LoraLibrary() {
   const [loras, setLoras] = useState([]);
@@ -32,7 +29,8 @@ export default function LoraLibrary() {
     }
   }
 
-  async function handleDelete(loraId, loraName) {
+  async function handleDelete(e, loraId, loraName) {
+    e.stopPropagation();
     if (!confirm(`Are you sure you want to delete "${loraName}" from the library?`)) {
       return;
     }
@@ -62,7 +60,7 @@ export default function LoraLibrary() {
 
   if (loading) {
     return (
-      <div>
+      <div className="lora-library">
         <h1>LoRA Library</h1>
         <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
           <CircularProgress />
@@ -73,118 +71,97 @@ export default function LoraLibrary() {
 
   return (
     <div className="lora-library">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h1 style={{ margin: 0 }}>LoRA Library</h1>
-        <p style={{ color: '#666' }}>{loras.length} LoRA{loras.length !== 1 ? 's' : ''} cached</p>
+      <div className="lora-library-header">
+        <h1>LoRA Library</h1>
+        <span className="lora-count">{loras.length} LoRA{loras.length !== 1 ? 's' : ''}</span>
       </div>
 
       {loras.length === 0 ? (
-        <div className="card" style={{ padding: '40px', textAlign: 'center' }}>
-          <p style={{ color: '#999', margin: '0 0 16px 0' }}>
-            No LoRAs cached yet. Go to Settings and click "Fetch LoRAs from ComfyUI" to populate the library.
-          </p>
+        <div className="lora-empty">
+          <p>No LoRAs cached yet.</p>
+          <p>Go to Settings and click "Fetch LoRAs from ComfyUI" to populate the library.</p>
         </div>
       ) : (
-        <div className="card">
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: '70px' }}>Preview</th>
-                <th>Name</th>
-                <th>Rating</th>
-                <th>URL</th>
-                <th>Trigger Keywords</th>
-                <th style={{ width: '80px' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loras.map((lora) => (
-                <tr key={lora.id} onClick={() => handleEdit(lora)} style={{ cursor: 'pointer' }}>
-                  <td style={{ padding: '4px' }}>
-                    <img
-                      src={API.getLoraPreviewUrl(lora.id)}
-                      alt="Preview"
-                      style={{
-                        width: '60px',
-                        height: '60px',
-                        objectFit: 'cover',
-                        borderRadius: '4px',
-                        backgroundColor: '#f0f0f0'
-                      }}
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                        e.target.nextSibling.style.display = 'flex';
-                      }}
-                    />
-                    <div style={{
-                      width: '60px',
-                      height: '60px',
-                      backgroundColor: '#f0f0f0',
-                      borderRadius: '4px',
-                      display: 'none',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#999',
-                      fontSize: '10px'
-                    }}>
-                      No preview
-                    </div>
-                  </td>
-                  <td>
-                    <div>
-                      {lora.friendly_name ? (
-                        <strong>{lora.friendly_name}</strong>
-                      ) : (
-                        <span style={{ color: '#999', fontStyle: 'italic' }}>—</span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: '11px', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                      {lora.high_file && (
-                        <span style={{ color: '#2e7d32' }} title={lora.high_file}>
-                          H: {lora.high_file.split('/').pop()}
-                        </span>
-                      )}
-                      {lora.low_file && (
-                        <span style={{ color: '#1565c0' }} title={lora.low_file}>
-                          L: {lora.low_file.split('/').pop()}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td>
-                    <Rating value={lora.rating || 0} readOnly size="small" />
-                  </td>
-                  <td>
-                    {lora.url ? (
-                      <a href={lora.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '13px' }}>
-                        Link
-                      </a>
-                    ) : (
-                      <span style={{ color: '#999' }}>—</span>
-                    )}
-                  </td>
-                  <td>
-                    {lora.trigger_keywords ? (
-                      <span style={{ fontSize: '13px' }}>{lora.trigger_keywords}</span>
-                    ) : (
-                      <span style={{ color: '#999' }}>—</span>
-                    )}
-                  </td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      <button
-                        className="btn-icon delete"
-                        onClick={() => handleDelete(lora.id, lora.friendly_name || lora.high_file?.split('/').pop() || 'this LoRA')}
-                        title="Delete from library"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="lora-grid">
+          {loras.map((lora) => (
+            <div key={lora.id} className="lora-card" onClick={() => handleEdit(lora)}>
+              <div className="lora-card-preview">
+                <img
+                  src={API.getLoraPreviewUrl(lora.id)}
+                  alt="Preview"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
+                />
+                <div className="lora-card-no-preview">
+                  No preview
+                </div>
+              </div>
+
+              <div className="lora-card-content">
+                <div className="lora-card-name">
+                  {lora.friendly_name || lora.base_name?.replace(/\{type\}/gi, '').replace(/[_-]+/g, ' ').trim() || 'Unnamed'}
+                </div>
+
+                <Rating value={lora.rating || 0} readOnly size="small" />
+
+                <div className="lora-card-files">
+                  {lora.high_file && (
+                    <span className="file-tag high" title={lora.high_file}>
+                      H: {lora.high_file.split('/').pop().substring(0, 25)}...
+                    </span>
+                  )}
+                  {lora.low_file && (
+                    <span className="file-tag low" title={lora.low_file}>
+                      L: {lora.low_file.split('/').pop().substring(0, 25)}...
+                    </span>
+                  )}
+                </div>
+
+                {lora.trigger_keywords && (
+                  <div className="lora-card-keywords" title={lora.trigger_keywords}>
+                    {lora.trigger_keywords.length > 50
+                      ? lora.trigger_keywords.substring(0, 50) + '...'
+                      : lora.trigger_keywords}
+                  </div>
+                )}
+              </div>
+
+              <div className="lora-card-actions">
+                {lora.url && (
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.open(lora.url, '_blank');
+                    }}
+                    title="Open CivitAI page"
+                  >
+                    <LinkIcon fontSize="small" />
+                  </IconButton>
+                )}
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEdit(lora);
+                  }}
+                  title="Edit"
+                >
+                  <EditIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={(e) => handleDelete(e, lora.id, lora.friendly_name || lora.high_file?.split('/').pop() || 'this LoRA')}
+                  title="Delete"
+                  color="error"
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
