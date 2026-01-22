@@ -59,6 +59,7 @@ export default function SubmitPromptModal({
   const [faceswapSourceType, setFaceswapSourceType] = useState(defaultFaceswap?.sourceImage ? 'segment' : 'preset');
   const [faceswapSourceImage, setFaceswapSourceImage] = useState(defaultFaceswap?.sourceImage || '');
   const [segmentFrames, setSegmentFrames] = useState([]);
+  const [hoverPreview, setHoverPreview] = useState(null);  // {url, x, y} for hover preview
 
   // Custom start image state (only for segments > 0)
   const [customStartImage, setCustomStartImage] = useState(defaultCustomStartImage);  // Path in image repo
@@ -517,18 +518,11 @@ export default function SubmitPromptModal({
 
                 {/* Segment frame picker */}
                 {faceswapSourceType === 'segment' && segmentFrames.length > 0 && (
-                  <div style={{ marginTop: '8px' }}>
+                  <div style={{ marginTop: '8px', marginBottom: '16px' }}>
                     <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
                       Select a frame from a previous segment:
                     </div>
-                    <div style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      gap: '6px',
-                      maxHeight: '200px',
-                      overflowY: 'auto',
-                      padding: '4px'
-                    }}>
+                    <div className="segment-frame-container">
                       {segmentFrames.map((frame) => {
                         // Start frames use relative API URLs, end frames use full ComfyUI URLs
                         const imgUrl = frame.url.startsWith('/api/')
@@ -541,10 +535,13 @@ export default function SubmitPromptModal({
                               src={imgUrl}
                               alt={frame.label}
                               onClick={() => setFaceswapSourceImage(frame.url)}
-                              className="image-thumbnail-hover"
+                              onMouseEnter={(e) => {
+                                const rect = e.target.getBoundingClientRect();
+                                setHoverPreview({ url: imgUrl, x: rect.right + 10, y: rect.top });
+                              }}
+                              onMouseLeave={() => setHoverPreview(null)}
+                              className="segment-frame-thumb"
                               style={{
-                                width: '50px',
-                                height: '50px',
                                 border: isSelected ? '2px solid #1976d2' : '1px solid #ccc',
                                 background: isSelected ? '#e3f2fd' : 'white'
                               }}
@@ -554,6 +551,19 @@ export default function SubmitPromptModal({
                         );
                       })}
                     </div>
+                    {/* Fixed position hover preview */}
+                    {hoverPreview && (
+                      <img
+                        src={hoverPreview.url}
+                        alt="Preview"
+                        className="segment-frame-preview"
+                        style={{
+                          display: 'block',
+                          left: hoverPreview.x,
+                          top: hoverPreview.y
+                        }}
+                      />
+                    )}
                   </div>
                 )}
 
