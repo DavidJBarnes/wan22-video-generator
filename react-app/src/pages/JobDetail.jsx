@@ -679,7 +679,8 @@ export default function JobDetail() {
         enabled: Boolean(segment.faceswap_enabled),
         image: segment.faceswap_image || '',
         facesOrder: segment.faceswap_faces_order || 'left-right',
-        facesIndex: segment.faceswap_faces_index || '0'
+        facesIndex: segment.faceswap_faces_index || '0',
+        sourceImage: segment.faceswap_source_image || ''
       };
     }
     // Fall back to job parameters (initial job settings)
@@ -688,7 +689,8 @@ export default function JobDetail() {
         enabled: Boolean(jobParams.faceswap_enabled),
         image: jobParams.faceswap_image || '',
         facesOrder: jobParams.faceswap_faces_order || 'left-right',
-        facesIndex: jobParams.faceswap_faces_index || '0'
+        facesIndex: jobParams.faceswap_faces_index || '0',
+        sourceImage: jobParams.faceswap_source_image || ''
       };
     }
     return null;
