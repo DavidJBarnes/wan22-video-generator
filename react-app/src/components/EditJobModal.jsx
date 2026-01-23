@@ -8,11 +8,11 @@ export default function EditJobModal({ job, onClose, onSuccess }) {
   const params = job.parameters || {};
 
   // Check if job has active completed segments (not deleted)
-  // Allow editing if: no segments completed, all segments deleted, or job failed
+  // Dimensions/fps are locked once any segment is completed (to prevent resolution mismatch during stitching)
   const completedSegments = job.completed_segments ?? 0;
   const deletedSegments = job.deleted_segments ?? 0;
   const activeCompletedSegments = completedSegments - deletedSegments;
-  const hasStarted = activeCompletedSegments > 0 && job.status !== 'failed';
+  const hasStarted = activeCompletedSegments > 0;
 
   const [name, setName] = useState(job.name || '');
   const [prompt, setPrompt] = useState(job.prompt || '');
