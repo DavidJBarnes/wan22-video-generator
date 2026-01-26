@@ -646,7 +646,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                       onClick={() => setFaceswapSourceType('frame')}
                       disabled={!imagePreview}
                     >
-                      From Start Image
+                      From Frame
                     </Button>
                   </div>
 
