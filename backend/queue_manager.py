@@ -668,8 +668,8 @@ class QueueManager:
                     # Format: http://localhost:8188/view?filename=xxx&subfolder=&type=output
                     if 'filename=' in faceswap_source_image:
                         parsed = urllib.parse.urlparse(faceswap_source_image)
-                        params = urllib.parse.parse_qs(parsed.query)
-                        filename = params.get('filename', [''])[0]
+                        url_params = urllib.parse.parse_qs(parsed.query)
+                        filename = url_params.get('filename', [''])[0]
                         if filename:
                             # Use the filename directly (it's already in ComfyUI)
                             faceswap_image = filename
