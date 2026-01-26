@@ -458,9 +458,19 @@ class QueueManager:
 
         # Update segment status to running
         update_segment_status(job_id, segment_index, "running")
-        
-        # Get job parameters
-        params = job.get("parameters") or {}
+
+        # Re-fetch job from database to ensure we have fresh parameters
+        # This fixes an issue where params could be empty when processing segments > 0
+        fresh_job = get_job(job_id)
+        if not fresh_job:
+            logger.error(f"[Job {job_id}] Job not found in database!")
+            update_segment_status(job_id, segment_index, "failed", error_message="Job not found")
+            return False
+
+        # Get job parameters from fresh fetch
+        params = fresh_job.get("parameters") or {}
+        if not params.get("width") or not params.get("height"):
+            logger.warning(f"[Job {job_id}] Missing dimensions in params: {params}")
         target_fps = int(params.get("target_fps", get_setting("default_target_fps", "30")))
         segment_duration = float(params.get("segment_duration", 5))
         
