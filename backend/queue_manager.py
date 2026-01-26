@@ -469,8 +469,13 @@ class QueueManager:
 
         # Get job parameters from fresh fetch
         params = fresh_job.get("parameters") or {}
+        # DEBUG: Log params to database for debugging dimension issues
+        add_job_log(job_id, "DEBUG", f"Fresh job params loaded", segment_index=segment_index,
+                   details=f"width={params.get('width')}, height={params.get('height')}, params_keys={list(params.keys()) if params else 'empty'}")
         if not params.get("width") or not params.get("height"):
             logger.warning(f"[Job {job_id}] Missing dimensions in params: {params}")
+            add_job_log(job_id, "WARN", "Missing dimensions in params", segment_index=segment_index,
+                       details=f"params={params}")
         target_fps = int(params.get("target_fps", get_setting("default_target_fps", "30")))
         segment_duration = float(params.get("segment_duration", 5))
         
