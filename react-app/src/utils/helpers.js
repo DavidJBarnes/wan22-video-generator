@@ -47,7 +47,7 @@ export function getFaceswapName(job) {
 
   // Using preset face image
   if (!params.faceswap_image) {
-    return 'Enabled';  // Faceswap enabled but no specific source set
+    return null;
   }
 
   // Extract name from filename like "Andrea_all.safetensors.png" or "gena.safetensors.png"
