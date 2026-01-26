@@ -1320,10 +1320,11 @@ async def delete_segment_endpoint(job_id: int, segment_index: int):
         raise HTTPException(status_code=404, detail="Job not found")
 
     # Validate job status - only allow deletion on non-finalized jobs
-    if job.get("status") != "awaiting_prompt":
+    # Allow deletion when awaiting_prompt OR pending (pending can happen if finalization failed)
+    if job.get("status") not in ("awaiting_prompt", "pending"):
         raise HTTPException(
             status_code=400,
-            detail="Can only delete segments when job is awaiting prompt (not finalized)"
+            detail="Can only delete segments when job is awaiting prompt or pending"
         )
 
     # Validate the segment exists and is not already deleted
