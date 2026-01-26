@@ -152,6 +152,12 @@ class APIClient {
     });
   }
 
+  async resetJobToAwaiting(jobId) {
+    return this.request(`/jobs/${jobId}/reset-to-awaiting`, {
+      method: 'POST'
+    });
+  }
+
   async moveJobUp(jobId) {
     return this.request(`/jobs/${jobId}/move-up`, {
       method: 'POST'
