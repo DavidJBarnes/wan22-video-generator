@@ -47,6 +47,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   const [faceswapImage, setFaceswapImage] = useState(FACESWAP_FACES[0]?.value || '');
   const [faceswapFacesOrder, setFaceswapFacesOrder] = useState('left-right');
   const [faceswapFacesIndex, setFaceswapFacesIndex] = useState('0');
+  const [faceswapSourceType, setFaceswapSourceType] = useState('preset');  // 'preset' or 'frame'
   const [selectedPrefix, setSelectedPrefix] = useState(null);
   const [selectedDescription, setSelectedDescription] = useState(null);
   const [autoFinalize, setAutoFinalize] = useState(false);
@@ -383,9 +384,14 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
           target_fps: targetFps,
           segment_duration: segmentDuration,
           faceswap_enabled: faceswapEnabled,
-          faceswap_image: faceswapEnabled ? faceswapImage : null,
+          faceswap_image: faceswapEnabled && faceswapSourceType === 'preset' ? faceswapImage : null,
           faceswap_faces_order: faceswapEnabled ? faceswapFacesOrder : null,
           faceswap_faces_index: faceswapEnabled ? faceswapFacesIndex : null,
+          // When 'frame' source type is selected, use the input image as faceswap source
+          // Backend extracts filename from URLs containing 'filename=' parameter
+          faceswap_source_image: faceswapEnabled && faceswapSourceType === 'frame'
+            ? `${API.baseUrl}/comfyui/view?filename=${encodeURIComponent(imageFilename)}&subfolder=&type=input`
+            : null,
           auto_finalize: autoFinalize
         }
       };
@@ -624,25 +630,69 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
                 sx={{ mb: faceswapEnabled ? 1 : 0 }}
               />
               {faceswapEnabled && (
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <FormControl variant="outlined" size="small" sx={{ width: '140px' }}>
-                    <InputLabel>Face</InputLabel>
-                    <Select value={faceswapImage} onChange={(e) => setFaceswapImage(e.target.value)} label="Face">
-                      {FACESWAP_FACES.map((face) => (
-                        <MenuItem key={face.value} value={face.value}>{face.label}</MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  <FormControl variant="outlined" size="small" sx={{ width: '130px' }}>
-                    <InputLabel>Order</InputLabel>
-                    <Select value={faceswapFacesOrder} onChange={(e) => setFaceswapFacesOrder(e.target.value)} label="Order">
-                      <MenuItem value="left-right">Left-Right</MenuItem>
-                      <MenuItem value="right-left">Right-Left</MenuItem>
-                      <MenuItem value="small-large">Small-Large</MenuItem>
-                      <MenuItem value="large-small">Large-Small</MenuItem>
-                    </Select>
-                  </FormControl>
-                  <TextField label="Index" value={faceswapFacesIndex} onChange={(e) => setFaceswapFacesIndex(e.target.value)} variant="outlined" size="small" sx={{ width: '70px' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {/* Source type selector */}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <Button
+                      variant={faceswapSourceType === 'preset' ? 'contained' : 'outlined'}
+                      size="small"
+                      onClick={() => setFaceswapSourceType('preset')}
+                    >
+                      Preset Face
+                    </Button>
+                    <Button
+                      variant={faceswapSourceType === 'frame' ? 'contained' : 'outlined'}
+                      size="small"
+                      onClick={() => setFaceswapSourceType('frame')}
+                      disabled={!imagePreview}
+                    >
+                      From Start Image
+                    </Button>
+                  </div>
+
+                  {/* Preset face selector */}
+                  {faceswapSourceType === 'preset' && (
+                    <FormControl variant="outlined" size="small" sx={{ width: '140px' }}>
+                      <InputLabel>Face</InputLabel>
+                      <Select value={faceswapImage} onChange={(e) => setFaceswapImage(e.target.value)} label="Face">
+                        {FACESWAP_FACES.map((face) => (
+                          <MenuItem key={face.value} value={face.value}>{face.label}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  )}
+
+                  {/* Start image preview when using frame source */}
+                  {faceswapSourceType === 'frame' && imagePreview && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <img
+                        src={imagePreview}
+                        alt="Start image"
+                        style={{
+                          width: '50px',
+                          height: '50px',
+                          objectFit: 'cover',
+                          borderRadius: '4px',
+                          border: '2px solid #1976d2'
+                        }}
+                      />
+                      <span style={{ fontSize: '12px', color: '#666' }}>Using start image as face source</span>
+                    </div>
+                  )}
+
+                  {/* Face detection order and index */}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <FormControl variant="outlined" size="small" sx={{ width: '130px' }}>
+                      <InputLabel>Order</InputLabel>
+                      <Select value={faceswapFacesOrder} onChange={(e) => setFaceswapFacesOrder(e.target.value)} label="Order">
+                        <MenuItem value="left-right">Left-Right</MenuItem>
+                        <MenuItem value="right-left">Right-Left</MenuItem>
+                        <MenuItem value="small-large">Small-Large</MenuItem>
+                        <MenuItem value="large-small">Large-Small</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <TextField label="Index" value={faceswapFacesIndex} onChange={(e) => setFaceswapFacesIndex(e.target.value)} variant="outlined" size="small" sx={{ width: '70px' }} />
+                  </div>
                 </div>
               )}
             </div>
