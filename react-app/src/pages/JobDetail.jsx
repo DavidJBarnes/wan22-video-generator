@@ -999,7 +999,9 @@ export default function JobDetail() {
             <label>Face Swap</label>
             <div className="value">
               {params.faceswap_enabled
-                ? (params.faceswap_image?.replace('.safetensors.png', '') || 'Enabled')
+                ? (params.faceswap_source_image
+                    ? 'From Frame'
+                    : params.faceswap_image?.replace('.safetensors.png', '') || 'Enabled')
                 : 'N/A'}
             </div>
           </div>
@@ -1322,7 +1324,9 @@ export default function JobDetail() {
                     <strong>Face Swap:</strong>{' '}
                     {seg.faceswap_enabled ? (
                       <span style={{ color: '#7b1fa2' }}>
-                        {getFaceswapDisplayName(seg.faceswap_image) || 'Enabled'}
+                        {seg.faceswap_source_image
+                          ? 'From Frame'
+                          : getFaceswapDisplayName(seg.faceswap_image) || 'Enabled'}
                       </span>
                     ) : (
                       <span style={{ color: '#999' }}>N/A</span>
