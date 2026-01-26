@@ -34,28 +34,9 @@ export function getChipClass(status) {
   return statusMap[status] || '';
 }
 
-export function getFaceswapName(job) {
+export function hasFaceswap(job) {
   const params = job.parameters || {};
-  if (!params.faceswap_enabled) {
-    return null;
-  }
-
-  // Check if using "From Frame" source (faceswap_source_image is set)
-  if (params.faceswap_source_image) {
-    return 'From Frame';
-  }
-
-  // Using preset face image
-  if (!params.faceswap_image) {
-    return null;
-  }
-
-  // Extract name from filename like "Andrea_all.safetensors.png" or "gena.safetensors.png"
-  let name = params.faceswap_image
-    .replace('.safetensors.png', '')
-    .replace('_all', '');
-  // Capitalize first letter
-  return name.charAt(0).toUpperCase() + name.slice(1);
+  return Boolean(params.faceswap_enabled);
 }
 
 export function showToast(message, type = 'info') {

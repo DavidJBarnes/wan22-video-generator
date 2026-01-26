@@ -14,8 +14,9 @@ import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp';
 import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrowDown';
+import FaceIcon from '@mui/icons-material/Face';
 import API from '../api/client';
-import { formatDate, showToast, getFaceswapName } from '../utils/helpers';
+import { formatDate, showToast, hasFaceswap } from '../utils/helpers';
 import StatusChip from './StatusChip';
 import PaginationControl from './PaginationControl';
 
@@ -219,8 +220,8 @@ export default function JobTable({
                         />
                       </TableCell>
                       <TableCell>{job.name}</TableCell>
-                      <TableCell sx={{ color: getFaceswapName(job) ? 'inherit' : '#999' }}>
-                        {getFaceswapName(job) || 'N/A'}
+                      <TableCell sx={{ color: hasFaceswap(job) ? '#7b1fa2' : '#999' }}>
+                        {hasFaceswap(job) ? <FaceIcon fontSize="small" /> : 'N/A'}
                       </TableCell>
                       <TableCell>{job.last_segment_run ? formatDate(job.last_segment_run) : '-'}</TableCell>
                       <TableCell>
