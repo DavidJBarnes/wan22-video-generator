@@ -36,9 +36,20 @@ export function getChipClass(status) {
 
 export function getFaceswapName(job) {
   const params = job.parameters || {};
-  if (!params.faceswap_enabled || !params.faceswap_image) {
+  if (!params.faceswap_enabled) {
     return null;
   }
+
+  // Check if using "From Frame" source (faceswap_source_image is set)
+  if (params.faceswap_source_image) {
+    return 'From Frame';
+  }
+
+  // Using preset face image
+  if (!params.faceswap_image) {
+    return 'Enabled';  // Faceswap enabled but no specific source set
+  }
+
   // Extract name from filename like "Andrea_all.safetensors.png" or "gena.safetensors.png"
   let name = params.faceswap_image
     .replace('.safetensors.png', '')
