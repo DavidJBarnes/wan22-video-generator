@@ -1109,12 +1109,13 @@ export default function JobDetail() {
           // Helper function to render a segment
           const renderSegment = (seg, displayNumber, isDeleted) => {
             // Can delete any non-deleted segment when job is not finalized
-            const canDelete = !isDeleted && job.status === 'awaiting_prompt';
+            // Also allow when pending (e.g., finalization failed and job is stuck)
+            const canDelete = !isDeleted && ['awaiting_prompt', 'pending'].includes(job.status);
             // Can restore deleted segments when job is not finalized
-            const canRestore = isDeleted && job.status === 'awaiting_prompt';
+            const canRestore = isDeleted && ['awaiting_prompt', 'pending'].includes(job.status);
 
             // Can toggle fade on completed, non-deleted segments when job is not finalized
-            const canToggleFade = !isDeleted && seg.status === 'completed' && job.status === 'awaiting_prompt';
+            const canToggleFade = !isDeleted && seg.status === 'completed' && ['awaiting_prompt', 'pending'].includes(job.status);
 
             // Can edit pending segments when job is not running or completed
             const canEdit = !isDeleted && seg.status === 'pending' && ['pending', 'awaiting_prompt', 'paused'].includes(job.status);
