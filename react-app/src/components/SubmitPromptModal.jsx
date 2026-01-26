@@ -175,6 +175,25 @@ export default function SubmitPromptModal({
     loadFrames();
   }, [faceswapEnabled, jobId]);
 
+  // Build faceswap frames list - use API frames if available, fallback to job input image
+  const faceswapFrames = useMemo(() => {
+    // If API returned frames, use those
+    if (segmentFrames.length > 0) {
+      return segmentFrames;
+    }
+    // Fallback: include job's input image if available (for segment 0 when API hasn't responded)
+    if (jobInputImage) {
+      return [{
+        segment_index: -1,
+        segment_display: 0,
+        frame_type: 'input',
+        label: 'Original Start Image',
+        url: API.getComfyUIImage(jobInputImage)
+      }];
+    }
+    return [];
+  }, [segmentFrames, jobInputImage]);
+
   // Helper to populate prompt from LoRA if prompt is empty
   function populatePromptFromLora(lora) {
     if (prompt.trim() || !lora) return;
@@ -492,9 +511,9 @@ export default function SubmitPromptModal({
                     variant={faceswapSourceType === 'segment' ? 'contained' : 'outlined'}
                     size="small"
                     onClick={() => setFaceswapSourceType('segment')}
-                    disabled={segmentFrames.length === 0}
+                    disabled={faceswapFrames.length === 0}
                   >
-                    From Frame {segmentFrames.length === 0 ? '(loading...)' : ''}
+                    From Frame {faceswapFrames.length === 0 && segmentFrames.length === 0 ? '(loading...)' : ''}
                   </Button>
                 </div>
 
@@ -517,13 +536,13 @@ export default function SubmitPromptModal({
                 )}
 
                 {/* Segment frame picker */}
-                {faceswapSourceType === 'segment' && segmentFrames.length > 0 && (
+                {faceswapSourceType === 'segment' && faceswapFrames.length > 0 && (
                   <div style={{ marginTop: '8px', marginBottom: '16px' }}>
                     <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
                       Select a frame:
                     </div>
                     <div className="segment-frame-container">
-                      {segmentFrames.map((frame) => {
+                      {faceswapFrames.map((frame) => {
                         // Start frames use relative API URLs, end frames use full ComfyUI URLs
                         const imgUrl = frame.url.startsWith('/api/')
                           ? `${API.baseUrl}${frame.url}`
