@@ -444,6 +444,18 @@ export default function JobDetail() {
     }
   }
 
+  async function handleResetToAwaiting() {
+    try {
+      await API.resetJobToAwaiting(id);
+      showToast('Job reset to awaiting prompt', 'success');
+      await loadJobDetail();
+    } catch (error) {
+      console.error('Failed to reset job:', error);
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to reset job';
+      showToast(errorMessage, 'error');
+    }
+  }
+
   async function handleUpscaleVideo() {
     setUpscaling(true);
     showToast('Starting video upscale... This may take a few minutes.', 'info');
@@ -1060,6 +1072,15 @@ export default function JobDetail() {
           {job.status === 'failed' && (
             <Button variant="contained" onClick={handleRetryJob}>
               Retry Job
+            </Button>
+          )}
+          {job.status === 'pending' && (
+            <Button
+              variant="contained"
+              onClick={handleResetToAwaiting}
+              sx={{ bgcolor: '#2196f3', '&:hover': { bgcolor: '#1976d2' } }}
+            >
+              Reset to Awaiting
             </Button>
           )}
           {job.status === 'completed' && (

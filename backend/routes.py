@@ -899,6 +899,38 @@ async def reopen_job(job_id: int):
     }
 
 
+@router.post("/jobs/{job_id}/reset-to-awaiting")
+async def reset_job_to_awaiting(job_id: int):
+    """Reset a stuck job to awaiting_prompt status.
+
+    This is useful when a job gets stuck in 'pending' status after a failed
+    finalization attempt, allowing the user to delete/modify segments and retry.
+    """
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    current_status = job.get("status")
+    if current_status not in ("pending", "failed"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Can only reset jobs in 'pending' or 'failed' status, not '{current_status}'"
+        )
+
+    # Set job status to awaiting_prompt
+    update_job_status(job_id, "awaiting_prompt")
+
+    segments = db_get_job_segments(job_id)
+    completed_segments = [s for s in segments if s.get("status") == "completed" and not s.get("deleted_at")]
+
+    return {
+        "status": "awaiting_prompt",
+        "id": job_id,
+        "completed_segments": len(completed_segments),
+        "message": "Job reset to awaiting prompt. You can now modify segments or finalize."
+    }
+
+
 @router.get("/jobs/{job_id}/thumbnail")
 async def get_job_thumbnail(job_id: int):
     """Get thumbnail for a job.
