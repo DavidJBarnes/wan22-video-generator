@@ -4,6 +4,9 @@ import API from '../api/client';
 import { showToast } from '../utils/helpers';
 import './CreateJobModal.css';
 
+// Round to nearest multiple of 8 (required by ComfyUI/Wan2.2)
+const roundTo8 = (n) => Math.round(n / 8) * 8;
+
 export default function EditJobModal({ job, onClose, onSuccess }) {
   const params = job.parameters || {};
 
@@ -134,13 +137,17 @@ export default function EditJobModal({ job, onClose, onSuccess }) {
     setSaving(true);
 
     try {
+      // Ensure dimensions are multiples of 8 (safety validation)
+      const validWidth = roundTo8(width);
+      const validHeight = roundTo8(height);
+
       await API.updateJob(job.id, {
         name: name.trim(),
         prompt: prompt.trim(),
         parameters: {
           ...params,
-          width,
-          height,
+          width: validWidth,
+          height: validHeight,
           target_fps: targetFps,
           segment_duration: segmentDuration
         }

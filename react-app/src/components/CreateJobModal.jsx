@@ -52,6 +52,9 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   const [selectedDescription, setSelectedDescription] = useState(null);
   const [autoFinalize, setAutoFinalize] = useState(false);
 
+  // Round to nearest multiple of 8 (required by ComfyUI/Wan2.2)
+  const roundTo8 = (n) => Math.round(n / 8) * 8;
+
   useEffect(() => {
     console.log('[CreateJobModal] useEffect running with:', { preUploadedImageUrl, preUploadedDimensions, cloneData });
     async function initialize() {
@@ -66,9 +69,11 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
         // This must run AFTER loadSettings to override the defaults
         console.log('[CreateJobModal] preUploadedDimensions:', preUploadedDimensions);
         if (preUploadedDimensions) {
-          console.log('[CreateJobModal] Setting width:', preUploadedDimensions.width, 'height:', preUploadedDimensions.height);
-          setWidth(preUploadedDimensions.width);
-          setHeight(preUploadedDimensions.height);
+          const roundedWidth = roundTo8(preUploadedDimensions.width);
+          const roundedHeight = roundTo8(preUploadedDimensions.height);
+          console.log('[CreateJobModal] Setting width:', roundedWidth, 'height:', roundedHeight, '(rounded from', preUploadedDimensions.width, 'x', preUploadedDimensions.height, ')');
+          setWidth(roundedWidth);
+          setHeight(roundedHeight);
         }
       }
 
@@ -308,11 +313,11 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
       const reader = new FileReader();
       reader.onload = (e) => {
         setImagePreview(e.target.result);
-        // Extract dimensions from the loaded image
+        // Extract dimensions from the loaded image, rounded to multiple of 8
         const img = new Image();
         img.onload = () => {
-          setWidth(img.width);
-          setHeight(img.height);
+          setWidth(roundTo8(img.width));
+          setHeight(roundTo8(img.height));
         };
         img.src = e.target.result;
       };
@@ -371,6 +376,10 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
           low_weight: slot.lowWeight
         }));
 
+      // Ensure dimensions are multiples of 8 (safety validation)
+      const validWidth = roundTo8(width);
+      const validHeight = roundTo8(height);
+
       const jobData = {
         name: name.trim(),
         prompt: prompt.trim(),
@@ -379,8 +388,8 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
         input_image: imageFilename,
         loras: lorasArray.length > 0 ? lorasArray : null,
         parameters: {
-          width,
-          height,
+          width: validWidth,
+          height: validHeight,
           target_fps: targetFps,
           segment_duration: segmentDuration,
           faceswap_enabled: faceswapEnabled,
