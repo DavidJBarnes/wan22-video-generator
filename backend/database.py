@@ -1328,6 +1328,7 @@ def create_first_segment(
     faceswap_image: Optional[str] = None,
     faceswap_faces_order: str = "left-right",
     faceswap_faces_index: str = "0",
+    faceswap_source_image: Optional[str] = None,
     fade_to_black: bool = False
 ):
     """Create the first segment for a job (on-demand workflow).
@@ -1345,6 +1346,7 @@ def create_first_segment(
         faceswap_image: Filename of the face image to swap in
         faceswap_faces_order: Order to process faces (left-right, right-left, etc.)
         faceswap_faces_index: Which face indices to process (e.g., "0", "0,1")
+        faceswap_source_image: URL to segment frame to use as faceswap source (overrides faceswap_image)
         fade_to_black: Whether to apply fade-to-black transition at segment end
     """
     with get_connection() as conn:
@@ -1352,12 +1354,12 @@ def create_first_segment(
         cursor.execute("""
             INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora,
                                       faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index,
-                                      fade_to_black)
-            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      faceswap_source_image, fade_to_black)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (job_id, 0, initial_prompt, start_image_url,
               serialize_loras(high_loras), serialize_loras(low_loras),
               1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index,
-              1 if fade_to_black else 0))
+              faceswap_source_image, 1 if fade_to_black else 0))
 
 
 def create_next_segment(
