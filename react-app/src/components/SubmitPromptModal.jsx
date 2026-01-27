@@ -274,7 +274,7 @@ export default function SubmitPromptModal({
       onSuccess();
     } catch (error) {
       console.error('Failed to submit prompt:', error);
-      showToast('Failed to submit prompt', 'error');
+      showToast(error.message || 'Failed to submit prompt', 'error');
       setSubmitting(false);
     }
   }
