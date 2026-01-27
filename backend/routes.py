@@ -536,6 +536,14 @@ async def create_new_job(job: JobCreate):
     # Additional segments will be created when user provides prompts
     # Extract faceswap settings from job parameters for first segment
     params = job.parameters or {}
+
+    # Validate faceswap configuration
+    if params.get("faceswap_enabled") and not params.get("faceswap_source_image"):
+        raise HTTPException(
+            status_code=400,
+            detail="Faceswap is enabled but no source image was selected. Please select a source image for faceswap."
+        )
+
     create_first_segment(
         job_id,
         full_prompt,
@@ -1253,6 +1261,13 @@ async def update_segment_prompt_endpoint(
                         })
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid loras JSON format")
+
+    # Validate faceswap configuration
+    if faceswap_enabled and not faceswap_source_image:
+        raise HTTPException(
+            status_code=400,
+            detail="Faceswap is enabled but no source image was selected. Please select a source image for faceswap."
+        )
 
     segment = get_segment(job_id, segment_index)
 
