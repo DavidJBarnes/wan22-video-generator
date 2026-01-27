@@ -546,6 +546,7 @@ async def create_new_job(job: JobCreate):
         faceswap_image=params.get("faceswap_image", ""),
         faceswap_faces_order=params.get("faceswap_faces_order", "left-right"),
         faceswap_faces_index=params.get("faceswap_faces_index", "0"),
+        faceswap_source_image=params.get("faceswap_source_image"),
         fade_to_black=params.get("fade_to_black", False)
     )
 
