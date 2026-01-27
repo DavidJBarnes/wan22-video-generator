@@ -411,7 +411,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
       onSuccess(newJob.id);
     } catch (error) {
       console.error('Failed to create job:', error);
-      showToast('Failed to create job', 'error');
+      showToast(error.message || 'Failed to create job', 'error');
       setUploading(false);
     }
   }
