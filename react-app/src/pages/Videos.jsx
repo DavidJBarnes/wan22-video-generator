@@ -52,7 +52,8 @@ export default function Videos() {
 
   async function loadVideos() {
     try {
-      const data = await API.getJobs();
+      // Fetch more jobs to get all completed videos (default limit is 100)
+      const data = await API.getJobs(10000, 0);
       const jobsList = data.jobs || data || [];
       const completedJobs = jobsList.filter(job => job.status === 'completed');
       completedJobs.sort((a, b) => {
