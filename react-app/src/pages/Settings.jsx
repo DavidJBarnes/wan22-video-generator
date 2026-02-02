@@ -30,6 +30,12 @@ export default function Settings() {
   const [promptIdentity, setPromptIdentity] = useState('');
   const [slideshowDelay, setSlideshowDelay] = useState(5);
 
+  // FaceFusion face swap settings
+  const [faceswapModel, setFaceswapModel] = useState('hyperswap_1c_256');
+  const [faceswapOccluder, setFaceswapOccluder] = useState('xseg_3');
+  const [faceswapMaskBlur, setFaceswapMaskBlur] = useState(0.2);
+  const [faceswapRegionMask, setFaceswapRegionMask] = useState(true);
+
   // VR 180 stereo settings (validated for Quest 3S)
   const [vrEyeSeparation, setVrEyeSeparation] = useState(0.015);
   const [vrDepthStrength, setVrDepthStrength] = useState(0.5);
@@ -78,6 +84,12 @@ export default function Settings() {
 
       setPromptIdentity(s.prompt_identity || '');
       setSlideshowDelay(parseInt(s.slideshow_delay) || 5);
+
+      // FaceFusion settings
+      setFaceswapModel(s.faceswap_model || 'hyperswap_1c_256');
+      setFaceswapOccluder(s.faceswap_occluder || 'xseg_3');
+      setFaceswapMaskBlur(parseFloat(s.faceswap_mask_blur) || 0.2);
+      setFaceswapRegionMask(s.faceswap_region_mask !== 'false');
 
       // VR settings (validated for Quest 3S)
       setVrEyeSeparation(parseFloat(s.vr_eye_separation) || 0.015);
@@ -180,7 +192,12 @@ export default function Settings() {
         vr_upscale_threshold: String(vrUpscaleThreshold),
         vr_video_upscale_enabled: String(vrVideoUpscaleEnabled),
         vr_depth_model: vrDepthModel,
-        vr_encoding_preset: vrEncodingPreset
+        vr_encoding_preset: vrEncodingPreset,
+        // FaceFusion settings
+        faceswap_model: faceswapModel,
+        faceswap_occluder: faceswapOccluder,
+        faceswap_mask_blur: String(faceswapMaskBlur),
+        faceswap_region_mask: String(faceswapRegionMask)
       };
 
       await API.updateSettings(settingsPayload);
@@ -536,6 +553,82 @@ export default function Settings() {
             />
             <small style={{ color: '#666', fontSize: '12px' }}>
               This text is automatically prepended to all prompts (job creation and segment prompts)
+            </small>
+          </div>
+        </div>
+
+        {/* FaceFusion Face Swap Settings */}
+        <div className="card settings-section">
+          <h2>FaceFusion Face Swap</h2>
+          <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
+            Default parameters for face swapping with occlusion detection.
+          </p>
+
+          <div className="settings-grid">
+            <div className="form-group">
+              <label>Face Swapper Model</label>
+              <select
+                value={faceswapModel}
+                onChange={(e) => setFaceswapModel(e.target.value)}
+              >
+                <option value="hyperswap_1c_256">HyperSwap 1C 256 (best quality)</option>
+                <option value="hyperswap">HyperSwap Standard</option>
+                <option value="inswapper_128_fp16">InSwapper 128 FP16 (faster)</option>
+                <option value="inswapper_128">InSwapper 128</option>
+              </select>
+              <small style={{ color: '#666', fontSize: '12px' }}>
+                Model used for face swapping. HyperSwap 1C 256 provides highest quality.
+              </small>
+            </div>
+
+            <div className="form-group">
+              <label>Occlusion Detection Model</label>
+              <select
+                value={faceswapOccluder}
+                onChange={(e) => setFaceswapOccluder(e.target.value)}
+              >
+                <option value="xseg_3">XSeg 3 (best quality)</option>
+                <option value="xseg_2">XSeg 2</option>
+                <option value="xseg_1">XSeg 1 (faster)</option>
+              </select>
+              <small style={{ color: '#666', fontSize: '12px' }}>
+                Model for detecting occlusions (hands, tongue, etc.) to protect them during face swap.
+              </small>
+            </div>
+          </div>
+
+          <div className="form-group" style={{ marginTop: '12px' }}>
+            <label>Face Mask Blur: {faceswapMaskBlur}</label>
+            <input
+              type="range"
+              value={faceswapMaskBlur}
+              onChange={(e) => setFaceswapMaskBlur(parseFloat(e.target.value))}
+              min="0"
+              max="1"
+              step="0.05"
+              style={{ width: '100%' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#666', fontSize: '11px' }}>
+              <span>0 (sharp)</span>
+              <span>1.0 (blurred)</span>
+            </div>
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+              Blur amount for face mask edges. Lower values create sharper transitions.
+            </small>
+          </div>
+
+          <div className="form-group" style={{ marginTop: '12px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={faceswapRegionMask}
+                onChange={(e) => setFaceswapRegionMask(e.target.checked)}
+                style={{ width: 'auto', margin: 0 }}
+              />
+              Enable Region Masking
+            </label>
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+              Use region-specific masks (skin, nose, mouth, lips) for more precise face blending.
             </small>
           </div>
         </div>

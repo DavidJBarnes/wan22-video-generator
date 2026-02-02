@@ -246,6 +246,10 @@ def build_wan_i2v_workflow(
     faceswap_image: str = "",
     faceswap_faces_order: str = "left-right",
     faceswap_faces_index: str = "0",
+    faceswap_model: str = "hyperswap_1c_256",
+    faceswap_occluder: str = "xseg_3",
+    faceswap_mask_blur: float = 0.2,
+    faceswap_region_mask: bool = True,
 ) -> Dict[str, Any]:
     """Build a Wan2.2 i2v workflow by injecting values into the pre-converted template.
 
@@ -406,12 +410,12 @@ def build_wan_i2v_workflow(
                 "source_images": ["188", 0],       # Face to swap in
                 "target_image": ["87", 0],         # Decoded video frames from VAEDecode
                 "api_token": "-1",                 # Local mode, no API
-                "face_swapper_model": "hyperswap_1c_256",  # Best quality model
+                "face_swapper_model": faceswap_model,       # Configurable model
                 "face_detector_model": "scrfd",    # Fast and accurate detector
                 "pixel_boost": "512x512",          # Balance of quality/speed
-                "face_occluder_model": "xseg_3",   # Best occlusion detection model
-                "face_parser_model": "bisenet_resnet_34",  # Face parsing for regions
-                "face_mask_blur": 0.2,             # Sharper mask edges
+                "face_occluder_model": faceswap_occluder,   # Configurable occlusion model
+                "face_parser_model": "bisenet_resnet_34",   # Face parsing for regions
+                "face_mask_blur": faceswap_mask_blur,       # Configurable blur
                 "face_selector_mode": "one",       # Swap one face per frame
                 "face_position": int(faceswap_faces_index),  # Which face to swap (0-indexed)
                 "sort_order": faceswap_faces_order.replace("-", "-"),  # Face sorting order
@@ -419,7 +423,7 @@ def build_wan_i2v_workflow(
                 "use_box_mask": True,              # Use rectangular mask
                 "use_occlusion_mask": True,        # ENABLE OCCLUSION DETECTION
                 "use_area_mask": False,            # Don't use area mask
-                "use_region_mask": True,           # Enable region mask for hair/skin
+                "use_region_mask": faceswap_region_mask,    # Configurable region mask
                 "face_mask_areas": "upper-face,lower-face,mouth",
                 "face_mask_regions": "skin,nose,mouth,upper-lip,lower-lip",
                 "face_mask_padding": "0,0,0,0"     # No padding
