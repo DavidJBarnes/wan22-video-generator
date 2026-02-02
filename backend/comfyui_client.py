@@ -337,6 +337,7 @@ class ComfyUIClient:
         faceswap_occluder: str = "xseg_3",
         faceswap_mask_blur: float = 0.2,
         faceswap_region_mask: bool = True,
+        faceswap_score_threshold: float = 0.5,
     ) -> Dict[str, Any]:
         """Build a Wan2.2 i2v workflow using the pre-converted API template.
 
@@ -357,6 +358,7 @@ class ComfyUIClient:
             faceswap_occluder: Occlusion detection model (xseg_1, xseg_2, xseg_3)
             faceswap_mask_blur: Face mask blur amount (0.0-1.0)
             faceswap_region_mask: Enable region-specific masking
+            faceswap_score_threshold: Face detection confidence threshold (0.0-1.0)
         """
         return _build_wan_i2v_workflow(
             prompt=prompt,
@@ -379,6 +381,7 @@ class ComfyUIClient:
             faceswap_occluder=faceswap_occluder,
             faceswap_mask_blur=faceswap_mask_blur,
             faceswap_region_mask=faceswap_region_mask,
+            faceswap_score_threshold=faceswap_score_threshold,
         )
 
     def build_workflow(

@@ -250,6 +250,7 @@ def build_wan_i2v_workflow(
     faceswap_occluder: str = "xseg_3",
     faceswap_mask_blur: float = 0.2,
     faceswap_region_mask: bool = True,
+    faceswap_score_threshold: float = 0.5,
 ) -> Dict[str, Any]:
     """Build a Wan2.2 i2v workflow by injecting values into the pre-converted template.
 
@@ -419,7 +420,7 @@ def build_wan_i2v_workflow(
                 "face_selector_mode": "one",       # Swap one face per frame
                 "face_position": int(faceswap_faces_index),  # Which face to swap (0-indexed)
                 "sort_order": faceswap_faces_order.replace("-", "-"),  # Face sorting order
-                "score_threshold": 0.5,            # Face detection confidence
+                "score_threshold": faceswap_score_threshold,  # Configurable detection confidence
                 "use_box_mask": True,              # Use rectangular mask
                 "use_occlusion_mask": True,        # ENABLE OCCLUSION DETECTION
                 "use_area_mask": False,            # Don't use area mask

@@ -703,6 +703,7 @@ class QueueManager:
             faceswap_occluder=get_setting("faceswap_occluder", "xseg_3"),
             faceswap_mask_blur=float(get_setting("faceswap_mask_blur", "0.2")),
             faceswap_region_mask=get_setting("faceswap_region_mask", "true") == "true",
+            faceswap_score_threshold=float(get_setting("faceswap_score_threshold", "0.5")),
         )
 
         # Queue the prompt

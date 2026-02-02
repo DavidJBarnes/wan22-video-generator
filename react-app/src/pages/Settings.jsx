@@ -35,6 +35,7 @@ export default function Settings() {
   const [faceswapOccluder, setFaceswapOccluder] = useState('xseg_3');
   const [faceswapMaskBlur, setFaceswapMaskBlur] = useState(0.2);
   const [faceswapRegionMask, setFaceswapRegionMask] = useState(true);
+  const [faceswapScoreThreshold, setFaceswapScoreThreshold] = useState(0.5);
 
   // VR 180 stereo settings (validated for Quest 3S)
   const [vrEyeSeparation, setVrEyeSeparation] = useState(0.015);
@@ -90,6 +91,7 @@ export default function Settings() {
       setFaceswapOccluder(s.faceswap_occluder || 'xseg_3');
       setFaceswapMaskBlur(parseFloat(s.faceswap_mask_blur) || 0.2);
       setFaceswapRegionMask(s.faceswap_region_mask !== 'false');
+      setFaceswapScoreThreshold(parseFloat(s.faceswap_score_threshold) || 0.5);
 
       // VR settings (validated for Quest 3S)
       setVrEyeSeparation(parseFloat(s.vr_eye_separation) || 0.015);
@@ -197,7 +199,8 @@ export default function Settings() {
         faceswap_model: faceswapModel,
         faceswap_occluder: faceswapOccluder,
         faceswap_mask_blur: String(faceswapMaskBlur),
-        faceswap_region_mask: String(faceswapRegionMask)
+        faceswap_region_mask: String(faceswapRegionMask),
+        faceswap_score_threshold: String(faceswapScoreThreshold)
       };
 
       await API.updateSettings(settingsPayload);
@@ -629,6 +632,26 @@ export default function Settings() {
             </label>
             <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
               Use region-specific masks (skin, nose, mouth, lips) for more precise face blending.
+            </small>
+          </div>
+
+          <div className="form-group" style={{ marginTop: '12px' }}>
+            <label>Face Detection Score: {faceswapScoreThreshold}</label>
+            <input
+              type="range"
+              value={faceswapScoreThreshold}
+              onChange={(e) => setFaceswapScoreThreshold(parseFloat(e.target.value))}
+              min="0.1"
+              max="0.9"
+              step="0.05"
+              style={{ width: '100%' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#666', fontSize: '11px' }}>
+              <span>0.1 (lenient)</span>
+              <span>0.9 (strict)</span>
+            </div>
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+              Minimum confidence score for face detection. Lower values detect more faces but may include false positives.
             </small>
           </div>
         </div>

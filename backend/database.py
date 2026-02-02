@@ -615,7 +615,8 @@ def init_db():
             "faceswap_model": "hyperswap_1c_256",
             "faceswap_occluder": "xseg_3",
             "faceswap_mask_blur": "0.2",
-            "faceswap_region_mask": "true"
+            "faceswap_region_mask": "true",
+            "faceswap_score_threshold": "0.5"
         }
 
         for key, value in default_settings.items():
