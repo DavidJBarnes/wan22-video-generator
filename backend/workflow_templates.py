@@ -456,7 +456,7 @@ def build_wan_i2v_workflow(
             "inputs": {
                 "image": ["87", 0],           # Original frames from VAEDecode
                 "swapped_image": ["183", 0],  # Swapped frames from ReActorFaceSwapOpt
-                "bbox_model_name": "face_yolov8m.pt",
+                "bbox_model_name": "bbox/face_yolov8m.pt",  # Needs path prefix
                 "bbox_threshold": 0.5,
                 "bbox_dilation": 10,
                 "bbox_crop_factor": 3.0,
@@ -466,7 +466,7 @@ def build_wan_i2v_workflow(
                 "sam_threshold": 0.93,
                 "bbox_expansion": 0,
                 "mask_hint_threshold": 0.7,
-                "mask_hint_use_negative": False,
+                "mask_hint_use_negative": "False",  # String enum: 'False', 'Small', 'Outter'
                 "morphology_operation": "dilate",
                 "morphology_distance": 0,
                 "blur_radius": 9.0,
