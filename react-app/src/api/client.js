@@ -195,6 +195,40 @@ class APIClient {
     });
   }
 
+  // ============== Prompt Lists ==============
+
+  async getPromptLists() {
+    return this.request('/prompt-lists');
+  }
+
+  async getPromptListNames() {
+    return this.request('/prompt-lists/names');
+  }
+
+  async getPromptList(listId) {
+    return this.request(`/prompt-lists/${listId}`);
+  }
+
+  async createPromptList(name, items) {
+    return this.request('/prompt-lists', {
+      method: 'POST',
+      body: { name, items }
+    });
+  }
+
+  async updatePromptList(listId, data) {
+    return this.request(`/prompt-lists/${listId}`, {
+      method: 'PUT',
+      body: data
+    });
+  }
+
+  async deletePromptList(listId) {
+    return this.request(`/prompt-lists/${listId}`, {
+      method: 'DELETE'
+    });
+  }
+
   // ============== Queue Control ==============
 
   async getQueueStatus() {
@@ -275,9 +309,13 @@ class APIClient {
     return `${this.baseUrl}/jobs/${jobId}/segments/${segmentIndex}/video`;
   }
 
-  async submitSegmentPrompt(jobId, segmentIndex, prompt, loras = [], autoFinalize = false, faceswapOptions = null, fadeToBlack = false, customStartImage = null) {
+  async submitSegmentPrompt(jobId, segmentIndex, prompt, loras = [], autoFinalize = false, faceswapOptions = null, fadeToBlack = false, customStartImage = null, promptTemplate = null) {
     const formData = new FormData();
     formData.append('prompt', prompt);
+    // Send the original template with tags intact (for prepopulating next segment)
+    if (promptTemplate) {
+      formData.append('prompt_template', promptTemplate);
+    }
 
     // Send loras as JSON array: [{high_file, high_weight, low_file, low_weight}, ...]
     if (loras && loras.length > 0) {
