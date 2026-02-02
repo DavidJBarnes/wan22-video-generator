@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Button, TextField, Select, MenuItem, FormControl, InputLabel, FormHelperText, Autocomplete, FormControlLabel, Checkbox, CircularProgress } from '@mui/material';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
+import { extractTags, validateTags, resolvePrompt } from '../utils/promptResolver';
 import { useLoras } from '../contexts/LoraContext';
 import LoraAutocomplete from './LoraAutocomplete';
 import './CreateJobModal.css';
@@ -51,6 +52,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   const [selectedPrefix, setSelectedPrefix] = useState(null);
   const [selectedDescription, setSelectedDescription] = useState(null);
   const [autoFinalize, setAutoFinalize] = useState(false);
+  const [promptListNames, setPromptListNames] = useState([]);
 
   // Round to nearest multiple of 8 (required by ComfyUI/Wan2.2)
   const roundTo8 = (n) => Math.round(n / 8) * 8;
@@ -62,6 +64,14 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
       console.log('[CreateJobModal] Calling loadSettings...');
       await loadSettings();
       console.log('[CreateJobModal] loadSettings completed');
+
+      // Load prompt list names for tag validation
+      try {
+        const data = await API.getPromptListNames();
+        setPromptListNames(data.names || []);
+      } catch (error) {
+        console.error('Failed to load prompt list names:', error);
+      }
 
       if (preUploadedImageUrl) {
         setImagePreview(API.getComfyUIImage(preUploadedImageUrl));
@@ -345,6 +355,31 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
       return;
     }
 
+    // Validate and resolve prompt tags
+    let resolvedPrompt = prompt.trim();
+    const tags = extractTags(resolvedPrompt);
+    if (tags.length > 0) {
+      const validation = validateTags(resolvedPrompt, promptListNames);
+      if (!validation.valid) {
+        showToast(`Invalid prompt tags: ${validation.invalidTags.join(', ')}. These lists don't exist.`, 'error');
+        return;
+      }
+
+      // Fetch full list data and resolve tags
+      try {
+        const listsData = await API.getPromptLists();
+        const lists = {};
+        for (const list of listsData.prompt_lists || []) {
+          lists[list.name.toLowerCase()] = list.items;
+        }
+        resolvedPrompt = resolvePrompt(resolvedPrompt, lists);
+      } catch (error) {
+        console.error('Failed to resolve prompt tags:', error);
+        showToast('Failed to resolve prompt tags', 'error');
+        return;
+      }
+    }
+
     setUploading(true);
 
     try {
@@ -382,7 +417,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
 
       const jobData = {
         name: name.trim(),
-        prompt: prompt.trim(),
+        prompt: resolvedPrompt,
         workflow_type: 'i2v',
         negative_prompt: settings.default_negative_prompt || '',
         input_image: imageFilename,

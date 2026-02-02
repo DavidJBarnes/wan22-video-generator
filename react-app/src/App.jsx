@@ -8,6 +8,7 @@ import Videos from './pages/Videos';
 import JobDetail from './pages/JobDetail';
 import ImageRepo from './pages/ImageRepo';
 import LoraLibrary from './pages/LoraLibrary';
+import Prompts from './pages/Prompts';
 import Settings from './pages/Settings';
 
 function App() {
@@ -23,6 +24,7 @@ function App() {
               <Route path="job/:id" element={<JobDetail />} />
               <Route path="images" element={<ImageRepo />} />
               <Route path="loras" element={<LoraLibrary />} />
+              <Route path="prompts" element={<Prompts />} />
               <Route path="settings" element={<Settings />} />
             </Route>
           </Routes>

@@ -5,6 +5,7 @@ import QueueIcon from '@mui/icons-material/Queue';
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary';
 import BrushIcon from '@mui/icons-material/Brush';
+import ShuffleIcon from '@mui/icons-material/Shuffle';
 import SettingsIcon from '@mui/icons-material/Settings';
 import API from '../api/client';
 import './Layout.css';
@@ -68,6 +69,9 @@ export default function Layout() {
         </NavLink>
         <NavLink to="/loras" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
           <BrushIcon /> LoRA Library
+        </NavLink>
+        <NavLink to="/prompts" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+          <ShuffleIcon /> Prompts
         </NavLink>
         <NavLink to="/settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
           <SettingsIcon /> Settings

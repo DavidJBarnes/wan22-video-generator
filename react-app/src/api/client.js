@@ -195,6 +195,40 @@ class APIClient {
     });
   }
 
+  // ============== Prompt Lists ==============
+
+  async getPromptLists() {
+    return this.request('/prompt-lists');
+  }
+
+  async getPromptListNames() {
+    return this.request('/prompt-lists/names');
+  }
+
+  async getPromptList(listId) {
+    return this.request(`/prompt-lists/${listId}`);
+  }
+
+  async createPromptList(name, items) {
+    return this.request('/prompt-lists', {
+      method: 'POST',
+      body: { name, items }
+    });
+  }
+
+  async updatePromptList(listId, data) {
+    return this.request(`/prompt-lists/${listId}`, {
+      method: 'PUT',
+      body: data
+    });
+  }
+
+  async deletePromptList(listId) {
+    return this.request(`/prompt-lists/${listId}`, {
+      method: 'DELETE'
+    });
+  }
+
   // ============== Queue Control ==============
 
   async getQueueStatus() {

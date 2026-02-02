@@ -67,7 +67,14 @@ from database import (
     get_upscaled_video_by_id as db_get_upscaled_video_by_id,
     delete_upscaled_video as db_delete_upscaled_video,
     get_job_merge_offsets,
-    update_job_merge_offsets
+    update_job_merge_offsets,
+    get_all_prompt_lists,
+    get_prompt_list,
+    get_prompt_list_names,
+    create_prompt_list,
+    update_prompt_list,
+    delete_prompt_list,
+    get_prompt_lists_by_names
 )
 from comfyui_client import ComfyUIClient
 from queue_manager import queue_manager
@@ -351,6 +358,16 @@ def enrich_job_with_segments(job: Dict[str, Any]) -> Dict[str, Any]:
 
 class SettingsUpdate(BaseModel):
     settings: Dict[str, str]
+
+
+class PromptListCreate(BaseModel):
+    name: str
+    items: List[str]
+
+
+class PromptListUpdate(BaseModel):
+    name: Optional[str] = None
+    items: Optional[List[str]] = None
 
 
 class QueueStatus(BaseModel):
@@ -1535,6 +1552,59 @@ async def get_single_setting(key: str):
     if value is None:
         raise HTTPException(status_code=404, detail=f"Setting '{key}' not found")
     return {"key": key, "value": value}
+
+
+# ============== Prompt Lists Endpoints ==============
+
+@router.get("/prompt-lists")
+async def get_prompt_lists():
+    """Get all prompt lists."""
+    return {"prompt_lists": get_all_prompt_lists()}
+
+
+@router.get("/prompt-lists/names")
+async def get_prompt_list_names_endpoint():
+    """Get just the names of all prompt lists (lowercase, for validation)."""
+    return {"names": get_prompt_list_names()}
+
+
+@router.get("/prompt-lists/{list_id}")
+async def get_prompt_list_endpoint(list_id: int):
+    """Get a single prompt list by ID."""
+    prompt_list = get_prompt_list(list_id)
+    if not prompt_list:
+        raise HTTPException(status_code=404, detail=f"Prompt list with ID {list_id} not found")
+    return prompt_list
+
+
+@router.post("/prompt-lists")
+async def create_prompt_list_endpoint(data: PromptListCreate):
+    """Create a new prompt list."""
+    try:
+        prompt_list = create_prompt_list(data.name, data.items)
+        return prompt_list
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/prompt-lists/{list_id}")
+async def update_prompt_list_endpoint(list_id: int, data: PromptListUpdate):
+    """Update an existing prompt list."""
+    try:
+        prompt_list = update_prompt_list(list_id, data.name, data.items)
+        if not prompt_list:
+            raise HTTPException(status_code=404, detail=f"Prompt list with ID {list_id} not found")
+        return prompt_list
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/prompt-lists/{list_id}")
+async def delete_prompt_list_endpoint(list_id: int):
+    """Delete a prompt list."""
+    if not delete_prompt_list(list_id):
+        raise HTTPException(status_code=404, detail=f"Prompt list with ID {list_id} not found")
+    return {"status": "deleted"}
 
 
 # ============== Queue Control Endpoints ==============

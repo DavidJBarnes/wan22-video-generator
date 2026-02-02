@@ -553,6 +553,17 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_vr_videos_job ON vr_videos(job_id)
         """)
 
+        # Prompt lists table - reusable prompt tag lists for randomization
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS prompt_lists (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                items TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+
         # Migrate from old schema if needed and always drop old tables
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='image_tag_associations'")
         if cursor.fetchone():
@@ -2711,3 +2722,220 @@ def delete_vr_video(vr_video_id: int) -> bool:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM vr_videos WHERE id = ?", (vr_video_id,))
         return cursor.rowcount > 0
+
+
+# ============== Prompt Lists Functions ==============
+
+def get_all_prompt_lists() -> List[Dict[str, Any]]:
+    """Get all prompt lists.
+
+    Returns:
+        List of prompt list records with items parsed from JSON.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, name, items, created_at, updated_at
+            FROM prompt_lists
+            ORDER BY name ASC
+        """)
+        rows = cursor.fetchall()
+        result = []
+        for row in rows:
+            record = dict(row)
+            record['items'] = json.loads(record['items'])
+            result.append(record)
+        return result
+
+
+def get_prompt_list(list_id: int) -> Optional[Dict[str, Any]]:
+    """Get a single prompt list by ID.
+
+    Args:
+        list_id: ID of the prompt list
+
+    Returns:
+        Prompt list record with items parsed from JSON, or None if not found.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, name, items, created_at, updated_at
+            FROM prompt_lists
+            WHERE id = ?
+        """, (list_id,))
+        row = cursor.fetchone()
+        if row:
+            record = dict(row)
+            record['items'] = json.loads(record['items'])
+            return record
+        return None
+
+
+def get_prompt_list_names() -> List[str]:
+    """Get just the names of all prompt lists (lowercase).
+
+    Returns:
+        List of prompt list names in lowercase for validation.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT LOWER(name) as name FROM prompt_lists ORDER BY name")
+        return [row['name'] for row in cursor.fetchall()]
+
+
+def create_prompt_list(name: str, items: List[str]) -> Dict[str, Any]:
+    """Create a new prompt list.
+
+    Args:
+        name: The tag identifier (will be stored as-is, compared case-insensitively)
+        items: List of prompt text items
+
+    Returns:
+        The created prompt list record.
+
+    Raises:
+        ValueError: If name is invalid or already exists, or items is empty.
+    """
+    import re
+
+    # Validate name format
+    if not re.match(r'^[a-zA-Z][a-zA-Z0-9_-]*$', name):
+        raise ValueError("Name must start with a letter and contain only letters, numbers, underscores, and dashes")
+
+    # Validate items
+    if not items:
+        raise ValueError("Items list cannot be empty")
+
+    # Filter out empty strings
+    filtered_items = [item.strip() for item in items if item.strip()]
+    if not filtered_items:
+        raise ValueError("Items list must contain at least one non-empty item")
+
+    now = utc_now_iso()
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO prompt_lists (name, items, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
+            """, (name, json.dumps(filtered_items), now, now))
+
+            return {
+                'id': cursor.lastrowid,
+                'name': name,
+                'items': filtered_items,
+                'created_at': now,
+                'updated_at': now
+            }
+        except sqlite3.IntegrityError:
+            raise ValueError(f"A prompt list with name '{name}' already exists")
+
+
+def update_prompt_list(list_id: int, name: Optional[str] = None, items: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+    """Update an existing prompt list.
+
+    Args:
+        list_id: ID of the prompt list to update
+        name: New name (optional)
+        items: New items list (optional)
+
+    Returns:
+        The updated prompt list record, or None if not found.
+
+    Raises:
+        ValueError: If name is invalid or already exists, or items is empty.
+    """
+    import re
+
+    # Get existing record
+    existing = get_prompt_list(list_id)
+    if not existing:
+        return None
+
+    # Validate name if provided
+    if name is not None:
+        if not re.match(r'^[a-zA-Z][a-zA-Z0-9_-]*$', name):
+            raise ValueError("Name must start with a letter and contain only letters, numbers, underscores, and dashes")
+
+    # Validate items if provided
+    filtered_items = None
+    if items is not None:
+        filtered_items = [item.strip() for item in items if item.strip()]
+        if not filtered_items:
+            raise ValueError("Items list must contain at least one non-empty item")
+
+    now = utc_now_iso()
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Build update query
+        updates = ["updated_at = ?"]
+        params = [now]
+
+        if name is not None:
+            updates.append("name = ?")
+            params.append(name)
+
+        if filtered_items is not None:
+            updates.append("items = ?")
+            params.append(json.dumps(filtered_items))
+
+        params.append(list_id)
+
+        try:
+            cursor.execute(f"""
+                UPDATE prompt_lists
+                SET {', '.join(updates)}
+                WHERE id = ?
+            """, params)
+        except sqlite3.IntegrityError:
+            raise ValueError(f"A prompt list with name '{name}' already exists")
+
+    return get_prompt_list(list_id)
+
+
+def delete_prompt_list(list_id: int) -> bool:
+    """Delete a prompt list.
+
+    Args:
+        list_id: ID of the prompt list to delete
+
+    Returns:
+        True if deleted, False if not found.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM prompt_lists WHERE id = ?", (list_id,))
+        return cursor.rowcount > 0
+
+
+def get_prompt_lists_by_names(names: List[str]) -> Dict[str, List[str]]:
+    """Get prompt lists by their names.
+
+    Args:
+        names: List of prompt list names to fetch (case-insensitive)
+
+    Returns:
+        Dict mapping lowercase name to items list.
+    """
+    if not names:
+        return {}
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        placeholders = ','.join('?' * len(names))
+        # Convert names to lowercase for comparison
+        lower_names = [n.lower() for n in names]
+        cursor.execute(f"""
+            SELECT LOWER(name) as name, items
+            FROM prompt_lists
+            WHERE LOWER(name) IN ({placeholders})
+        """, lower_names)
+
+        result = {}
+        for row in cursor.fetchall():
+            result[row['name']] = json.loads(row['items'])
+        return result
