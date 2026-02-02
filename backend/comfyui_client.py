@@ -333,6 +333,10 @@ class ComfyUIClient:
         faceswap_image: str = "",
         faceswap_faces_order: str = "left-right",
         faceswap_faces_index: str = "0",
+        faceswap_model: str = "hyperswap_1c_256",
+        faceswap_occluder: str = "xseg_3",
+        faceswap_mask_blur: float = 0.2,
+        faceswap_region_mask: bool = True,
     ) -> Dict[str, Any]:
         """Build a Wan2.2 i2v workflow using the pre-converted API template.
 
@@ -345,10 +349,14 @@ class ComfyUIClient:
             loras: Optional list of LoRA pairs (max 3). Each dict has:
                    - high_file: LoRA filename for high noise pass
                    - low_file: LoRA filename for low noise pass
-            faceswap_enabled: Whether to enable face swapping via ReActor
+            faceswap_enabled: Whether to enable face swapping via FaceFusion
             faceswap_image: Filename of the face image to swap in
             faceswap_faces_order: Order to process faces (left-right, right-left, etc.)
             faceswap_faces_index: Which face indices to process (e.g., "0", "0,1")
+            faceswap_model: Face swapper model (hyperswap_1c_256, inswapper_128_fp16, etc.)
+            faceswap_occluder: Occlusion detection model (xseg_1, xseg_2, xseg_3)
+            faceswap_mask_blur: Face mask blur amount (0.0-1.0)
+            faceswap_region_mask: Enable region-specific masking
         """
         return _build_wan_i2v_workflow(
             prompt=prompt,
@@ -367,6 +375,10 @@ class ComfyUIClient:
             faceswap_image=faceswap_image,
             faceswap_faces_order=faceswap_faces_order,
             faceswap_faces_index=faceswap_faces_index,
+            faceswap_model=faceswap_model,
+            faceswap_occluder=faceswap_occluder,
+            faceswap_mask_blur=faceswap_mask_blur,
+            faceswap_region_mask=faceswap_region_mask,
         )
 
     def build_workflow(
