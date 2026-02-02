@@ -48,5 +48,5 @@ if [ ! -d "$VR_OUTPUT_PATH" ]; then
     mkdir -p "$VR_OUTPUT_PATH"
 fi
 
-# Start uvicorn
-exec uvicorn main:app --host 0.0.0.0 --port 9090
+# Start uvicorn (log-level warning to reduce noise)
+exec uvicorn main:app --host 0.0.0.0 --port 9090 --log-level warning
