@@ -309,9 +309,13 @@ class APIClient {
     return `${this.baseUrl}/jobs/${jobId}/segments/${segmentIndex}/video`;
   }
 
-  async submitSegmentPrompt(jobId, segmentIndex, prompt, loras = [], autoFinalize = false, faceswapOptions = null, fadeToBlack = false, customStartImage = null) {
+  async submitSegmentPrompt(jobId, segmentIndex, prompt, loras = [], autoFinalize = false, faceswapOptions = null, fadeToBlack = false, customStartImage = null, promptTemplate = null) {
     const formData = new FormData();
     formData.append('prompt', prompt);
+    // Send the original template with tags intact (for prepopulating next segment)
+    if (promptTemplate) {
+      formData.append('prompt_template', promptTemplate);
+    }
 
     // Send loras as JSON array: [{high_file, high_weight, low_file, low_weight}, ...]
     if (loras && loras.length > 0) {

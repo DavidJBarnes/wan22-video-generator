@@ -299,6 +299,8 @@ export default function SubmitPromptModal({
         sourceImage: faceswapEnabled && faceswapSourceType === 'segment' ? faceswapSourceImage : ''
       };
 
+      // Send both resolved prompt and original template (with tags intact)
+      const originalTemplate = prompt.trim();
       await API.submitSegmentPrompt(
         jobId,
         segmentIndex,
@@ -307,7 +309,8 @@ export default function SubmitPromptModal({
         isEditing ? false : autoFinalize,  // Don't change auto-finalize when editing
         faceswapOptions,
         false,  // fadeToBlack - controlled via segment timeline, not modal
-        customStartImage  // Custom start image path (or null for default)
+        customStartImage,  // Custom start image path (or null for default)
+        originalTemplate  // Original prompt with tags intact (for prepopulating next segment)
       );
 
       showToast(isEditing ? 'Segment updated successfully' : 'Prompt submitted successfully', 'success');

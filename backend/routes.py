@@ -1225,6 +1225,7 @@ async def update_segment_prompt_endpoint(
     job_id: int,
     segment_index: int,
     prompt: str = Form(...),
+    prompt_template: Optional[str] = Form(None),  # Original prompt with tags intact
     loras: Optional[str] = Form(None),  # JSON array: '[{"high_file": "...", "low_file": "..."}]'
     auto_finalize: Optional[bool] = Form(False),  # Auto-finalize after this segment completes
     faceswap_enabled: Optional[bool] = Form(False),  # Enable faceswap for this segment
@@ -1238,6 +1239,8 @@ async def update_segment_prompt_endpoint(
     """Create or update a segment with a prompt and resume job processing (on-demand workflow).
 
     Args:
+        prompt: The resolved prompt (tags replaced with random values).
+        prompt_template: The original prompt with tags intact (for prepopulating next segment).
         loras: Optional JSON string containing array of LoRA pairs (max 2).
                Format: '[{"high_file": "path/to/high.safetensors", "low_file": "path/to/low.safetensors"}]'
         auto_finalize: If true, automatically finalize the job after this segment completes.
@@ -1255,6 +1258,8 @@ async def update_segment_prompt_endpoint(
 
     # Build full prompt - will skip prepending identity if already present
     full_prompt = build_full_prompt(prompt)
+    # Also build full template if provided (apply same identity prepending)
+    full_template = build_full_prompt(prompt_template) if prompt_template else None
 
     # Parse LoRA selections from JSON string
     # Format: [{"high_file": "...", "high_weight": 1.0, "low_file": "...", "low_weight": 1.0}, ...]
@@ -1329,6 +1334,7 @@ async def update_segment_prompt_endpoint(
             segment_index,
             full_prompt,
             start_image_url,
+            prompt_template=full_template,
             high_loras=high_loras if high_loras else None,
             low_loras=low_loras if low_loras else None,
             faceswap_enabled=faceswap_enabled or False,
@@ -1343,6 +1349,7 @@ async def update_segment_prompt_endpoint(
         # Segment exists - update its prompt, LoRA, and faceswap settings
         update_segment_prompt(
             job_id, segment_index, full_prompt,
+            prompt_template=full_template,
             high_loras=high_loras if high_loras else None,
             low_loras=low_loras if low_loras else None,
             faceswap_enabled=faceswap_enabled,

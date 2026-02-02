@@ -335,6 +335,12 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Add prompt_template column for storing original prompt with tags intact
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN prompt_template TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Add priority column for queue ordering (lower number = higher priority)
         try:
             cursor.execute("ALTER TABLE jobs ADD COLUMN priority INTEGER DEFAULT 0")
@@ -1378,6 +1384,7 @@ def create_next_segment(
     segment_index: int,
     prompt: str,
     start_image_url: str,
+    prompt_template: Optional[str] = None,
     high_loras: Optional[List[str]] = None,
     low_loras: Optional[List[str]] = None,
     faceswap_enabled: bool = False,
@@ -1395,8 +1402,9 @@ def create_next_segment(
     Args:
         job_id: The job ID
         segment_index: The segment index (1, 2, 3, ...)
-        prompt: The prompt for this segment
+        prompt: The resolved prompt (tags replaced with random values)
         start_image_url: ComfyUI image URL for the starting image
+        prompt_template: The original prompt with tags intact (for prepopulating next segment)
         high_loras: List of high noise LoRA filenames (max 2)
         low_loras: List of low noise LoRA filenames (max 2)
         faceswap_enabled: Whether to enable face swapping for this segment
@@ -1407,14 +1415,17 @@ def create_next_segment(
         fade_to_black: Whether to apply fade-to-black transition at segment end
         custom_start_image: Optional path to custom start image from image repo (overrides default)
     """
+    # Store template as-is, or use prompt if no template provided
+    template = prompt_template if prompt_template is not None else prompt
+
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora,
+            INSERT INTO job_segments (job_id, segment_index, status, prompt, prompt_template, start_image_url, high_lora, low_lora,
                                       faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index,
                                       faceswap_source_image, fade_to_black, custom_start_image)
-            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (job_id, segment_index, prompt, start_image_url,
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (job_id, segment_index, prompt, template, start_image_url,
               serialize_loras(high_loras), serialize_loras(low_loras),
               1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index,
               faceswap_source_image, 1 if fade_to_black else 0, custom_start_image))
@@ -1587,6 +1598,7 @@ def update_segment_prompt(
     job_id: int,
     segment_index: int,
     prompt: str,
+    prompt_template: Optional[str] = None,
     high_loras: Optional[List[str]] = None,
     low_loras: Optional[List[str]] = None,
     faceswap_enabled: Optional[bool] = None,
@@ -1602,7 +1614,8 @@ def update_segment_prompt(
     Args:
         job_id: The job ID
         segment_index: The segment index
-        prompt: The new prompt
+        prompt: The resolved prompt (tags replaced with random values)
+        prompt_template: The original prompt with tags intact, or None to use prompt value
         high_loras: List of high noise LoRA filenames (max 2), or None to not update
         low_loras: List of low noise LoRA filenames (max 2), or None to not update
         faceswap_enabled: Whether to enable face swapping, or None to not update
@@ -1618,8 +1631,9 @@ def update_segment_prompt(
     with get_connection() as conn:
         cursor = conn.cursor()
 
-        updates = ["prompt = ?"]
-        params = [prompt]
+        updates = ["prompt = ?", "prompt_template = ?"]
+        # Store template as-is, or use prompt if no template provided
+        params = [prompt, prompt_template if prompt_template is not None else prompt]
 
         if high_loras is not None:
             updates.append("high_lora = ?")
