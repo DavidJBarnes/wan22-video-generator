@@ -406,12 +406,12 @@ def build_wan_i2v_workflow(
                 "source_images": ["188", 0],       # Face to swap in
                 "target_image": ["87", 0],         # Decoded video frames from VAEDecode
                 "api_token": "-1",                 # Local mode, no API
-                "face_swapper_model": "inswapper_128_fp16",  # Fast model for RTX GPUs
+                "face_swapper_model": "hyperswap_1c_256",  # Best quality model
                 "face_detector_model": "scrfd",    # Fast and accurate detector
                 "pixel_boost": "512x512",          # Balance of quality/speed
-                "face_occluder_model": "xseg_1",   # Occlusion detection model
+                "face_occluder_model": "xseg_3",   # Best occlusion detection model
                 "face_parser_model": "bisenet_resnet_34",  # Face parsing for regions
-                "face_mask_blur": 0.3,             # Blend mask edges
+                "face_mask_blur": 0.2,             # Sharper mask edges
                 "face_selector_mode": "one",       # Swap one face per frame
                 "face_position": int(faceswap_faces_index),  # Which face to swap (0-indexed)
                 "sort_order": faceswap_faces_order.replace("-", "-"),  # Face sorting order
@@ -419,7 +419,7 @@ def build_wan_i2v_workflow(
                 "use_box_mask": True,              # Use rectangular mask
                 "use_occlusion_mask": True,        # ENABLE OCCLUSION DETECTION
                 "use_area_mask": False,            # Don't use area mask
-                "use_region_mask": False,          # Don't use region mask
+                "use_region_mask": True,           # Enable region mask for hair/skin
                 "face_mask_areas": "upper-face,lower-face,mouth",
                 "face_mask_regions": "skin,nose,mouth,upper-lip,lower-lip",
                 "face_mask_padding": "0,0,0,0"     # No padding
@@ -448,7 +448,7 @@ def build_wan_i2v_workflow(
         }
 
         print(f"[Workflow] Added faceswap nodes: 188 (LoadImage), 183 (FaceFusion), 186 (VHS_VideoCombine)")
-        print(f"[Workflow] FaceFusion occlusion masking: ENABLED (xseg_1)")
+        print(f"[Workflow] FaceFusion: hyperswap_1c_256, xseg_3 occlusion, region_mask=ON, blur=0.2")
         print(f"[Workflow] Removed node 108 (SaveVideo)")
 
     # Always add RIFE frame interpolation (required for both 30fps and 60fps output)
