@@ -1664,7 +1664,7 @@ export default function JobDetail() {
         <SubmitPromptModal
           jobId={id}
           segmentIndex={nextSegmentIndex}
-          defaultPrompt={lastCompletedSegment?.prompt || ''}
+          defaultPrompt={lastCompletedSegment?.prompt_template || lastCompletedSegment?.prompt || ''}
           defaultLoras={buildDefaultLoras(lastCompletedSegment)}
           defaultFaceswap={buildDefaultFaceswap(lastCompletedSegment, job?.parameters)}
           defaultStartImageUrl={lastCompletedSegment?.end_frame_url || null}
@@ -1682,7 +1682,7 @@ export default function JobDetail() {
         <SubmitPromptModal
           jobId={id}
           segmentIndex={editingSegment.segment_index}
-          defaultPrompt={editingSegment.prompt || ''}
+          defaultPrompt={editingSegment.prompt_template || editingSegment.prompt || ''}
           defaultLoras={buildDefaultLoras(editingSegment)}
           defaultFaceswap={buildDefaultFaceswap(editingSegment, job?.parameters)}
           defaultStartImageUrl={editingSegment.start_image_url || null}

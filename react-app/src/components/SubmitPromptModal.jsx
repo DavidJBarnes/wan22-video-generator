@@ -3,6 +3,7 @@ import { Button, TextField, FormControlLabel, Checkbox, FormHelperText, Circular
 import RestoreIcon from '@mui/icons-material/Restore';
 import API from '../api/client';
 import { showToast } from '../utils/helpers';
+import { extractTags, validateTags, resolvePrompt } from '../utils/promptResolver';
 import { useLoras } from '../contexts/LoraContext';
 import LoraAutocomplete from './LoraAutocomplete';
 import ImageRepoBrowserModal from './ImageRepoBrowserModal';
@@ -64,6 +65,7 @@ export default function SubmitPromptModal({
   // Custom start image state (only for segments > 0)
   const [customStartImage, setCustomStartImage] = useState(defaultCustomStartImage);  // Path in image repo
   const [showImageBrowser, setShowImageBrowser] = useState(false);
+  const [promptListNames, setPromptListNames] = useState([]);
 
   // Helper to extract filename from ComfyUI view URL
   function extractComfyUIFilename(url) {
@@ -175,6 +177,19 @@ export default function SubmitPromptModal({
     loadFrames();
   }, [faceswapEnabled, jobId]);
 
+  // Load prompt list names for tag validation
+  useEffect(() => {
+    async function loadPromptListNames() {
+      try {
+        const data = await API.getPromptListNames();
+        setPromptListNames(data.names || []);
+      } catch (error) {
+        console.error('Failed to load prompt list names:', error);
+      }
+    }
+    loadPromptListNames();
+  }, []);
+
   // Build faceswap frames list - use API frames if available, fallback to job input image
   const faceswapFrames = useMemo(() => {
     // If API returned frames, use those
@@ -236,6 +251,31 @@ export default function SubmitPromptModal({
       return;
     }
 
+    // Validate and resolve prompt tags
+    let resolvedPrompt = prompt.trim();
+    const tags = extractTags(resolvedPrompt);
+    if (tags.length > 0) {
+      const validation = validateTags(resolvedPrompt, promptListNames);
+      if (!validation.valid) {
+        showToast(`Invalid prompt tags: ${validation.invalidTags.join(', ')}. These lists don't exist.`, 'error');
+        return;
+      }
+
+      // Fetch full list data and resolve tags
+      try {
+        const listsData = await API.getPromptLists();
+        const lists = {};
+        for (const list of listsData.prompt_lists || []) {
+          lists[list.name.toLowerCase()] = list.items;
+        }
+        resolvedPrompt = resolvePrompt(resolvedPrompt, lists);
+      } catch (error) {
+        console.error('Failed to resolve prompt tags:', error);
+        showToast('Failed to resolve prompt tags', 'error');
+        return;
+      }
+    }
+
     setSubmitting(true);
 
     try {
@@ -259,15 +299,18 @@ export default function SubmitPromptModal({
         sourceImage: faceswapEnabled && faceswapSourceType === 'segment' ? faceswapSourceImage : ''
       };
 
+      // Send both resolved prompt and original template (with tags intact)
+      const originalTemplate = prompt.trim();
       await API.submitSegmentPrompt(
         jobId,
         segmentIndex,
-        prompt.trim(),
+        resolvedPrompt,
         lorasArray,
         isEditing ? false : autoFinalize,  // Don't change auto-finalize when editing
         faceswapOptions,
         false,  // fadeToBlack - controlled via segment timeline, not modal
-        customStartImage  // Custom start image path (or null for default)
+        customStartImage,  // Custom start image path (or null for default)
+        originalTemplate  // Original prompt with tags intact (for prepopulating next segment)
       );
 
       showToast(isEditing ? 'Segment updated successfully' : 'Prompt submitted successfully', 'success');

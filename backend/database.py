@@ -335,6 +335,12 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Add prompt_template column for storing original prompt with tags intact
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN prompt_template TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Add priority column for queue ordering (lower number = higher priority)
         try:
             cursor.execute("ALTER TABLE jobs ADD COLUMN priority INTEGER DEFAULT 0")
@@ -551,6 +557,17 @@ def init_db():
         # Index for fast lookup by job_id
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_vr_videos_job ON vr_videos(job_id)
+        """)
+
+        # Prompt lists table - reusable prompt tag lists for randomization
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS prompt_lists (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                items TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
         """)
 
         # Migrate from old schema if needed and always drop old tables
@@ -1373,6 +1390,7 @@ def create_next_segment(
     segment_index: int,
     prompt: str,
     start_image_url: str,
+    prompt_template: Optional[str] = None,
     high_loras: Optional[List[str]] = None,
     low_loras: Optional[List[str]] = None,
     faceswap_enabled: bool = False,
@@ -1390,8 +1408,9 @@ def create_next_segment(
     Args:
         job_id: The job ID
         segment_index: The segment index (1, 2, 3, ...)
-        prompt: The prompt for this segment
+        prompt: The resolved prompt (tags replaced with random values)
         start_image_url: ComfyUI image URL for the starting image
+        prompt_template: The original prompt with tags intact (for prepopulating next segment)
         high_loras: List of high noise LoRA filenames (max 2)
         low_loras: List of low noise LoRA filenames (max 2)
         faceswap_enabled: Whether to enable face swapping for this segment
@@ -1402,14 +1421,17 @@ def create_next_segment(
         fade_to_black: Whether to apply fade-to-black transition at segment end
         custom_start_image: Optional path to custom start image from image repo (overrides default)
     """
+    # Store template as-is, or use prompt if no template provided
+    template = prompt_template if prompt_template is not None else prompt
+
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora,
+            INSERT INTO job_segments (job_id, segment_index, status, prompt, prompt_template, start_image_url, high_lora, low_lora,
                                       faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index,
                                       faceswap_source_image, fade_to_black, custom_start_image)
-            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (job_id, segment_index, prompt, start_image_url,
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (job_id, segment_index, prompt, template, start_image_url,
               serialize_loras(high_loras), serialize_loras(low_loras),
               1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index,
               faceswap_source_image, 1 if fade_to_black else 0, custom_start_image))
@@ -1582,6 +1604,7 @@ def update_segment_prompt(
     job_id: int,
     segment_index: int,
     prompt: str,
+    prompt_template: Optional[str] = None,
     high_loras: Optional[List[str]] = None,
     low_loras: Optional[List[str]] = None,
     faceswap_enabled: Optional[bool] = None,
@@ -1597,7 +1620,8 @@ def update_segment_prompt(
     Args:
         job_id: The job ID
         segment_index: The segment index
-        prompt: The new prompt
+        prompt: The resolved prompt (tags replaced with random values)
+        prompt_template: The original prompt with tags intact, or None to use prompt value
         high_loras: List of high noise LoRA filenames (max 2), or None to not update
         low_loras: List of low noise LoRA filenames (max 2), or None to not update
         faceswap_enabled: Whether to enable face swapping, or None to not update
@@ -1613,8 +1637,9 @@ def update_segment_prompt(
     with get_connection() as conn:
         cursor = conn.cursor()
 
-        updates = ["prompt = ?"]
-        params = [prompt]
+        updates = ["prompt = ?", "prompt_template = ?"]
+        # Store template as-is, or use prompt if no template provided
+        params = [prompt, prompt_template if prompt_template is not None else prompt]
 
         if high_loras is not None:
             updates.append("high_lora = ?")
@@ -2717,3 +2742,220 @@ def delete_vr_video(vr_video_id: int) -> bool:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM vr_videos WHERE id = ?", (vr_video_id,))
         return cursor.rowcount > 0
+
+
+# ============== Prompt Lists Functions ==============
+
+def get_all_prompt_lists() -> List[Dict[str, Any]]:
+    """Get all prompt lists.
+
+    Returns:
+        List of prompt list records with items parsed from JSON.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, name, items, created_at, updated_at
+            FROM prompt_lists
+            ORDER BY name ASC
+        """)
+        rows = cursor.fetchall()
+        result = []
+        for row in rows:
+            record = dict(row)
+            record['items'] = json.loads(record['items'])
+            result.append(record)
+        return result
+
+
+def get_prompt_list(list_id: int) -> Optional[Dict[str, Any]]:
+    """Get a single prompt list by ID.
+
+    Args:
+        list_id: ID of the prompt list
+
+    Returns:
+        Prompt list record with items parsed from JSON, or None if not found.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, name, items, created_at, updated_at
+            FROM prompt_lists
+            WHERE id = ?
+        """, (list_id,))
+        row = cursor.fetchone()
+        if row:
+            record = dict(row)
+            record['items'] = json.loads(record['items'])
+            return record
+        return None
+
+
+def get_prompt_list_names() -> List[str]:
+    """Get just the names of all prompt lists (lowercase).
+
+    Returns:
+        List of prompt list names in lowercase for validation.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT LOWER(name) as name FROM prompt_lists ORDER BY name")
+        return [row['name'] for row in cursor.fetchall()]
+
+
+def create_prompt_list(name: str, items: List[str]) -> Dict[str, Any]:
+    """Create a new prompt list.
+
+    Args:
+        name: The tag identifier (will be stored as-is, compared case-insensitively)
+        items: List of prompt text items
+
+    Returns:
+        The created prompt list record.
+
+    Raises:
+        ValueError: If name is invalid or already exists, or items is empty.
+    """
+    import re
+
+    # Validate name format
+    if not re.match(r'^[a-zA-Z][a-zA-Z0-9_-]*$', name):
+        raise ValueError("Name must start with a letter and contain only letters, numbers, underscores, and dashes")
+
+    # Validate items
+    if not items:
+        raise ValueError("Items list cannot be empty")
+
+    # Filter out empty strings
+    filtered_items = [item.strip() for item in items if item.strip()]
+    if not filtered_items:
+        raise ValueError("Items list must contain at least one non-empty item")
+
+    now = utc_now_iso()
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO prompt_lists (name, items, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
+            """, (name, json.dumps(filtered_items), now, now))
+
+            return {
+                'id': cursor.lastrowid,
+                'name': name,
+                'items': filtered_items,
+                'created_at': now,
+                'updated_at': now
+            }
+        except sqlite3.IntegrityError:
+            raise ValueError(f"A prompt list with name '{name}' already exists")
+
+
+def update_prompt_list(list_id: int, name: Optional[str] = None, items: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+    """Update an existing prompt list.
+
+    Args:
+        list_id: ID of the prompt list to update
+        name: New name (optional)
+        items: New items list (optional)
+
+    Returns:
+        The updated prompt list record, or None if not found.
+
+    Raises:
+        ValueError: If name is invalid or already exists, or items is empty.
+    """
+    import re
+
+    # Get existing record
+    existing = get_prompt_list(list_id)
+    if not existing:
+        return None
+
+    # Validate name if provided
+    if name is not None:
+        if not re.match(r'^[a-zA-Z][a-zA-Z0-9_-]*$', name):
+            raise ValueError("Name must start with a letter and contain only letters, numbers, underscores, and dashes")
+
+    # Validate items if provided
+    filtered_items = None
+    if items is not None:
+        filtered_items = [item.strip() for item in items if item.strip()]
+        if not filtered_items:
+            raise ValueError("Items list must contain at least one non-empty item")
+
+    now = utc_now_iso()
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Build update query
+        updates = ["updated_at = ?"]
+        params = [now]
+
+        if name is not None:
+            updates.append("name = ?")
+            params.append(name)
+
+        if filtered_items is not None:
+            updates.append("items = ?")
+            params.append(json.dumps(filtered_items))
+
+        params.append(list_id)
+
+        try:
+            cursor.execute(f"""
+                UPDATE prompt_lists
+                SET {', '.join(updates)}
+                WHERE id = ?
+            """, params)
+        except sqlite3.IntegrityError:
+            raise ValueError(f"A prompt list with name '{name}' already exists")
+
+    return get_prompt_list(list_id)
+
+
+def delete_prompt_list(list_id: int) -> bool:
+    """Delete a prompt list.
+
+    Args:
+        list_id: ID of the prompt list to delete
+
+    Returns:
+        True if deleted, False if not found.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM prompt_lists WHERE id = ?", (list_id,))
+        return cursor.rowcount > 0
+
+
+def get_prompt_lists_by_names(names: List[str]) -> Dict[str, List[str]]:
+    """Get prompt lists by their names.
+
+    Args:
+        names: List of prompt list names to fetch (case-insensitive)
+
+    Returns:
+        Dict mapping lowercase name to items list.
+    """
+    if not names:
+        return {}
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        placeholders = ','.join('?' * len(names))
+        # Convert names to lowercase for comparison
+        lower_names = [n.lower() for n in names]
+        cursor.execute(f"""
+            SELECT LOWER(name) as name, items
+            FROM prompt_lists
+            WHERE LOWER(name) IN ({placeholders})
+        """, lower_names)
+
+        result = {}
+        for row in cursor.fetchall():
+            result[row['name']] = json.loads(row['items'])
+        return result
