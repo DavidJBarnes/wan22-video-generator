@@ -246,6 +246,11 @@ def build_wan_i2v_workflow(
     faceswap_image: str = "",
     faceswap_faces_order: str = "left-right",
     faceswap_faces_index: str = "0",
+    faceswap_model: str = "hyperswap_1c_256",
+    faceswap_occluder: str = "xseg_3",
+    faceswap_mask_blur: float = 0.2,
+    faceswap_region_mask: bool = True,
+    faceswap_score_threshold: float = 0.5,
 ) -> Dict[str, Any]:
     """Build a Wan2.2 i2v workflow by injecting values into the pre-converted template.
 
@@ -397,37 +402,34 @@ def build_wan_i2v_workflow(
             "_meta": {"title": "Face Swap Source"}
         }
 
-        # Add ReActorOptions node (node 189) for face detection settings
-        workflow["189"] = {
-            "class_type": "ReActorOptions",
-            "inputs": {
-                "input_faces_order": faceswap_faces_order,
-                "input_faces_index": faceswap_faces_index,
-                "detect_gender_input": "no",
-                "source_faces_order": "left-right",
-                "source_faces_index": "0",
-                "detect_gender_source": "no",
-                "console_log_level": 1
-            },
-            "_meta": {"title": "ReActor Options"}
-        }
-
-        # Add ReActorFaceSwapOpt node (node 183)
-        # Takes decoded frames from node 87 (VAEDecode) and swaps faces
+        # Add FaceFusion AdvancedSwapFaceImage node (node 183)
+        # Replaces ReActor - has built-in occlusion detection for hands, tongue, etc.
+        # Processes video frames as a batch internally
         workflow["183"] = {
-            "class_type": "ReActorFaceSwapOpt",
+            "class_type": "AdvancedSwapFaceImage",
             "inputs": {
-                "enabled": True,
-                "swap_model": "inswapper_128.onnx",
-                "facedetection": "retinaface_resnet50",
-                "face_restore_model": "codeformer-v0.1.0.pth",
-                "face_restore_visibility": 1,
-                "codeformer_weight": 1,
-                "input_image": ["87", 0],  # Decoded video frames from VAEDecode
-                "source_image": ["188", 0],  # Face to swap in
-                "options": ["189", 0]  # ReActorOptions
+                "source_images": ["188", 0],       # Face to swap in
+                "target_image": ["87", 0],         # Decoded video frames from VAEDecode
+                "api_token": "-1",                 # Local mode, no API
+                "face_swapper_model": faceswap_model,       # Configurable model
+                "face_detector_model": "scrfd",    # Fast and accurate detector
+                "pixel_boost": "512x512",          # Balance of quality/speed
+                "face_occluder_model": faceswap_occluder,   # Configurable occlusion model
+                "face_parser_model": "bisenet_resnet_34",   # Face parsing for regions
+                "face_mask_blur": faceswap_mask_blur,       # Configurable blur
+                "face_selector_mode": "one",       # Swap one face per frame
+                "face_position": int(faceswap_faces_index),  # Which face to swap (0-indexed)
+                "sort_order": faceswap_faces_order.replace("-", "-"),  # Face sorting order
+                "score_threshold": faceswap_score_threshold,  # Configurable detection confidence
+                "use_box_mask": True,              # Use rectangular mask
+                "use_occlusion_mask": True,        # ENABLE OCCLUSION DETECTION
+                "use_area_mask": False,            # Don't use area mask
+                "use_region_mask": faceswap_region_mask,    # Configurable region mask
+                "face_mask_areas": "upper-face,lower-face,mouth",
+                "face_mask_regions": "skin,nose,mouth,upper-lip,lower-lip",
+                "face_mask_padding": "0,0,0,0"     # No padding
             },
-            "_meta": {"title": "ReActor Face Swap"}
+            "_meta": {"title": "FaceFusion Face Swap"}
         }
 
         # Add VHS_VideoCombine node (node 186)
@@ -445,12 +447,13 @@ def build_wan_i2v_workflow(
                 "trim_to_audio": False,
                 "pingpong": False,
                 "save_output": True,
-                "images": ["183", 0]  # Face-swapped frames from ReActor (rewired below for RIFE)
+                "images": ["183", 0]  # Face-swapped frames from FaceFusion (rewired below for RIFE)
             },
             "_meta": {"title": "Video Combine (Faceswap)"}
         }
 
-        print(f"[Workflow] Added faceswap nodes: 188 (LoadImage), 183 (ReActor), 186 (VHS_VideoCombine)")
+        print(f"[Workflow] Added faceswap nodes: 188 (LoadImage), 183 (FaceFusion), 186 (VHS_VideoCombine)")
+        print(f"[Workflow] FaceFusion: hyperswap_1c_256, xseg_3 occlusion, region_mask=ON, blur=0.2")
         print(f"[Workflow] Removed node 108 (SaveVideo)")
 
     # Always add RIFE frame interpolation (required for both 30fps and 60fps output)
@@ -472,11 +475,11 @@ def build_wan_i2v_workflow(
     }
 
     if faceswap_enabled:
-        # With faceswap: 183 (ReActor) → 200 (RIFE) → 186 (VHS_VideoCombine)
+        # With faceswap: 183 (FaceFusion) → 200 (RIFE) → 186 (VHS_VideoCombine)
         workflow["200"]["inputs"]["frames"] = ["183", 0]
         workflow["186"]["inputs"]["images"] = ["200", 0]
         workflow["186"]["inputs"]["frame_rate"] = output_fps
-        print(f"[Workflow] RIFE wired: ReActor(183) → RIFE(200) → VHS_VideoCombine(186) @ {output_fps}fps ({rife_multiplier}x interpolated)")
+        print(f"[Workflow] RIFE wired: FaceFusion(183) → RIFE(200) → VHS_VideoCombine(186) @ {output_fps}fps ({rife_multiplier}x interpolated)")
     else:
         # Without faceswap: use VHS_VideoCombine instead of CreateVideo+SaveVideo
         # Remove CreateVideo and SaveVideo nodes
