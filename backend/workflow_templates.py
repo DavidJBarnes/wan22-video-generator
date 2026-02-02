@@ -385,8 +385,9 @@ def build_wan_i2v_workflow(
     if faceswap_enabled:
         print(f"[Workflow] Faceswap enabled with image: {faceswap_image}")
 
-        # Remove standard SaveVideo node (we'll use VHS_VideoCombine instead)
-        del workflow["108"]
+        # Remove standard video nodes (we'll use VHS_VideoCombine instead)
+        del workflow["94"]   # CreateVideo
+        del workflow["108"]  # SaveVideo
 
         # Add LoadImage node for face swap source (node 188)
         workflow["188"] = {
@@ -476,7 +477,7 @@ def build_wan_i2v_workflow(
         }
 
         print(f"[Workflow] Added faceswap nodes: 188 (LoadImage), 183 (ReActor), 190 (MaskHelper), 186 (VHS_VideoCombine)")
-        print(f"[Workflow] Removed node 108 (SaveVideo)")
+        print(f"[Workflow] Removed nodes 94 (CreateVideo), 108 (SaveVideo)")
 
     # Always add RIFE frame interpolation (required for both 30fps and 60fps output)
     print(f"[Workflow] Adding RIFE {rife_multiplier}x frame interpolation")
