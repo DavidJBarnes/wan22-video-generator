@@ -466,10 +466,10 @@ def build_wan_i2v_workflow(
                 "sam_threshold": 0.93,
                 "bbox_expansion": 0,
                 "mask_hint_threshold": 0.7,
-                "mask_hint_use_negative": "False",
+                "mask_hint_use_negative": False,
                 "morphology_operation": "dilate",
                 "morphology_distance": 0,
-                "blur_radius": 9,
+                "blur_radius": 9.0,
                 "sigma_factor": 1.0
             },
             "_meta": {"title": "ReActor Mask Helper"}
