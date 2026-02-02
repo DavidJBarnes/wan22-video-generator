@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Optional, Callable
 from datetime import datetime
 
-# Configure logging for better debugging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
+# Configure logging - WARNING level to reduce noise (set to INFO for debugging)
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
 from database import (
@@ -238,7 +238,7 @@ class QueueManager:
 
         # Check for pending jobs
         pending_jobs = get_pending_jobs()
-        print(f"[QueueManager] Checking queue: {len(pending_jobs)} pending jobs")
+        logger.info(f"[QueueManager] Checking queue: {len(pending_jobs)} pending jobs")
         if not pending_jobs:
             return
 
