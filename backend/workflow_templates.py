@@ -451,7 +451,41 @@ def build_wan_i2v_workflow(
             "_meta": {"title": "Video Combine (Faceswap)"}
         }
 
-        print(f"[Workflow] Added faceswap nodes: 188 (LoadImage), 183 (ReActor), 186 (VHS_VideoCombine)")
+        # Add OcclusionMask node (191) for detecting occluding objects (hands, hair, etc.)
+        # This generates a mask of what's occluding the face in the original frames
+        workflow["191"] = {
+            "class_type": "ImageOcclusion",
+            "inputs": {
+                "input_image": ["87", 0],          # Original frames from VAEDecode
+                "mask_type": "Occluder",           # Best for detecting hands/objects over face
+                "object_mask_threshold": 0.5,      # Detection sensitivity
+                "feather_radius": 8,               # Blur mask edges for smooth blending
+                "grow_left": 0,
+                "grow_right": 0,
+                "grow_up": 0,
+                "grow_down": 0,
+                "dilation_radius": 4,              # Expand mask slightly
+                "expansion_iterations": 1.0
+            },
+            "_meta": {"title": "Occlusion Mask"}
+        }
+
+        # Add ImageCompositeMasked node (192) to blend original occlusions back onto swapped face
+        # This puts hands, hair, etc. from original frames back on top of the swapped result
+        workflow["192"] = {
+            "class_type": "ImageCompositeMasked",
+            "inputs": {
+                "destination": ["183", 0],         # Swapped frames (background)
+                "source": ["87", 0],               # Original frames (foreground - occlusions)
+                "mask": ["191", 1],                # Occlusion mask (output 1 from ImageOcclusion)
+                "x": 0,
+                "y": 0,
+                "resize_source": False
+            },
+            "_meta": {"title": "Composite Occlusions"}
+        }
+
+        print(f"[Workflow] Added faceswap nodes: 188 (LoadImage), 183 (ReActor), 191 (OcclusionMask), 192 (Composite), 186 (VHS_VideoCombine)")
         print(f"[Workflow] Removed nodes 94 (CreateVideo), 108 (SaveVideo)")
 
     # Always add RIFE frame interpolation (required for both 30fps and 60fps output)
@@ -473,11 +507,13 @@ def build_wan_i2v_workflow(
     }
 
     if faceswap_enabled:
-        # With faceswap: 183 (ReActor) → 200 (RIFE) → 186 (VHS_VideoCombine)
-        workflow["200"]["inputs"]["frames"] = ["183", 0]
+        # With faceswap + occlusion masking:
+        # VAEDecode(87) → OcclusionMask(191) → mask
+        # VAEDecode(87) → ReActor(183) → Composite(192) → RIFE(200) → VHS_VideoCombine(186)
+        workflow["200"]["inputs"]["frames"] = ["192", 0]
         workflow["186"]["inputs"]["images"] = ["200", 0]
         workflow["186"]["inputs"]["frame_rate"] = output_fps
-        print(f"[Workflow] RIFE wired: ReActor(183) → RIFE(200) → VHS_VideoCombine(186) @ {output_fps}fps ({rife_multiplier}x interpolated)")
+        print(f"[Workflow] RIFE wired: ReActor(183) + OcclusionMask(191) → Composite(192) → RIFE(200) → VHS_VideoCombine(186) @ {output_fps}fps ({rife_multiplier}x interpolated)")
     else:
         # Without faceswap: use VHS_VideoCombine instead of CreateVideo+SaveVideo
         # Remove CreateVideo and SaveVideo nodes
