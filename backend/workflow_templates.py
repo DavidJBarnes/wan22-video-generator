@@ -451,32 +451,7 @@ def build_wan_i2v_workflow(
             "_meta": {"title": "Video Combine (Faceswap)"}
         }
 
-        # Add ReActorMaskHelper for occlusion handling (always enabled with faceswap for testing)
-        workflow["190"] = {
-            "class_type": "ReActorMaskHelper",
-            "inputs": {
-                "image": ["87", 0],           # Original frames from VAEDecode
-                "swapped_image": ["183", 0],  # Swapped frames from ReActorFaceSwapOpt
-                "bbox_model_name": "bbox/face_yolov8m.pt",  # Needs path prefix
-                "bbox_threshold": 0.5,
-                "bbox_dilation": 10,
-                "bbox_crop_factor": 3.0,
-                "bbox_drop_size": 10,
-                "sam_model_name": "sam_vit_b_01ec64.pth",
-                "sam_dilation": 0,
-                "sam_threshold": 0.93,
-                "bbox_expansion": 0,
-                "mask_hint_threshold": 0.7,
-                "mask_hint_use_negative": "False",  # String enum: 'False', 'Small', 'Outter'
-                "morphology_operation": "dilate",
-                "morphology_distance": 0,
-                "blur_radius": 9.0,
-                "sigma_factor": 1.0
-            },
-            "_meta": {"title": "ReActor Mask Helper"}
-        }
-
-        print(f"[Workflow] Added faceswap nodes: 188 (LoadImage), 183 (ReActor), 190 (MaskHelper), 186 (VHS_VideoCombine)")
+        print(f"[Workflow] Added faceswap nodes: 188 (LoadImage), 183 (ReActor), 186 (VHS_VideoCombine)")
         print(f"[Workflow] Removed nodes 94 (CreateVideo), 108 (SaveVideo)")
 
     # Always add RIFE frame interpolation (required for both 30fps and 60fps output)
@@ -498,11 +473,11 @@ def build_wan_i2v_workflow(
     }
 
     if faceswap_enabled:
-        # With faceswap: 183 (ReActor) → 190 (MaskHelper) → 200 (RIFE) → 186 (VHS_VideoCombine)
-        workflow["200"]["inputs"]["frames"] = ["190", 0]
+        # With faceswap: 183 (ReActor) → 200 (RIFE) → 186 (VHS_VideoCombine)
+        workflow["200"]["inputs"]["frames"] = ["183", 0]
         workflow["186"]["inputs"]["images"] = ["200", 0]
         workflow["186"]["inputs"]["frame_rate"] = output_fps
-        print(f"[Workflow] RIFE wired: ReActor(183) → MaskHelper(190) → RIFE(200) → VHS_VideoCombine(186) @ {output_fps}fps ({rife_multiplier}x interpolated)")
+        print(f"[Workflow] RIFE wired: ReActor(183) → RIFE(200) → VHS_VideoCombine(186) @ {output_fps}fps ({rife_multiplier}x interpolated)")
     else:
         # Without faceswap: use VHS_VideoCombine instead of CreateVideo+SaveVideo
         # Remove CreateVideo and SaveVideo nodes
