@@ -44,8 +44,7 @@ export default function Settings() {
   // FaceFusion presets
   const FACESWAP_PRESETS = {
     clean_face: {
-      label: 'Clean Face',
-      description: 'Optimized for unobstructed faces - maximum stability',
+      label: 'Clean Face - Unobstructed faces, maximum stability',
       model: 'inswapper_128',
       occluder: 'xseg_1',
       maskBlur: 0.3,
@@ -56,8 +55,7 @@ export default function Settings() {
       detectorModel: 'retinaface'
     },
     occlusion: {
-      label: 'Occlusion',
-      description: 'For hands, objects blocking face - better edge handling',
+      label: 'Occlusion - Hands/objects blocking face',
       model: 'inswapper_128',
       occluder: 'xseg_3',
       maskBlur: 0.4,
@@ -68,8 +66,7 @@ export default function Settings() {
       detectorModel: 'retinaface'
     },
     quality: {
-      label: 'High Quality',
-      description: 'For close-ups - maximum detail, slower processing',
+      label: 'High Quality - Close-ups, maximum detail (slower)',
       model: 'inswapper_128',
       occluder: 'xseg_3',
       maskBlur: 0.3,
@@ -80,8 +77,7 @@ export default function Settings() {
       detectorModel: 'retinaface'
     },
     custom: {
-      label: 'Custom',
-      description: 'Manual configuration'
+      label: 'Custom - Manual configuration'
     }
   };
 
@@ -669,15 +665,12 @@ export default function Settings() {
             <select
               value={faceswapPreset}
               onChange={(e) => applyPreset(e.target.value)}
-              style={{ width: '100%', marginBottom: '8px' }}
+              style={{ width: '100%' }}
             >
               {Object.entries(FACESWAP_PRESETS).map(([key, preset]) => (
                 <option key={key} value={key}>{preset.label}</option>
               ))}
             </select>
-            <small style={{ color: '#666', fontSize: '12px', display: 'block' }}>
-              {FACESWAP_PRESETS[faceswapPreset]?.description || 'Select a preset to auto-configure settings'}
-            </small>
           </div>
 
           <div className="settings-grid">
