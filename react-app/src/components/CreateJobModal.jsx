@@ -24,7 +24,7 @@ const FACESWAP_PRESETS = {
     label: 'Occlusion - Hands/objects blocking face',
     model: 'inswapper_128',
     occluder: 'xseg_3',
-    maskBlur: 0.4,
+    maskBlur: 0.2,
     regionMask: true,
     scoreThreshold: 0.4,
     pixelBoost: '768x768',
