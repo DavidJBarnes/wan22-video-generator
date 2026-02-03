@@ -634,7 +634,7 @@ def init_db():
             "vr_encoding_preset": "balanced",
             # VR video target FPS (30, 60, or 90)
             "vr_target_fps": "60",
-            # FaceFusion face swap settings
+            # FaceFusion face swap settings (current/custom values)
             "faceswap_preset": "clean_face",
             "faceswap_model": "inswapper_128",
             "faceswap_occluder": "xseg_1",
@@ -643,7 +643,43 @@ def init_db():
             "faceswap_score_threshold": "0.5",
             "faceswap_pixel_boost": "512x512",
             "faceswap_selector_mode": "reference",
-            "faceswap_detector_model": "retinaface"
+            "faceswap_detector_model": "retinaface",
+            # FaceFusion preset definitions (JSON)
+            "faceswap_presets": json.dumps({
+                "clean_face": {
+                    "label": "Clean Face - Unobstructed faces, maximum stability",
+                    "model": "inswapper_128",
+                    "occluder": "xseg_1",
+                    "maskBlur": 0.3,
+                    "regionMask": False,
+                    "scoreThreshold": 0.5,
+                    "pixelBoost": "512x512",
+                    "selectorMode": "reference",
+                    "detectorModel": "retinaface"
+                },
+                "occlusion": {
+                    "label": "Occlusion - Hands/objects blocking face",
+                    "model": "inswapper_128",
+                    "occluder": "xseg_3",
+                    "maskBlur": 0.2,
+                    "regionMask": True,
+                    "scoreThreshold": 0.4,
+                    "pixelBoost": "768x768",
+                    "selectorMode": "reference",
+                    "detectorModel": "retinaface"
+                },
+                "quality": {
+                    "label": "High Quality - Close-ups, maximum detail (slower)",
+                    "model": "inswapper_128",
+                    "occluder": "xseg_3",
+                    "maskBlur": 0.3,
+                    "regionMask": True,
+                    "scoreThreshold": 0.5,
+                    "pixelBoost": "1024x1024",
+                    "selectorMode": "reference",
+                    "detectorModel": "retinaface"
+                }
+            })
         }
 
         for key, value in default_settings.items():

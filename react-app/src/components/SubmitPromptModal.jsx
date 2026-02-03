@@ -9,43 +9,6 @@ import LoraAutocomplete from './LoraAutocomplete';
 import ImageRepoBrowserModal from './ImageRepoBrowserModal';
 import './CreateJobModal.css';
 
-// FaceFusion preset configurations with use case descriptions
-const FACESWAP_PRESETS = {
-  clean_face: {
-    label: 'Clean Face - Unobstructed faces, maximum stability',
-    model: 'inswapper_128',
-    occluder: 'xseg_1',
-    maskBlur: 0.3,
-    regionMask: false,
-    scoreThreshold: 0.5,
-    pixelBoost: '512x512',
-    selectorMode: 'reference',
-    detectorModel: 'retinaface'
-  },
-  occlusion: {
-    label: 'Occlusion - Hands/objects blocking face',
-    model: 'inswapper_128',
-    occluder: 'xseg_3',
-    maskBlur: 0.2,
-    regionMask: true,
-    scoreThreshold: 0.4,
-    pixelBoost: '768x768',
-    selectorMode: 'reference',
-    detectorModel: 'retinaface'
-  },
-  quality: {
-    label: 'High Quality - Close-ups, maximum detail (slower)',
-    model: 'inswapper_128',
-    occluder: 'xseg_3',
-    maskBlur: 0.3,
-    regionMask: true,
-    scoreThreshold: 0.5,
-    pixelBoost: '1024x1024',
-    selectorMode: 'reference',
-    detectorModel: 'retinaface'
-  }
-};
-
 // Available face swap images (in ComfyUI input folder)
 // Configure these values to match your local face image files
 const FACESWAP_FACES = [
@@ -98,6 +61,8 @@ export default function SubmitPromptModal({
   const [faceswapSourceImage, setFaceswapSourceImage] = useState(defaultFaceswap?.sourceImage || '');
   // Faceswap preset selection (clean_face, occlusion, quality)
   const [faceswapPreset, setFaceswapPreset] = useState(defaultFaceswap?.preset || 'clean_face');
+  // Faceswap presets loaded from database
+  const [faceswapPresets, setFaceswapPresets] = useState({});
   const [segmentFrames, setSegmentFrames] = useState([]);
   const [hoverPreview, setHoverPreview] = useState(null);  // {url, x, y} for hover preview
 
@@ -229,6 +194,23 @@ export default function SubmitPromptModal({
     loadPromptListNames();
   }, []);
 
+  // Load faceswap presets from settings
+  useEffect(() => {
+    async function loadFaceswapPresets() {
+      try {
+        const data = await API.getSettings();
+        const s = data.settings || data;
+        if (s.faceswap_presets) {
+          const presets = JSON.parse(s.faceswap_presets);
+          setFaceswapPresets(presets);
+        }
+      } catch (error) {
+        console.error('Failed to load faceswap presets:', error);
+      }
+    }
+    loadFaceswapPresets();
+  }, []);
+
   // Build faceswap frames list - use API frames if available, fallback to job input image
   const faceswapFrames = useMemo(() => {
     // If API returned frames, use those
@@ -328,8 +310,8 @@ export default function SubmitPromptModal({
           low_weight: slot.lowWeight
         }));
 
-      // Build faceswap options with preset settings
-      const presetSettings = FACESWAP_PRESETS[faceswapPreset] || FACESWAP_PRESETS.clean_face;
+      // Build faceswap options with preset settings (loaded from database)
+      const presetSettings = faceswapPresets[faceswapPreset] || faceswapPresets.clean_face || {};
       const faceswapOptions = {
         enabled: faceswapEnabled,
         image: faceswapEnabled && faceswapSourceType === 'preset' ? faceswapImage : '',
@@ -599,7 +581,7 @@ export default function SubmitPromptModal({
                     onChange={(e) => setFaceswapPreset(e.target.value)}
                     label="Preset"
                   >
-                    {Object.entries(FACESWAP_PRESETS).map(([key, preset]) => (
+                    {Object.entries(faceswapPresets).map(([key, preset]) => (
                       <MenuItem key={key} value={key}>
                         {preset.label}
                       </MenuItem>
