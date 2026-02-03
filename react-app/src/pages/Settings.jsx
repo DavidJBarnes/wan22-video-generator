@@ -40,6 +40,7 @@ export default function Settings() {
   const [faceswapPixelBoost, setFaceswapPixelBoost] = useState('512x512');
   const [faceswapSelectorMode, setFaceswapSelectorMode] = useState('reference');
   const [faceswapDetectorModel, setFaceswapDetectorModel] = useState('retinaface');
+  const [faceswapReferenceDistance, setFaceswapReferenceDistance] = useState(0.8);
   // FaceFusion presets loaded from database
   const [faceswapPresets, setFaceswapPresets] = useState({});
 
@@ -60,12 +61,13 @@ export default function Settings() {
       setFaceswapPixelBoost(preset.pixelBoost);
       setFaceswapSelectorMode(preset.selectorMode);
       setFaceswapDetectorModel(preset.detectorModel);
+      setFaceswapReferenceDistance(preset.referenceFaceDistance ?? 0.8);
     }
   };
 
   // Check if current settings match a preset
   const detectPreset = () => {
-    for (const [key, preset] of Object.entries(FACESWAP_PRESETS)) {
+    for (const [key, preset] of Object.entries(faceswapPresets)) {
       if (key === 'custom') continue;
       if (
         faceswapModel === preset.model &&
@@ -142,6 +144,7 @@ export default function Settings() {
       setFaceswapPixelBoost(s.faceswap_pixel_boost || '512x512');
       setFaceswapSelectorMode(s.faceswap_selector_mode || 'reference');
       setFaceswapDetectorModel(s.faceswap_detector_model || 'retinaface');
+      setFaceswapReferenceDistance(parseFloat(s.faceswap_reference_distance) || 0.8);
       // Load FaceFusion presets from database
       try {
         const presets = JSON.parse(s.faceswap_presets || '{}');
@@ -259,7 +262,8 @@ export default function Settings() {
         faceswap_score_threshold: String(faceswapScoreThreshold),
         faceswap_pixel_boost: faceswapPixelBoost,
         faceswap_selector_mode: faceswapSelectorMode,
-        faceswap_detector_model: faceswapDetectorModel
+        faceswap_detector_model: faceswapDetectorModel,
+        faceswap_reference_distance: String(faceswapReferenceDistance)
       };
 
       await API.updateSettings(settingsPayload);
@@ -777,6 +781,26 @@ export default function Settings() {
             </select>
             <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
               Face detection model. RetinaFace tends to give more consistent landmark positions across frames, reducing jitter in video face swaps.
+            </small>
+          </div>
+
+          <div className="form-group" style={{ marginTop: '12px' }}>
+            <label>Reference Face Distance: {faceswapReferenceDistance}</label>
+            <input
+              type="range"
+              value={faceswapReferenceDistance}
+              onChange={(e) => { setFaceswapReferenceDistance(parseFloat(e.target.value)); setFaceswapPreset('custom'); }}
+              min="0.4"
+              max="1.0"
+              step="0.05"
+              style={{ width: '100%' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#666', fontSize: '11px' }}>
+              <span>0.4 (strict)</span>
+              <span>1.0 (lenient)</span>
+            </div>
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+              Similarity threshold for reference mode face matching. Higher values allow more variation in face angle/expression, helping track faces at different angles. Only used when Face Selector Mode is "Reference".
             </small>
           </div>
         </div>
