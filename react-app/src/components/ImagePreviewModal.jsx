@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Button, Rating, Box, Typography, CircularProgress, FormControl, InputLabel, Select, MenuItem, Chip } from '@mui/material';
 import { Link } from 'react-router-dom';
 import API from '../api/client';
-import { showToast } from '../utils/helpers';
+import { showToast, normalizeUtcTimestamp } from '../utils/helpers';
 import './CreateJobModal.css';
 
 export default function ImagePreviewModal({ image, images, currentIndex, onClose, onCreateJob, onDelete, onNavigate, onRatingChange }) {
@@ -555,7 +555,7 @@ export default function ImagePreviewModal({ image, images, currentIndex, onClose
                         padding: '4px 8px'
                       }}
                     >
-                      VR #{vr.id} - {new Date(vr.created_at).toLocaleDateString()}
+                      VR #{vr.id} - {new Date(normalizeUtcTimestamp(vr.created_at)).toLocaleDateString()}
                     </Button>
                   ))}
                 </div>

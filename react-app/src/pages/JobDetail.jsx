@@ -1614,7 +1614,7 @@ export default function JobDetail() {
                       return (
                         <tr key={log.id} style={{ borderBottom: '1px solid #eee' }}>
                           <td style={{ padding: '8px', fontFamily: 'monospace', fontSize: '12px', color: '#666' }}>
-                            {new Date(log.timestamp).toLocaleString()}
+                            {formatDate(log.timestamp)}
                           </td>
                           <td style={{ padding: '8px' }}>
                             <span style={{

@@ -2,10 +2,34 @@
  * Utility helper functions
  */
 
+/**
+ * Normalize a timestamp string to ensure it's interpreted as UTC.
+ * SQLite CURRENT_TIMESTAMP produces "2024-01-15 10:30:00" (no timezone).
+ * Our utc_now_iso() produces "2024-01-15T10:30:00Z".
+ * Without 'Z', browsers interpret the timestamp as local time.
+ */
+export function normalizeUtcTimestamp(dateString) {
+  if (!dateString) return null;
+  // Already has timezone info (Z or +/-offset)
+  if (/[Z+-]\d{0,4}:?\d{0,2}$/.test(dateString)) {
+    return dateString;
+  }
+  // SQLite format "YYYY-MM-DD HH:MM:SS" - add Z to mark as UTC
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(dateString)) {
+    return dateString.replace(' ', 'T') + 'Z';
+  }
+  // ISO format without timezone "YYYY-MM-DDTHH:MM:SS" - add Z
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(dateString)) {
+    return dateString + 'Z';
+  }
+  return dateString;
+}
+
 export function formatDate(dateString) {
   if (!dateString) return 'N/A';
   try {
-    const date = new Date(dateString);
+    const normalized = normalizeUtcTimestamp(dateString);
+    const date = new Date(normalized);
     return date.toLocaleString();
   } catch {
     return dateString;
@@ -15,7 +39,8 @@ export function formatDate(dateString) {
 export function formatTime(isoString) {
   if (!isoString) return '--';
   try {
-    const date = new Date(isoString);
+    const normalized = normalizeUtcTimestamp(isoString);
+    const date = new Date(normalized);
     return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   } catch {
     return '--';
