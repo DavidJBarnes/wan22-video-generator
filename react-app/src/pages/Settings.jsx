@@ -31,14 +31,99 @@ export default function Settings() {
   const [slideshowDelay, setSlideshowDelay] = useState(5);
 
   // FaceFusion face swap settings
-  const [faceswapModel, setFaceswapModel] = useState('hyperswap_1c_256');
-  const [faceswapOccluder, setFaceswapOccluder] = useState('xseg_3');
-  const [faceswapMaskBlur, setFaceswapMaskBlur] = useState(0.2);
-  const [faceswapRegionMask, setFaceswapRegionMask] = useState(true);
+  const [faceswapPreset, setFaceswapPreset] = useState('clean_face');
+  const [faceswapModel, setFaceswapModel] = useState('inswapper_128');
+  const [faceswapOccluder, setFaceswapOccluder] = useState('xseg_1');
+  const [faceswapMaskBlur, setFaceswapMaskBlur] = useState(0.3);
+  const [faceswapRegionMask, setFaceswapRegionMask] = useState(false);
   const [faceswapScoreThreshold, setFaceswapScoreThreshold] = useState(0.5);
   const [faceswapPixelBoost, setFaceswapPixelBoost] = useState('512x512');
   const [faceswapSelectorMode, setFaceswapSelectorMode] = useState('reference');
   const [faceswapDetectorModel, setFaceswapDetectorModel] = useState('retinaface');
+
+  // FaceFusion presets
+  const FACESWAP_PRESETS = {
+    clean_face: {
+      label: 'Clean Face',
+      description: 'Optimized for unobstructed faces - maximum stability',
+      model: 'inswapper_128',
+      occluder: 'xseg_1',
+      maskBlur: 0.3,
+      regionMask: false,
+      scoreThreshold: 0.5,
+      pixelBoost: '512x512',
+      selectorMode: 'reference',
+      detectorModel: 'retinaface'
+    },
+    occlusion: {
+      label: 'Occlusion',
+      description: 'For hands, objects blocking face - better edge handling',
+      model: 'inswapper_128',
+      occluder: 'xseg_3',
+      maskBlur: 0.4,
+      regionMask: true,
+      scoreThreshold: 0.4,
+      pixelBoost: '768x768',
+      selectorMode: 'reference',
+      detectorModel: 'retinaface'
+    },
+    quality: {
+      label: 'High Quality',
+      description: 'For close-ups - maximum detail, slower processing',
+      model: 'inswapper_128',
+      occluder: 'xseg_3',
+      maskBlur: 0.3,
+      regionMask: true,
+      scoreThreshold: 0.5,
+      pixelBoost: '1024x1024',
+      selectorMode: 'reference',
+      detectorModel: 'retinaface'
+    },
+    custom: {
+      label: 'Custom',
+      description: 'Manual configuration'
+    }
+  };
+
+  // Apply preset settings
+  const applyPreset = (presetKey) => {
+    if (presetKey === 'custom') {
+      setFaceswapPreset('custom');
+      return;
+    }
+    const preset = FACESWAP_PRESETS[presetKey];
+    if (preset) {
+      setFaceswapPreset(presetKey);
+      setFaceswapModel(preset.model);
+      setFaceswapOccluder(preset.occluder);
+      setFaceswapMaskBlur(preset.maskBlur);
+      setFaceswapRegionMask(preset.regionMask);
+      setFaceswapScoreThreshold(preset.scoreThreshold);
+      setFaceswapPixelBoost(preset.pixelBoost);
+      setFaceswapSelectorMode(preset.selectorMode);
+      setFaceswapDetectorModel(preset.detectorModel);
+    }
+  };
+
+  // Check if current settings match a preset
+  const detectPreset = () => {
+    for (const [key, preset] of Object.entries(FACESWAP_PRESETS)) {
+      if (key === 'custom') continue;
+      if (
+        faceswapModel === preset.model &&
+        faceswapOccluder === preset.occluder &&
+        Math.abs(faceswapMaskBlur - preset.maskBlur) < 0.01 &&
+        faceswapRegionMask === preset.regionMask &&
+        Math.abs(faceswapScoreThreshold - preset.scoreThreshold) < 0.01 &&
+        faceswapPixelBoost === preset.pixelBoost &&
+        faceswapSelectorMode === preset.selectorMode &&
+        faceswapDetectorModel === preset.detectorModel
+      ) {
+        return key;
+      }
+    }
+    return 'custom';
+  };
 
   // VR 180 stereo settings (validated for Quest 3S)
   const [vrEyeSeparation, setVrEyeSeparation] = useState(0.015);
@@ -90,10 +175,11 @@ export default function Settings() {
       setSlideshowDelay(parseInt(s.slideshow_delay) || 5);
 
       // FaceFusion settings
-      setFaceswapModel(s.faceswap_model || 'hyperswap_1c_256');
-      setFaceswapOccluder(s.faceswap_occluder || 'xseg_3');
-      setFaceswapMaskBlur(parseFloat(s.faceswap_mask_blur) || 0.2);
-      setFaceswapRegionMask(s.faceswap_region_mask !== 'false');
+      setFaceswapPreset(s.faceswap_preset || 'clean_face');
+      setFaceswapModel(s.faceswap_model || 'inswapper_128');
+      setFaceswapOccluder(s.faceswap_occluder || 'xseg_1');
+      setFaceswapMaskBlur(parseFloat(s.faceswap_mask_blur) || 0.3);
+      setFaceswapRegionMask(s.faceswap_region_mask === 'true');
       setFaceswapScoreThreshold(parseFloat(s.faceswap_score_threshold) || 0.5);
       setFaceswapPixelBoost(s.faceswap_pixel_boost || '512x512');
       setFaceswapSelectorMode(s.faceswap_selector_mode || 'reference');
@@ -202,6 +288,7 @@ export default function Settings() {
         vr_depth_model: vrDepthModel,
         vr_encoding_preset: vrEncodingPreset,
         // FaceFusion settings
+        faceswap_preset: faceswapPreset,
         faceswap_model: faceswapModel,
         faceswap_occluder: faceswapOccluder,
         faceswap_mask_blur: String(faceswapMaskBlur),
@@ -576,20 +663,37 @@ export default function Settings() {
             Default parameters for face swapping with occlusion detection.
           </p>
 
+          {/* Preset Selector */}
+          <div className="form-group" style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#f5f5f5', borderRadius: '8px' }}>
+            <label style={{ fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>Preset</label>
+            <select
+              value={faceswapPreset}
+              onChange={(e) => applyPreset(e.target.value)}
+              style={{ width: '100%', marginBottom: '8px' }}
+            >
+              {Object.entries(FACESWAP_PRESETS).map(([key, preset]) => (
+                <option key={key} value={key}>{preset.label}</option>
+              ))}
+            </select>
+            <small style={{ color: '#666', fontSize: '12px', display: 'block' }}>
+              {FACESWAP_PRESETS[faceswapPreset]?.description || 'Select a preset to auto-configure settings'}
+            </small>
+          </div>
+
           <div className="settings-grid">
             <div className="form-group">
               <label>Face Swapper Model</label>
               <select
                 value={faceswapModel}
-                onChange={(e) => setFaceswapModel(e.target.value)}
+                onChange={(e) => { setFaceswapModel(e.target.value); setFaceswapPreset('custom'); }}
               >
-                <option value="hyperswap_1c_256">HyperSwap 1C 256 (best quality)</option>
-                <option value="hyperswap">HyperSwap Standard</option>
+                <option value="inswapper_128">InSwapper 128 (recommended)</option>
                 <option value="inswapper_128_fp16">InSwapper 128 FP16 (faster)</option>
-                <option value="inswapper_128">InSwapper 128</option>
+                <option value="hyperswap_1c_256">HyperSwap 1C 256</option>
+                <option value="hyperswap">HyperSwap Standard</option>
               </select>
               <small style={{ color: '#666', fontSize: '12px' }}>
-                Model used for face swapping. HyperSwap 1C 256 provides highest quality.
+                Model used for face swapping. InSwapper 128 provides best identity preservation.
               </small>
             </div>
 
@@ -597,11 +701,11 @@ export default function Settings() {
               <label>Occlusion Detection Model</label>
               <select
                 value={faceswapOccluder}
-                onChange={(e) => setFaceswapOccluder(e.target.value)}
+                onChange={(e) => { setFaceswapOccluder(e.target.value); setFaceswapPreset('custom'); }}
               >
-                <option value="xseg_3">XSeg 3 (best quality)</option>
-                <option value="xseg_2">XSeg 2</option>
                 <option value="xseg_1">XSeg 1 (faster)</option>
+                <option value="xseg_2">XSeg 2</option>
+                <option value="xseg_3">XSeg 3 (best quality)</option>
               </select>
               <small style={{ color: '#666', fontSize: '12px' }}>
                 Model for detecting occlusions (hands, tongue, etc.) to protect them during face swap.
@@ -614,7 +718,7 @@ export default function Settings() {
             <input
               type="range"
               value={faceswapMaskBlur}
-              onChange={(e) => setFaceswapMaskBlur(parseFloat(e.target.value))}
+              onChange={(e) => { setFaceswapMaskBlur(parseFloat(e.target.value)); setFaceswapPreset('custom'); }}
               min="0"
               max="1"
               step="0.05"
@@ -634,7 +738,7 @@ export default function Settings() {
               <input
                 type="checkbox"
                 checked={faceswapRegionMask}
-                onChange={(e) => setFaceswapRegionMask(e.target.checked)}
+                onChange={(e) => { setFaceswapRegionMask(e.target.checked); setFaceswapPreset('custom'); }}
                 style={{ width: 'auto', margin: 0 }}
               />
               Enable Region Masking
@@ -649,7 +753,7 @@ export default function Settings() {
             <input
               type="range"
               value={faceswapScoreThreshold}
-              onChange={(e) => setFaceswapScoreThreshold(parseFloat(e.target.value))}
+              onChange={(e) => { setFaceswapScoreThreshold(parseFloat(e.target.value)); setFaceswapPreset('custom'); }}
               min="0.1"
               max="0.9"
               step="0.05"
@@ -668,7 +772,7 @@ export default function Settings() {
             <label>Pixel Boost (Face Resolution)</label>
             <select
               value={faceswapPixelBoost}
-              onChange={(e) => setFaceswapPixelBoost(e.target.value)}
+              onChange={(e) => { setFaceswapPixelBoost(e.target.value); setFaceswapPreset('custom'); }}
               style={{ width: '100%' }}
             >
               <option value="256x256">256x256 - Fast, lower quality</option>
@@ -685,7 +789,7 @@ export default function Settings() {
             <label>Face Selector Mode</label>
             <select
               value={faceswapSelectorMode}
-              onChange={(e) => setFaceswapSelectorMode(e.target.value)}
+              onChange={(e) => { setFaceswapSelectorMode(e.target.value); setFaceswapPreset('custom'); }}
               style={{ width: '100%' }}
             >
               <option value="one">One - Select by position (may jitter)</option>
@@ -701,7 +805,7 @@ export default function Settings() {
             <label>Face Detector Model</label>
             <select
               value={faceswapDetectorModel}
-              onChange={(e) => setFaceswapDetectorModel(e.target.value)}
+              onChange={(e) => { setFaceswapDetectorModel(e.target.value); setFaceswapPreset('custom'); }}
               style={{ width: '100%' }}
             >
               <option value="retinaface">RetinaFace - More stable/consistent (recommended)</option>
