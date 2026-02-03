@@ -1362,6 +1362,15 @@ def create_first_segment(
     faceswap_faces_order: str = "left-right",
     faceswap_faces_index: str = "0",
     faceswap_source_image: Optional[str] = None,
+    faceswap_preset: Optional[str] = None,
+    faceswap_model: Optional[str] = None,
+    faceswap_occluder: Optional[str] = None,
+    faceswap_mask_blur: Optional[float] = None,
+    faceswap_region_mask: Optional[bool] = None,
+    faceswap_score_threshold: Optional[float] = None,
+    faceswap_pixel_boost: Optional[str] = None,
+    faceswap_selector_mode: Optional[str] = None,
+    faceswap_detector_model: Optional[str] = None,
     fade_to_black: bool = False
 ):
     """Create the first segment for a job (on-demand workflow).
@@ -1380,19 +1389,45 @@ def create_first_segment(
         faceswap_faces_order: Order to process faces (left-right, right-left, etc.)
         faceswap_faces_index: Which face indices to process (e.g., "0", "0,1")
         faceswap_source_image: URL to segment frame to use as faceswap source (overrides faceswap_image)
+        faceswap_preset: FaceFusion preset name (clean_face, occlusion, quality)
+        faceswap_model: Face swap model name
+        faceswap_occluder: Occlusion model (xseg_1, xseg_2, xseg_3)
+        faceswap_mask_blur: Mask blur amount
+        faceswap_region_mask: Whether to enable region masking
+        faceswap_score_threshold: Face detection score threshold
+        faceswap_pixel_boost: Pixel boost resolution
+        faceswap_selector_mode: Face selector mode (one, many, reference)
+        faceswap_detector_model: Face detector model
         fade_to_black: Whether to apply fade-to-black transition at segment end
     """
+    # Build faceswap_params JSON if any preset settings are provided
+    faceswap_params = None
+    if any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
+            faceswap_region_mask is not None, faceswap_score_threshold is not None,
+            faceswap_pixel_boost, faceswap_selector_mode, faceswap_detector_model]):
+        faceswap_params = json.dumps({
+            "preset": faceswap_preset,
+            "model": faceswap_model,
+            "occluder": faceswap_occluder,
+            "mask_blur": faceswap_mask_blur,
+            "region_mask": faceswap_region_mask,
+            "score_threshold": faceswap_score_threshold,
+            "pixel_boost": faceswap_pixel_boost,
+            "selector_mode": faceswap_selector_mode,
+            "detector_model": faceswap_detector_model
+        })
+
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora,
                                       faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index,
-                                      faceswap_source_image, fade_to_black)
-            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      faceswap_source_image, faceswap_params, fade_to_black)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (job_id, 0, initial_prompt, start_image_url,
               serialize_loras(high_loras), serialize_loras(low_loras),
               1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index,
-              faceswap_source_image, 1 if fade_to_black else 0))
+              faceswap_source_image, faceswap_params, 1 if fade_to_black else 0))
 
 
 def create_next_segment(

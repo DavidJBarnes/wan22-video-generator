@@ -572,6 +572,15 @@ async def create_new_job(job: JobCreate):
         faceswap_faces_order=params.get("faceswap_faces_order", "left-right"),
         faceswap_faces_index=params.get("faceswap_faces_index", "0"),
         faceswap_source_image=params.get("faceswap_source_image"),
+        faceswap_preset=params.get("faceswap_preset"),
+        faceswap_model=params.get("faceswap_model"),
+        faceswap_occluder=params.get("faceswap_occluder"),
+        faceswap_mask_blur=params.get("faceswap_mask_blur"),
+        faceswap_region_mask=params.get("faceswap_region_mask"),
+        faceswap_score_threshold=params.get("faceswap_score_threshold"),
+        faceswap_pixel_boost=params.get("faceswap_pixel_boost"),
+        faceswap_selector_mode=params.get("faceswap_selector_mode"),
+        faceswap_detector_model=params.get("faceswap_detector_model"),
         fade_to_black=params.get("fade_to_black", False)
     )
 

@@ -7,6 +7,43 @@ import { useLoras } from '../contexts/LoraContext';
 import LoraAutocomplete from './LoraAutocomplete';
 import './CreateJobModal.css';
 
+// FaceFusion preset configurations with use case descriptions
+const FACESWAP_PRESETS = {
+  clean_face: {
+    label: 'Clean Face - Unobstructed faces, maximum stability',
+    model: 'inswapper_128',
+    occluder: 'xseg_1',
+    maskBlur: 0.3,
+    regionMask: false,
+    scoreThreshold: 0.5,
+    pixelBoost: '512x512',
+    selectorMode: 'reference',
+    detectorModel: 'retinaface'
+  },
+  occlusion: {
+    label: 'Occlusion - Hands/objects blocking face',
+    model: 'inswapper_128',
+    occluder: 'xseg_3',
+    maskBlur: 0.4,
+    regionMask: true,
+    scoreThreshold: 0.4,
+    pixelBoost: '768x768',
+    selectorMode: 'reference',
+    detectorModel: 'retinaface'
+  },
+  quality: {
+    label: 'High Quality - Close-ups, maximum detail (slower)',
+    model: 'inswapper_128',
+    occluder: 'xseg_3',
+    maskBlur: 0.3,
+    regionMask: true,
+    scoreThreshold: 0.5,
+    pixelBoost: '1024x1024',
+    selectorMode: 'reference',
+    detectorModel: 'retinaface'
+  }
+};
+
 // Available face swap images (in ComfyUI input folder)
 // Configure these values to match your local face image files
 const FACESWAP_FACES = [
@@ -49,6 +86,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   const [faceswapFacesOrder, setFaceswapFacesOrder] = useState('left-right');
   const [faceswapFacesIndex, setFaceswapFacesIndex] = useState('0');
   const [faceswapSourceType, setFaceswapSourceType] = useState('preset');  // 'preset' or 'frame'
+  const [faceswapPreset, setFaceswapPreset] = useState('clean_face');
   const [selectedPrefix, setSelectedPrefix] = useState(null);
   const [selectedDescription, setSelectedDescription] = useState(null);
   const [autoFinalize, setAutoFinalize] = useState(false);
@@ -113,6 +151,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
           setFaceswapImage(cloneData.parameters.faceswap_image || FACESWAP_FACES[0]?.value || '');
           setFaceswapFacesOrder(cloneData.parameters.faceswap_faces_order || 'left-right');
           setFaceswapFacesIndex(cloneData.parameters.faceswap_faces_index || '0');
+          setFaceswapPreset(cloneData.parameters.faceswap_preset || 'clean_face');
         }
 
         // Set the input image if available - use thumbnail endpoint for proper URL
@@ -436,6 +475,18 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
           faceswap_source_image: faceswapEnabled && faceswapSourceType === 'frame'
             ? `${API.baseUrl}/comfyui/view?filename=${encodeURIComponent(imageFilename)}&subfolder=&type=input`
             : null,
+          // FaceFusion preset settings
+          faceswap_preset: faceswapEnabled ? faceswapPreset : null,
+          ...(faceswapEnabled && FACESWAP_PRESETS[faceswapPreset] ? {
+            faceswap_model: FACESWAP_PRESETS[faceswapPreset].model,
+            faceswap_occluder: FACESWAP_PRESETS[faceswapPreset].occluder,
+            faceswap_mask_blur: FACESWAP_PRESETS[faceswapPreset].maskBlur,
+            faceswap_region_mask: FACESWAP_PRESETS[faceswapPreset].regionMask,
+            faceswap_score_threshold: FACESWAP_PRESETS[faceswapPreset].scoreThreshold,
+            faceswap_pixel_boost: FACESWAP_PRESETS[faceswapPreset].pixelBoost,
+            faceswap_selector_mode: FACESWAP_PRESETS[faceswapPreset].selectorMode,
+            faceswap_detector_model: FACESWAP_PRESETS[faceswapPreset].detectorModel
+          } : {}),
           auto_finalize: autoFinalize
         }
       };
@@ -675,6 +726,16 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
               />
               {faceswapEnabled && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {/* Preset selector */}
+                  <FormControl variant="outlined" size="small" fullWidth>
+                    <InputLabel>Preset</InputLabel>
+                    <Select value={faceswapPreset} onChange={(e) => setFaceswapPreset(e.target.value)} label="Preset">
+                      {Object.entries(FACESWAP_PRESETS).map(([key, preset]) => (
+                        <MenuItem key={key} value={key}>{preset.label}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+
                   {/* Source type selector */}
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <Button
