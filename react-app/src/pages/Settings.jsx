@@ -40,54 +40,16 @@ export default function Settings() {
   const [faceswapPixelBoost, setFaceswapPixelBoost] = useState('512x512');
   const [faceswapSelectorMode, setFaceswapSelectorMode] = useState('reference');
   const [faceswapDetectorModel, setFaceswapDetectorModel] = useState('retinaface');
+  // FaceFusion presets loaded from database
+  const [faceswapPresets, setFaceswapPresets] = useState({});
 
-  // FaceFusion presets
-  const FACESWAP_PRESETS = {
-    clean_face: {
-      label: 'Clean Face - Unobstructed faces, maximum stability',
-      model: 'inswapper_128',
-      occluder: 'xseg_1',
-      maskBlur: 0.3,
-      regionMask: false,
-      scoreThreshold: 0.5,
-      pixelBoost: '512x512',
-      selectorMode: 'reference',
-      detectorModel: 'retinaface'
-    },
-    occlusion: {
-      label: 'Occlusion - Hands/objects blocking face',
-      model: 'inswapper_128',
-      occluder: 'xseg_3',
-      maskBlur: 0.2,
-      regionMask: true,
-      scoreThreshold: 0.4,
-      pixelBoost: '768x768',
-      selectorMode: 'reference',
-      detectorModel: 'retinaface'
-    },
-    quality: {
-      label: 'High Quality - Close-ups, maximum detail (slower)',
-      model: 'inswapper_128',
-      occluder: 'xseg_3',
-      maskBlur: 0.3,
-      regionMask: true,
-      scoreThreshold: 0.5,
-      pixelBoost: '1024x1024',
-      selectorMode: 'reference',
-      detectorModel: 'retinaface'
-    },
-    custom: {
-      label: 'Custom - Manual configuration'
-    }
-  };
-
-  // Apply preset settings
+  // Apply preset settings (uses presets loaded from database)
   const applyPreset = (presetKey) => {
     if (presetKey === 'custom') {
       setFaceswapPreset('custom');
       return;
     }
-    const preset = FACESWAP_PRESETS[presetKey];
+    const preset = faceswapPresets[presetKey];
     if (preset) {
       setFaceswapPreset(presetKey);
       setFaceswapModel(preset.model);
@@ -180,6 +142,11 @@ export default function Settings() {
       setFaceswapPixelBoost(s.faceswap_pixel_boost || '512x512');
       setFaceswapSelectorMode(s.faceswap_selector_mode || 'reference');
       setFaceswapDetectorModel(s.faceswap_detector_model || 'retinaface');
+      // Load FaceFusion presets from database
+      try {
+        const presets = JSON.parse(s.faceswap_presets || '{}');
+        setFaceswapPresets(presets);
+      } catch { setFaceswapPresets({}); }
 
       // VR settings (validated for Quest 3S)
       setVrEyeSeparation(parseFloat(s.vr_eye_separation) || 0.015);
@@ -667,9 +634,10 @@ export default function Settings() {
               onChange={(e) => applyPreset(e.target.value)}
               style={{ width: '100%' }}
             >
-              {Object.entries(FACESWAP_PRESETS).map(([key, preset]) => (
+              {Object.entries(faceswapPresets).map(([key, preset]) => (
                 <option key={key} value={key}>{preset.label}</option>
               ))}
+              <option value="custom">Custom - Manual configuration</option>
             </select>
           </div>
 
