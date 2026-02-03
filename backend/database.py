@@ -335,6 +335,12 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Add faceswap_params column for storing FaceFusion preset settings as JSON
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN faceswap_params TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Add prompt_template column for storing original prompt with tags intact
         try:
             cursor.execute("ALTER TABLE job_segments ADD COLUMN prompt_template TEXT")
@@ -1402,6 +1408,15 @@ def create_next_segment(
     faceswap_faces_order: str = "left-right",
     faceswap_faces_index: str = "0",
     faceswap_source_image: Optional[str] = None,
+    faceswap_preset: Optional[str] = None,
+    faceswap_model: Optional[str] = None,
+    faceswap_occluder: Optional[str] = None,
+    faceswap_mask_blur: Optional[float] = None,
+    faceswap_region_mask: Optional[bool] = None,
+    faceswap_score_threshold: Optional[float] = None,
+    faceswap_pixel_boost: Optional[str] = None,
+    faceswap_selector_mode: Optional[str] = None,
+    faceswap_detector_model: Optional[str] = None,
     fade_to_black: bool = False,
     custom_start_image: Optional[str] = None
 ):
@@ -1422,23 +1437,49 @@ def create_next_segment(
         faceswap_faces_order: Order to process faces (left-right, right-left, etc.)
         faceswap_faces_index: Which face indices to process (e.g., "0", "0,1")
         faceswap_source_image: URL to segment frame to use as faceswap source (overrides faceswap_image)
+        faceswap_preset: FaceFusion preset name (clean_face, occlusion, quality)
+        faceswap_model: Face swap model name
+        faceswap_occluder: Occlusion model (xseg_1, xseg_2, xseg_3)
+        faceswap_mask_blur: Mask blur amount
+        faceswap_region_mask: Whether to enable region masking
+        faceswap_score_threshold: Face detection score threshold
+        faceswap_pixel_boost: Pixel boost resolution
+        faceswap_selector_mode: Face selector mode (one, many, reference)
+        faceswap_detector_model: Face detector model
         fade_to_black: Whether to apply fade-to-black transition at segment end
         custom_start_image: Optional path to custom start image from image repo (overrides default)
     """
     # Store template as-is, or use prompt if no template provided
     template = prompt_template if prompt_template is not None else prompt
 
+    # Build faceswap_params JSON if any preset settings are provided
+    faceswap_params = None
+    if any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
+            faceswap_region_mask is not None, faceswap_score_threshold is not None,
+            faceswap_pixel_boost, faceswap_selector_mode, faceswap_detector_model]):
+        faceswap_params = json.dumps({
+            "preset": faceswap_preset,
+            "model": faceswap_model,
+            "occluder": faceswap_occluder,
+            "mask_blur": faceswap_mask_blur,
+            "region_mask": faceswap_region_mask,
+            "score_threshold": faceswap_score_threshold,
+            "pixel_boost": faceswap_pixel_boost,
+            "selector_mode": faceswap_selector_mode,
+            "detector_model": faceswap_detector_model
+        })
+
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO job_segments (job_id, segment_index, status, prompt, prompt_template, start_image_url, high_lora, low_lora,
                                       faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index,
-                                      faceswap_source_image, fade_to_black, custom_start_image)
-            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      faceswap_source_image, faceswap_params, fade_to_black, custom_start_image)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (job_id, segment_index, prompt, template, start_image_url,
               serialize_loras(high_loras), serialize_loras(low_loras),
               1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index,
-              faceswap_source_image, 1 if fade_to_black else 0, custom_start_image))
+              faceswap_source_image, faceswap_params, 1 if fade_to_black else 0, custom_start_image))
 
 
 def create_segments_for_job(
@@ -1616,6 +1657,15 @@ def update_segment_prompt(
     faceswap_faces_order: Optional[str] = None,
     faceswap_faces_index: Optional[str] = None,
     faceswap_source_image: Optional[str] = None,
+    faceswap_preset: Optional[str] = None,
+    faceswap_model: Optional[str] = None,
+    faceswap_occluder: Optional[str] = None,
+    faceswap_mask_blur: Optional[float] = None,
+    faceswap_region_mask: Optional[bool] = None,
+    faceswap_score_threshold: Optional[float] = None,
+    faceswap_pixel_boost: Optional[str] = None,
+    faceswap_selector_mode: Optional[str] = None,
+    faceswap_detector_model: Optional[str] = None,
     fade_to_black: Optional[bool] = None,
     custom_start_image: Optional[str] = None
 ):
@@ -1634,6 +1684,15 @@ def update_segment_prompt(
         faceswap_faces_index: Faces index, or None to not update
         faceswap_source_image: URL to segment frame to use as faceswap source, or None to not update.
                               Use empty string to clear and revert to job-level default.
+        faceswap_preset: FaceFusion preset name (clean_face, occlusion, quality)
+        faceswap_model: Face swap model name
+        faceswap_occluder: Occlusion model (xseg_1, xseg_2, xseg_3)
+        faceswap_mask_blur: Mask blur amount
+        faceswap_region_mask: Whether to enable region masking
+        faceswap_score_threshold: Face detection score threshold
+        faceswap_pixel_boost: Pixel boost resolution
+        faceswap_selector_mode: Face selector mode (one, many, reference)
+        faceswap_detector_model: Face detector model
         fade_to_black: Whether to apply fade-to-black transition at segment end, or None to not update
         custom_start_image: Path to custom start image from image repo, or None to not update.
                            Use empty string to clear custom image and revert to default.
@@ -1673,6 +1732,24 @@ def update_segment_prompt(
             updates.append("faceswap_source_image = ?")
             # Empty string means clear (revert to job-level default), otherwise store the URL
             params.append(faceswap_source_image if faceswap_source_image else None)
+
+        # Build faceswap_params JSON if any preset settings are provided
+        if any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
+                faceswap_region_mask is not None, faceswap_score_threshold is not None,
+                faceswap_pixel_boost, faceswap_selector_mode, faceswap_detector_model]):
+            faceswap_params = json.dumps({
+                "preset": faceswap_preset,
+                "model": faceswap_model,
+                "occluder": faceswap_occluder,
+                "mask_blur": faceswap_mask_blur,
+                "region_mask": faceswap_region_mask,
+                "score_threshold": faceswap_score_threshold,
+                "pixel_boost": faceswap_pixel_boost,
+                "selector_mode": faceswap_selector_mode,
+                "detector_model": faceswap_detector_model
+            })
+            updates.append("faceswap_params = ?")
+            params.append(faceswap_params)
 
         if fade_to_black is not None:
             updates.append("fade_to_black = ?")

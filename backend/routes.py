@@ -1233,6 +1233,15 @@ async def update_segment_prompt_endpoint(
     faceswap_faces_order: Optional[str] = Form("left-right"),  # Faces order
     faceswap_faces_index: Optional[str] = Form("0"),  # Faces index
     faceswap_source_image: Optional[str] = Form(None),  # Segment frame URL to use as faceswap source
+    faceswap_preset: Optional[str] = Form(None),  # Preset name (clean_face, occlusion, quality)
+    faceswap_model: Optional[str] = Form(None),  # Face swap model
+    faceswap_occluder: Optional[str] = Form(None),  # Occlusion model (xseg_1, xseg_2, xseg_3)
+    faceswap_mask_blur: Optional[float] = Form(None),  # Mask blur amount
+    faceswap_region_mask: Optional[bool] = Form(None),  # Enable region masking
+    faceswap_score_threshold: Optional[float] = Form(None),  # Face detection threshold
+    faceswap_pixel_boost: Optional[str] = Form(None),  # Pixel boost resolution
+    faceswap_selector_mode: Optional[str] = Form(None),  # Face selector mode (one, many, reference)
+    faceswap_detector_model: Optional[str] = Form(None),  # Face detector model
     fade_to_black: Optional[bool] = Form(False),  # Apply fade-to-black transition at segment end
     custom_start_image: Optional[str] = Form(None)  # Custom start image path from image repo
 ):
@@ -1249,6 +1258,15 @@ async def update_segment_prompt_endpoint(
         faceswap_faces_order: Order to process faces (left-right, right-left, etc.).
         faceswap_faces_index: Which face indices to process (e.g., "0", "0,1").
         faceswap_source_image: URL to segment frame to use as faceswap source (overrides faceswap_image).
+        faceswap_preset: Preset name (clean_face, occlusion, quality) for FaceFusion settings.
+        faceswap_model: Face swap model name.
+        faceswap_occluder: Occlusion model (xseg_1, xseg_2, xseg_3).
+        faceswap_mask_blur: Mask blur amount (0.0-1.0).
+        faceswap_region_mask: Whether to enable region masking.
+        faceswap_score_threshold: Face detection score threshold.
+        faceswap_pixel_boost: Pixel boost resolution (512x512, 768x768, 1024x1024).
+        faceswap_selector_mode: Face selector mode (one, many, reference).
+        faceswap_detector_model: Face detector model (retinaface, scrfd, etc.).
         fade_to_black: Apply fade-to-black transition at the end of this segment.
         custom_start_image: Path to custom start image from image repo (overrides default).
     """
@@ -1342,6 +1360,15 @@ async def update_segment_prompt_endpoint(
             faceswap_faces_order=faceswap_faces_order or "left-right",
             faceswap_faces_index=faceswap_faces_index or "0",
             faceswap_source_image=faceswap_source_image,
+            faceswap_preset=faceswap_preset,
+            faceswap_model=faceswap_model,
+            faceswap_occluder=faceswap_occluder,
+            faceswap_mask_blur=faceswap_mask_blur,
+            faceswap_region_mask=faceswap_region_mask,
+            faceswap_score_threshold=faceswap_score_threshold,
+            faceswap_pixel_boost=faceswap_pixel_boost,
+            faceswap_selector_mode=faceswap_selector_mode,
+            faceswap_detector_model=faceswap_detector_model,
             fade_to_black=fade_to_black or False,
             custom_start_image=custom_start_image
         )
@@ -1357,6 +1384,15 @@ async def update_segment_prompt_endpoint(
             faceswap_faces_order=faceswap_faces_order,
             faceswap_faces_index=faceswap_faces_index,
             faceswap_source_image=faceswap_source_image,
+            faceswap_preset=faceswap_preset,
+            faceswap_model=faceswap_model,
+            faceswap_occluder=faceswap_occluder,
+            faceswap_mask_blur=faceswap_mask_blur,
+            faceswap_region_mask=faceswap_region_mask,
+            faceswap_score_threshold=faceswap_score_threshold,
+            faceswap_pixel_boost=faceswap_pixel_boost,
+            faceswap_selector_mode=faceswap_selector_mode,
+            faceswap_detector_model=faceswap_detector_model,
             fade_to_black=fade_to_black,
             custom_start_image=custom_start_image
         )

@@ -633,6 +633,14 @@ class QueueManager:
         faceswap_faces_order = segment.get("faceswap_faces_order", "left-right") or "left-right"
         faceswap_faces_index = segment.get("faceswap_faces_index", "0") or "0"
 
+        # Parse faceswap_params if present (per-segment preset settings)
+        faceswap_params = {}
+        if segment.get("faceswap_params"):
+            try:
+                faceswap_params = json.loads(segment["faceswap_params"])
+            except json.JSONDecodeError:
+                logger.warning(f"[Job {job_id}] Invalid faceswap_params JSON, using global settings")
+
         # If faceswap_source_image is set (a URL to a segment frame), extract the frame
         # and save it as a temp file to use as the faceswap source
         if faceswap_enabled and faceswap_source_image:
@@ -699,14 +707,15 @@ class QueueManager:
             faceswap_image=faceswap_image,
             faceswap_faces_order=faceswap_faces_order,
             faceswap_faces_index=faceswap_faces_index,
-            faceswap_model=get_setting("faceswap_model", "inswapper_128"),
-            faceswap_occluder=get_setting("faceswap_occluder", "xseg_1"),
-            faceswap_mask_blur=float(get_setting("faceswap_mask_blur", "0.3")),
-            faceswap_region_mask=get_setting("faceswap_region_mask", "false") == "true",
-            faceswap_score_threshold=float(get_setting("faceswap_score_threshold", "0.5")),
-            faceswap_pixel_boost=get_setting("faceswap_pixel_boost", "512x512"),
-            faceswap_selector_mode=get_setting("faceswap_selector_mode", "reference"),
-            faceswap_detector_model=get_setting("faceswap_detector_model", "retinaface"),
+            # Use per-segment preset settings if provided, otherwise fall back to global settings
+            faceswap_model=faceswap_params.get("model") or get_setting("faceswap_model", "inswapper_128"),
+            faceswap_occluder=faceswap_params.get("occluder") or get_setting("faceswap_occluder", "xseg_1"),
+            faceswap_mask_blur=float(faceswap_params.get("mask_blur") if faceswap_params.get("mask_blur") is not None else get_setting("faceswap_mask_blur", "0.3")),
+            faceswap_region_mask=faceswap_params.get("region_mask") if faceswap_params.get("region_mask") is not None else (get_setting("faceswap_region_mask", "false") == "true"),
+            faceswap_score_threshold=float(faceswap_params.get("score_threshold") if faceswap_params.get("score_threshold") is not None else get_setting("faceswap_score_threshold", "0.5")),
+            faceswap_pixel_boost=faceswap_params.get("pixel_boost") or get_setting("faceswap_pixel_boost", "512x512"),
+            faceswap_selector_mode=faceswap_params.get("selector_mode") or get_setting("faceswap_selector_mode", "reference"),
+            faceswap_detector_model=faceswap_params.get("detector_model") or get_setting("faceswap_detector_model", "retinaface"),
         )
 
         # Queue the prompt
