@@ -633,7 +633,9 @@ def init_db():
             "faceswap_occluder": "xseg_3",
             "faceswap_mask_blur": "0.2",
             "faceswap_region_mask": "true",
-            "faceswap_score_threshold": "0.5"
+            "faceswap_score_threshold": "0.5",
+            "faceswap_weight": "1.0",
+            "faceswap_pixel_boost": "512x512"
         }
 
         for key, value in default_settings.items():
