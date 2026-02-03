@@ -38,12 +38,14 @@ export default function Videos() {
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
+  const [loopVideo, setLoopVideo] = useState(false);
 
   // Shuffle mode state
   const [shuffleMode, setShuffleMode] = useState(false);
   const [shufflePlaylist, setShufflePlaylist] = useState([]);
   const [shuffleIndex, setShuffleIndex] = useState(0);
   const [shuffleHistory, setShuffleHistory] = useState([]);
+  const [shuffleLoop, setShuffleLoop] = useState(false);
   const shuffleVideoRef = useRef(null);
 
   useEffect(() => {
@@ -116,6 +118,20 @@ export default function Videos() {
     setPage(1);
   }, [searchQuery]);
 
+  // Keyboard handler for modal view (L to toggle loop)
+  useEffect(() => {
+    if (!selectedVideo) return;
+
+    function handleKeyDown(e) {
+      if (e.key === 'l' || e.key === 'L') {
+        setLoopVideo(prev => !prev);
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedVideo]);
+
   function handleDownload(jobId, jobName, event) {
     event.stopPropagation();
     const link = document.createElement('a');
@@ -175,6 +191,8 @@ export default function Videos() {
         nextShuffleVideo();
       } else if (e.key === 'ArrowLeft') {
         prevShuffleVideo();
+      } else if (e.key === 'l' || e.key === 'L') {
+        setShuffleLoop(prev => !prev);
       }
     }
 
@@ -182,9 +200,11 @@ export default function Videos() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [shuffleMode, nextShuffleVideo, prevShuffleVideo]);
 
-  // Handle video ended - auto advance
+  // Handle video ended - auto advance (unless loop is on)
   function handleShuffleVideoEnded() {
-    nextShuffleVideo();
+    if (!shuffleLoop) {
+      nextShuffleVideo();
+    }
   }
 
   const currentShuffleVideo = shufflePlaylist[shuffleIndex];
@@ -296,9 +316,18 @@ export default function Videos() {
                 src={API.getJobVideo(selectedVideo.id)}
                 controls
                 autoPlay
+                loop={loopVideo}
                 className="video-modal-player"
               />
               <Box className="video-modal-actions">
+                <Tooltip title={loopVideo ? "Loop: On" : "Loop: Off"}>
+                  <IconButton
+                    onClick={() => setLoopVideo(!loopVideo)}
+                    sx={{ color: loopVideo ? '#1976d2' : 'inherit' }}
+                  >
+                    <span style={{ fontSize: '20px' }}>🔁</span>
+                  </IconButton>
+                </Tooltip>
                 <Tooltip title="Download">
                   <IconButton
                     onClick={(e) => handleDownload(selectedVideo.id, selectedVideo.name, e)}
@@ -324,17 +353,18 @@ export default function Videos() {
             src={API.getJobVideo(currentShuffleVideo.id)}
             className="shuffle-video"
             autoPlay
-            loop={false}
+            loop={shuffleLoop}
             onEnded={handleShuffleVideoEnded}
           />
           <div className="shuffle-info">
             <span className="shuffle-title">{currentShuffleVideo.name}</span>
             <span className="shuffle-counter">
               {shuffleHistory.length} / {shufflePlaylist.length}
+              {shuffleLoop && <span style={{ marginLeft: '8px', color: '#4caf50' }}>🔁</span>}
             </span>
           </div>
           <div className="shuffle-hint">
-            ← Previous | Next → | Esc to exit
+            ← Previous | Next → | L Loop {shuffleLoop ? '(on)' : '(off)'} | Esc to exit
           </div>
         </div>
       )}
