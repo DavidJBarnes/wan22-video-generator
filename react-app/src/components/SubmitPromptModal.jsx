@@ -9,6 +9,43 @@ import LoraAutocomplete from './LoraAutocomplete';
 import ImageRepoBrowserModal from './ImageRepoBrowserModal';
 import './CreateJobModal.css';
 
+// FaceFusion preset configurations with use case descriptions
+const FACESWAP_PRESETS = {
+  clean_face: {
+    label: 'Clean Face - Unobstructed faces, maximum stability',
+    model: 'inswapper_128',
+    occluder: 'xseg_1',
+    maskBlur: 0.3,
+    regionMask: false,
+    scoreThreshold: 0.5,
+    pixelBoost: '512x512',
+    selectorMode: 'reference',
+    detectorModel: 'retinaface'
+  },
+  occlusion: {
+    label: 'Occlusion - Hands/objects blocking face',
+    model: 'inswapper_128',
+    occluder: 'xseg_3',
+    maskBlur: 0.4,
+    regionMask: true,
+    scoreThreshold: 0.4,
+    pixelBoost: '768x768',
+    selectorMode: 'reference',
+    detectorModel: 'retinaface'
+  },
+  quality: {
+    label: 'High Quality - Close-ups, maximum detail (slower)',
+    model: 'inswapper_128',
+    occluder: 'xseg_3',
+    maskBlur: 0.3,
+    regionMask: true,
+    scoreThreshold: 0.5,
+    pixelBoost: '1024x1024',
+    selectorMode: 'reference',
+    detectorModel: 'retinaface'
+  }
+};
+
 // Available face swap images (in ComfyUI input folder)
 // Configure these values to match your local face image files
 const FACESWAP_FACES = [
@@ -59,6 +96,8 @@ export default function SubmitPromptModal({
   // Faceswap source selection: 'preset' for static face images, 'segment' for segment frames
   const [faceswapSourceType, setFaceswapSourceType] = useState(defaultFaceswap?.sourceImage ? 'segment' : 'preset');
   const [faceswapSourceImage, setFaceswapSourceImage] = useState(defaultFaceswap?.sourceImage || '');
+  // Faceswap preset selection (clean_face, occlusion, quality)
+  const [faceswapPreset, setFaceswapPreset] = useState(defaultFaceswap?.preset || 'clean_face');
   const [segmentFrames, setSegmentFrames] = useState([]);
   const [hoverPreview, setHoverPreview] = useState(null);  // {url, x, y} for hover preview
 
@@ -289,14 +328,25 @@ export default function SubmitPromptModal({
           low_weight: slot.lowWeight
         }));
 
-      // Build faceswap options
+      // Build faceswap options with preset settings
+      const presetSettings = FACESWAP_PRESETS[faceswapPreset] || FACESWAP_PRESETS.clean_face;
       const faceswapOptions = {
         enabled: faceswapEnabled,
         image: faceswapEnabled && faceswapSourceType === 'preset' ? faceswapImage : '',
         facesOrder: faceswapEnabled ? faceswapFacesOrder : 'left-right',
         facesIndex: faceswapEnabled ? faceswapFacesIndex : '0',
         // Include segment frame source if selected
-        sourceImage: faceswapEnabled && faceswapSourceType === 'segment' ? faceswapSourceImage : ''
+        sourceImage: faceswapEnabled && faceswapSourceType === 'segment' ? faceswapSourceImage : '',
+        // Preset settings for FaceFusion
+        preset: faceswapPreset,
+        model: presetSettings.model,
+        occluder: presetSettings.occluder,
+        maskBlur: presetSettings.maskBlur,
+        regionMask: presetSettings.regionMask,
+        scoreThreshold: presetSettings.scoreThreshold,
+        pixelBoost: presetSettings.pixelBoost,
+        selectorMode: presetSettings.selectorMode,
+        detectorModel: presetSettings.detectorModel
       };
 
       // Send both resolved prompt and original template (with tags intact)
@@ -537,10 +587,26 @@ export default function SubmitPromptModal({
                   onChange={(e) => setFaceswapEnabled(e.target.checked)}
                 />
               }
-              label={<span style={{ fontWeight: 500 }}>Enable Face Swap (ReActor)</span>}
+              label={<span style={{ fontWeight: 500 }}>Enable Face Swap (FaceFusion)</span>}
             />
             {faceswapEnabled && (
               <>
+                {/* Preset selector */}
+                <FormControl fullWidth variant="outlined" size="small" sx={{ mt: 1, mb: 1 }}>
+                  <InputLabel>Preset</InputLabel>
+                  <Select
+                    value={faceswapPreset}
+                    onChange={(e) => setFaceswapPreset(e.target.value)}
+                    label="Preset"
+                  >
+                    {Object.entries(FACESWAP_PRESETS).map(([key, preset]) => (
+                      <MenuItem key={key} value={key}>
+                        {preset.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
                 {/* Source type selector */}
                 <div style={{ display: 'flex', gap: '8px', marginTop: '8px', marginBottom: '8px' }}>
                   <Button

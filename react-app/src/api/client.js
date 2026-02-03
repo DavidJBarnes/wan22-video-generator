@@ -350,6 +350,34 @@ class APIClient {
       if (faceswapOptions.sourceImage) {
         formData.append('faceswap_source_image', faceswapOptions.sourceImage);
       }
+      // FaceFusion preset settings
+      if (faceswapOptions.preset) {
+        formData.append('faceswap_preset', faceswapOptions.preset);
+      }
+      if (faceswapOptions.model) {
+        formData.append('faceswap_model', faceswapOptions.model);
+      }
+      if (faceswapOptions.occluder) {
+        formData.append('faceswap_occluder', faceswapOptions.occluder);
+      }
+      if (faceswapOptions.maskBlur !== undefined && faceswapOptions.maskBlur !== null) {
+        formData.append('faceswap_mask_blur', faceswapOptions.maskBlur.toString());
+      }
+      if (faceswapOptions.regionMask !== undefined && faceswapOptions.regionMask !== null) {
+        formData.append('faceswap_region_mask', faceswapOptions.regionMask.toString());
+      }
+      if (faceswapOptions.scoreThreshold !== undefined && faceswapOptions.scoreThreshold !== null) {
+        formData.append('faceswap_score_threshold', faceswapOptions.scoreThreshold.toString());
+      }
+      if (faceswapOptions.pixelBoost) {
+        formData.append('faceswap_pixel_boost', faceswapOptions.pixelBoost);
+      }
+      if (faceswapOptions.selectorMode) {
+        formData.append('faceswap_selector_mode', faceswapOptions.selectorMode);
+      }
+      if (faceswapOptions.detectorModel) {
+        formData.append('faceswap_detector_model', faceswapOptions.detectorModel);
+      }
     }
 
     // Custom start image (overrides default previous segment's last frame)
