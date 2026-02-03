@@ -33,7 +33,7 @@ export function JobsProvider({ children }) {
   const fetchJobs = useCallback(async () => {
     try {
       const [jobsData, comfy] = await Promise.all([
-        API.getJobs(),
+        API.getJobs(10000), // Fetch all jobs for accurate stats
         API.checkComfyStatus()
       ]);
 

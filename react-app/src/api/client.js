@@ -74,8 +74,12 @@ class APIClient {
 
   // ============== Jobs ==============
 
-  async getJobs(limit = 100, offset = 0) {
-    return this.request(`/jobs?limit=${limit}&offset=${offset}`);
+  async getJobs(limit = 100, offset = 0, statuses = null) {
+    let url = `/jobs?limit=${limit}&offset=${offset}`;
+    if (statuses && statuses.length > 0) {
+      url += `&status=${statuses.join(',')}`;
+    }
+    return this.request(url);
   }
 
   async getJob(jobId) {
