@@ -37,6 +37,7 @@ export default function Settings() {
   const [faceswapRegionMask, setFaceswapRegionMask] = useState(true);
   const [faceswapScoreThreshold, setFaceswapScoreThreshold] = useState(0.5);
   const [faceswapWeight, setFaceswapWeight] = useState(1.0);
+  const [faceswapPixelBoost, setFaceswapPixelBoost] = useState('512x512');
 
   // VR 180 stereo settings (validated for Quest 3S)
   const [vrEyeSeparation, setVrEyeSeparation] = useState(0.015);
@@ -94,6 +95,7 @@ export default function Settings() {
       setFaceswapRegionMask(s.faceswap_region_mask !== 'false');
       setFaceswapScoreThreshold(parseFloat(s.faceswap_score_threshold) || 0.5);
       setFaceswapWeight(parseFloat(s.faceswap_weight) || 1.0);
+      setFaceswapPixelBoost(s.faceswap_pixel_boost || '512x512');
 
       // VR settings (validated for Quest 3S)
       setVrEyeSeparation(parseFloat(s.vr_eye_separation) || 0.015);
@@ -203,7 +205,8 @@ export default function Settings() {
         faceswap_mask_blur: String(faceswapMaskBlur),
         faceswap_region_mask: String(faceswapRegionMask),
         faceswap_score_threshold: String(faceswapScoreThreshold),
-        faceswap_weight: String(faceswapWeight)
+        faceswap_weight: String(faceswapWeight),
+        faceswap_pixel_boost: faceswapPixelBoost
       };
 
       await API.updateSettings(settingsPayload);
@@ -675,6 +678,23 @@ export default function Settings() {
             </div>
             <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
               Controls how much of the source face is applied. Higher values = stronger source face, lower values = original face shines through.
+            </small>
+          </div>
+
+          <div className="form-group" style={{ marginTop: '12px' }}>
+            <label>Pixel Boost (Face Resolution)</label>
+            <select
+              value={faceswapPixelBoost}
+              onChange={(e) => setFaceswapPixelBoost(e.target.value)}
+              style={{ width: '100%' }}
+            >
+              <option value="256x256">256x256 - Fast, lower quality</option>
+              <option value="512x512">512x512 - Balanced (default)</option>
+              <option value="768x768">768x768 - Higher quality, slower</option>
+              <option value="1024x1024">1024x1024 - Best quality, slowest</option>
+            </select>
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+              Resolution at which face swapping is performed. Higher values produce sharper, more detailed faces but require more VRAM and processing time. Use 512x512 for most cases, 768x768+ for close-up shots where face detail matters.
             </small>
           </div>
         </div>
