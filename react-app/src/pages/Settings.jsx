@@ -36,7 +36,6 @@ export default function Settings() {
   const [faceswapMaskBlur, setFaceswapMaskBlur] = useState(0.2);
   const [faceswapRegionMask, setFaceswapRegionMask] = useState(true);
   const [faceswapScoreThreshold, setFaceswapScoreThreshold] = useState(0.5);
-  const [faceswapWeight, setFaceswapWeight] = useState(1.0);
   const [faceswapPixelBoost, setFaceswapPixelBoost] = useState('512x512');
 
   // VR 180 stereo settings (validated for Quest 3S)
@@ -94,7 +93,6 @@ export default function Settings() {
       setFaceswapMaskBlur(parseFloat(s.faceswap_mask_blur) || 0.2);
       setFaceswapRegionMask(s.faceswap_region_mask !== 'false');
       setFaceswapScoreThreshold(parseFloat(s.faceswap_score_threshold) || 0.5);
-      setFaceswapWeight(parseFloat(s.faceswap_weight) || 1.0);
       setFaceswapPixelBoost(s.faceswap_pixel_boost || '512x512');
 
       // VR settings (validated for Quest 3S)
@@ -205,7 +203,6 @@ export default function Settings() {
         faceswap_mask_blur: String(faceswapMaskBlur),
         faceswap_region_mask: String(faceswapRegionMask),
         faceswap_score_threshold: String(faceswapScoreThreshold),
-        faceswap_weight: String(faceswapWeight),
         faceswap_pixel_boost: faceswapPixelBoost
       };
 
@@ -658,26 +655,6 @@ export default function Settings() {
             </div>
             <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
               Minimum confidence score for face detection. Lower values detect more faces but may include false positives.
-            </small>
-          </div>
-
-          <div className="form-group" style={{ marginTop: '12px' }}>
-            <label>Face Swap Weight: {faceswapWeight}</label>
-            <input
-              type="range"
-              value={faceswapWeight}
-              onChange={(e) => setFaceswapWeight(parseFloat(e.target.value))}
-              min="0.0"
-              max="1.0"
-              step="0.05"
-              style={{ width: '100%' }}
-            />
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#666', fontSize: '11px' }}>
-              <span>0.0 (original face)</span>
-              <span>1.0 (full swap)</span>
-            </div>
-            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
-              Controls how much of the source face is applied. Higher values = stronger source face, lower values = original face shines through.
             </small>
           </div>
 

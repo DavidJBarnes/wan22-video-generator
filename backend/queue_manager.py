@@ -704,7 +704,6 @@ class QueueManager:
             faceswap_mask_blur=float(get_setting("faceswap_mask_blur", "0.2")),
             faceswap_region_mask=get_setting("faceswap_region_mask", "true") == "true",
             faceswap_score_threshold=float(get_setting("faceswap_score_threshold", "0.5")),
-            faceswap_weight=float(get_setting("faceswap_weight", "1.0")),
             faceswap_pixel_boost=get_setting("faceswap_pixel_boost", "512x512"),
         )
 
