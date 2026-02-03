@@ -746,14 +746,27 @@ def get_job(job_id: int) -> Optional[Dict[str, Any]]:
         return None
 
 
-def get_all_jobs(limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
-    """Get all jobs with pagination."""
+def get_all_jobs(limit: int = 100, offset: int = 0, statuses: List[str] = None) -> List[Dict[str, Any]]:
+    """Get all jobs with pagination and optional status filtering.
+
+    Args:
+        limit: Maximum number of jobs to return
+        offset: Number of jobs to skip
+        statuses: Optional list of statuses to filter by (e.g., ['pending', 'running'])
+    """
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            (limit, offset)
-        )
+        if statuses:
+            placeholders = ','.join('?' * len(statuses))
+            cursor.execute(
+                f"SELECT * FROM jobs WHERE status IN ({placeholders}) ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (*statuses, limit, offset)
+            )
+        else:
+            cursor.execute(
+                "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (limit, offset)
+            )
         return [_row_to_job_dict(row) for row in cursor.fetchall()]
 
 

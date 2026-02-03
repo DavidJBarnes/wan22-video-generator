@@ -1,6 +1,6 @@
 """API routes for the ComfyUI Queue Manager."""
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks, Query
 from fastapi.responses import RedirectResponse, FileResponse, Response
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
@@ -381,8 +381,17 @@ class QueueStatus(BaseModel):
 # ============== Job Endpoints ==============
 
 @router.get("/jobs")
-async def list_jobs(limit: int = 100, offset: int = 0):
-    """Get all jobs with pagination, enriched with segment counts and queue info.
+async def list_jobs(
+    limit: int = 100,
+    offset: int = 0,
+    status: Optional[str] = Query(None, description="Comma-separated list of statuses to filter by")
+):
+    """Get all jobs with pagination and optional status filtering.
+
+    Args:
+        limit: Maximum number of jobs to return (default 100)
+        offset: Number of jobs to skip for pagination
+        status: Comma-separated list of statuses (e.g., 'pending,running,awaiting_prompt')
 
     Returns:
         Object with jobs list, avg_run_time, and queue position info.
@@ -390,7 +399,8 @@ async def list_jobs(limit: int = 100, offset: int = 0):
         - queue_position: Position in queue (1-based) for pending jobs, null otherwise
         - estimated_wait_seconds: Estimated wait time based on queue position × avg_run_time
     """
-    jobs = get_all_jobs(limit=limit, offset=offset)
+    statuses = [s.strip() for s in status.split(',')] if status else None
+    jobs = get_all_jobs(limit=limit, offset=offset, statuses=statuses)
     enriched_jobs = [enrich_job_with_segments(job) for job in jobs]
     avg_time = get_avg_run_time(num_segments=5)
 
