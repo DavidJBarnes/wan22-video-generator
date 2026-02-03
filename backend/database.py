@@ -630,11 +630,13 @@ def init_db():
             "vr_target_fps": "60",
             # FaceFusion face swap settings
             "faceswap_model": "inswapper_128",
-            "faceswap_occluder": "xseg_3",
-            "faceswap_mask_blur": "0.2",
-            "faceswap_region_mask": "true",
+            "faceswap_occluder": "xseg_1",
+            "faceswap_mask_blur": "0.3",
+            "faceswap_region_mask": "false",
             "faceswap_score_threshold": "0.5",
-            "faceswap_pixel_boost": "512x512"
+            "faceswap_pixel_boost": "512x512",
+            "faceswap_selector_mode": "reference",
+            "faceswap_detector_model": "retinaface"
         }
 
         for key, value in default_settings.items():

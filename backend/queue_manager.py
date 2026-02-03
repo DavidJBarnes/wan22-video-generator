@@ -705,6 +705,8 @@ class QueueManager:
             faceswap_region_mask=get_setting("faceswap_region_mask", "true") == "true",
             faceswap_score_threshold=float(get_setting("faceswap_score_threshold", "0.5")),
             faceswap_pixel_boost=get_setting("faceswap_pixel_boost", "512x512"),
+            faceswap_selector_mode=get_setting("faceswap_selector_mode", "reference"),
+            faceswap_detector_model=get_setting("faceswap_detector_model", "retinaface"),
         )
 
         # Queue the prompt

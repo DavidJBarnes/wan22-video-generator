@@ -37,6 +37,8 @@ export default function Settings() {
   const [faceswapRegionMask, setFaceswapRegionMask] = useState(true);
   const [faceswapScoreThreshold, setFaceswapScoreThreshold] = useState(0.5);
   const [faceswapPixelBoost, setFaceswapPixelBoost] = useState('512x512');
+  const [faceswapSelectorMode, setFaceswapSelectorMode] = useState('reference');
+  const [faceswapDetectorModel, setFaceswapDetectorModel] = useState('retinaface');
 
   // VR 180 stereo settings (validated for Quest 3S)
   const [vrEyeSeparation, setVrEyeSeparation] = useState(0.015);
@@ -94,6 +96,8 @@ export default function Settings() {
       setFaceswapRegionMask(s.faceswap_region_mask !== 'false');
       setFaceswapScoreThreshold(parseFloat(s.faceswap_score_threshold) || 0.5);
       setFaceswapPixelBoost(s.faceswap_pixel_boost || '512x512');
+      setFaceswapSelectorMode(s.faceswap_selector_mode || 'reference');
+      setFaceswapDetectorModel(s.faceswap_detector_model || 'retinaface');
 
       // VR settings (validated for Quest 3S)
       setVrEyeSeparation(parseFloat(s.vr_eye_separation) || 0.015);
@@ -203,7 +207,9 @@ export default function Settings() {
         faceswap_mask_blur: String(faceswapMaskBlur),
         faceswap_region_mask: String(faceswapRegionMask),
         faceswap_score_threshold: String(faceswapScoreThreshold),
-        faceswap_pixel_boost: faceswapPixelBoost
+        faceswap_pixel_boost: faceswapPixelBoost,
+        faceswap_selector_mode: faceswapSelectorMode,
+        faceswap_detector_model: faceswapDetectorModel
       };
 
       await API.updateSettings(settingsPayload);
@@ -672,6 +678,40 @@ export default function Settings() {
             </select>
             <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
               Resolution at which face swapping is performed. Higher values produce sharper, more detailed faces but require more VRAM and processing time. Use 512x512 for most cases, 768x768+ for close-up shots where face detail matters.
+            </small>
+          </div>
+
+          <div className="form-group" style={{ marginTop: '12px' }}>
+            <label>Face Selector Mode</label>
+            <select
+              value={faceswapSelectorMode}
+              onChange={(e) => setFaceswapSelectorMode(e.target.value)}
+              style={{ width: '100%' }}
+            >
+              <option value="one">One - Select by position (may jitter)</option>
+              <option value="reference">Reference - Track by similarity (recommended)</option>
+              <option value="many">Many - Swap all detected faces</option>
+            </select>
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+              How faces are selected for swapping. "Reference" mode tracks the same face across frames using similarity matching, reducing jitter. "One" selects by position which can vary frame-to-frame.
+            </small>
+          </div>
+
+          <div className="form-group" style={{ marginTop: '12px' }}>
+            <label>Face Detector Model</label>
+            <select
+              value={faceswapDetectorModel}
+              onChange={(e) => setFaceswapDetectorModel(e.target.value)}
+              style={{ width: '100%' }}
+            >
+              <option value="retinaface">RetinaFace - More stable/consistent (recommended)</option>
+              <option value="scrfd">SCRFD - Fast and accurate</option>
+              <option value="yolo_face">YOLO Face - YOLO-based detection</option>
+              <option value="yunet">YuNet - Lightweight</option>
+              <option value="many">Many - Multiple detectors (most robust, slowest)</option>
+            </select>
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+              Face detection model. RetinaFace tends to give more consistent landmark positions across frames, reducing jitter in video face swaps.
             </small>
           </div>
         </div>

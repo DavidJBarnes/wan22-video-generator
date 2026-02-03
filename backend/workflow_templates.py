@@ -252,6 +252,8 @@ def build_wan_i2v_workflow(
     faceswap_region_mask: bool = True,
     faceswap_score_threshold: float = 0.5,
     faceswap_pixel_boost: str = "512x512",
+    faceswap_selector_mode: str = "reference",
+    faceswap_detector_model: str = "retinaface",
 ) -> Dict[str, Any]:
     """Build a Wan2.2 i2v workflow by injecting values into the pre-converted template.
 
@@ -408,30 +410,37 @@ def build_wan_i2v_workflow(
         # Add FaceFusion AdvancedSwapFaceImage node (node 183)
         # Replaces ReActor - has built-in occlusion detection for hands, tongue, etc.
         # Processes video frames as a batch internally
+        facefusion_inputs = {
+            "source_images": ["188", 0],       # Face to swap in
+            "target_image": ["87", 0],         # Decoded video frames from VAEDecode
+            "api_token": "-1",                 # Local mode, no API
+            "face_swapper_model": faceswap_model,       # Configurable model
+            "face_detector_model": faceswap_detector_model,  # Configurable detector
+            "pixel_boost": faceswap_pixel_boost,  # Resolution for face processing
+            "face_occluder_model": faceswap_occluder,   # Configurable occlusion model
+            "face_parser_model": "bisenet_resnet_34",   # Face parsing for regions
+            "face_mask_blur": faceswap_mask_blur,       # Configurable blur
+            "face_selector_mode": faceswap_selector_mode,  # Configurable: one, many, reference
+            "face_position": int(faceswap_faces_index),  # Which face to swap (0-indexed)
+            "sort_order": faceswap_faces_order.replace("-", "-"),  # Face sorting order
+            "score_threshold": faceswap_score_threshold,  # Configurable detection confidence
+            "use_box_mask": True,              # Use rectangular mask
+            "use_occlusion_mask": True,        # ENABLE OCCLUSION DETECTION
+            "use_area_mask": False,            # Don't use area mask
+            "use_region_mask": faceswap_region_mask,    # Configurable region mask
+            "face_mask_areas": "upper-face,lower-face,mouth",
+            "face_mask_regions": "skin,nose,mouth,upper-lip,lower-lip",
+            "face_mask_padding": "0,0,0,0"     # No padding
+        }
+
+        # In reference mode, use the source face image as the reference for tracking
+        if faceswap_selector_mode == "reference":
+            facefusion_inputs["reference_image"] = ["188", 0]  # Same as source
+            facefusion_inputs["reference_face_distance"] = 0.6  # Default similarity threshold
+
         workflow["183"] = {
             "class_type": "AdvancedSwapFaceImage",
-            "inputs": {
-                "source_images": ["188", 0],       # Face to swap in
-                "target_image": ["87", 0],         # Decoded video frames from VAEDecode
-                "api_token": "-1",                 # Local mode, no API
-                "face_swapper_model": faceswap_model,       # Configurable model
-                "face_detector_model": "scrfd",    # Fast and accurate detector
-                "pixel_boost": faceswap_pixel_boost,  # Resolution for face processing (higher = better quality)
-                "face_occluder_model": faceswap_occluder,   # Configurable occlusion model
-                "face_parser_model": "bisenet_resnet_34",   # Face parsing for regions
-                "face_mask_blur": faceswap_mask_blur,       # Configurable blur
-                "face_selector_mode": "one",       # Swap one face per frame
-                "face_position": int(faceswap_faces_index),  # Which face to swap (0-indexed)
-                "sort_order": faceswap_faces_order.replace("-", "-"),  # Face sorting order
-                "score_threshold": faceswap_score_threshold,  # Configurable detection confidence
-                "use_box_mask": True,              # Use rectangular mask
-                "use_occlusion_mask": True,        # ENABLE OCCLUSION DETECTION
-                "use_area_mask": False,            # Don't use area mask
-                "use_region_mask": faceswap_region_mask,    # Configurable region mask
-                "face_mask_areas": "upper-face,lower-face,mouth",
-                "face_mask_regions": "skin,nose,mouth,upper-lip,lower-lip",
-                "face_mask_padding": "0,0,0,0"     # No padding
-            },
+            "inputs": facefusion_inputs,
             "_meta": {"title": "FaceFusion Face Swap"}
         }
 
@@ -456,7 +465,8 @@ def build_wan_i2v_workflow(
         }
 
         print(f"[Workflow] Added faceswap nodes: 188 (LoadImage), 183 (FaceFusion), 186 (VHS_VideoCombine)")
-        print(f"[Workflow] FaceFusion: {faceswap_model}, {faceswap_occluder} occlusion, pixel_boost={faceswap_pixel_boost}")
+        print(f"[Workflow] FaceFusion: {faceswap_model}, detector={faceswap_detector_model}, mode={faceswap_selector_mode}")
+        print(f"[Workflow] FaceFusion: {faceswap_occluder} occlusion, pixel_boost={faceswap_pixel_boost}")
         print(f"[Workflow] Removed node 108 (SaveVideo)")
 
     # Always add RIFE frame interpolation (required for both 30fps and 60fps output)

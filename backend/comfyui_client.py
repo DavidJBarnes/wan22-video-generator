@@ -339,6 +339,8 @@ class ComfyUIClient:
         faceswap_region_mask: bool = True,
         faceswap_score_threshold: float = 0.5,
         faceswap_pixel_boost: str = "512x512",
+        faceswap_selector_mode: str = "reference",
+        faceswap_detector_model: str = "retinaface",
     ) -> Dict[str, Any]:
         """Build a Wan2.2 i2v workflow using the pre-converted API template.
 
@@ -361,6 +363,8 @@ class ComfyUIClient:
             faceswap_region_mask: Enable region-specific masking
             faceswap_score_threshold: Face detection confidence threshold (0.0-1.0)
             faceswap_pixel_boost: Resolution for face processing (256x256 to 1024x1024)
+            faceswap_selector_mode: Face selection mode (one, many, reference)
+            faceswap_detector_model: Face detector model (scrfd, retinaface, yolo_face, yunet, many)
         """
         return _build_wan_i2v_workflow(
             prompt=prompt,
@@ -385,6 +389,8 @@ class ComfyUIClient:
             faceswap_region_mask=faceswap_region_mask,
             faceswap_score_threshold=faceswap_score_threshold,
             faceswap_pixel_boost=faceswap_pixel_boost,
+            faceswap_selector_mode=faceswap_selector_mode,
+            faceswap_detector_model=faceswap_detector_model,
         )
 
     def build_workflow(
