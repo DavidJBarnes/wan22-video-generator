@@ -333,7 +333,7 @@ class ComfyUIClient:
         faceswap_image: str = "",
         faceswap_faces_order: str = "left-right",
         faceswap_faces_index: str = "0",
-        faceswap_model: str = "hyperswap_1c_256",
+        faceswap_model: str = "inswapper_128",
         faceswap_occluder: str = "xseg_3",
         faceswap_mask_blur: float = 0.2,
         faceswap_region_mask: bool = True,

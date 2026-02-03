@@ -629,7 +629,7 @@ def init_db():
             # VR video target FPS (30, 60, or 90)
             "vr_target_fps": "60",
             # FaceFusion face swap settings
-            "faceswap_model": "hyperswap_1c_256",
+            "faceswap_model": "inswapper_128",
             "faceswap_occluder": "xseg_3",
             "faceswap_mask_blur": "0.2",
             "faceswap_region_mask": "true",
