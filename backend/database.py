@@ -1475,12 +1475,12 @@ def create_first_segment(
         cursor.execute("""
             INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora,
                                       faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index,
-                                      faceswap_source_image, faceswap_params, fade_to_black)
-            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      faceswap_source_image, faceswap_params, fade_to_black, created_at)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (job_id, 0, initial_prompt, start_image_url,
               serialize_loras(high_loras), serialize_loras(low_loras),
               1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index,
-              faceswap_source_image, faceswap_params, 1 if fade_to_black else 0))
+              faceswap_source_image, faceswap_params, 1 if fade_to_black else 0, utc_now_iso()))
 
 
 def create_next_segment(
@@ -1562,12 +1562,12 @@ def create_next_segment(
         cursor.execute("""
             INSERT INTO job_segments (job_id, segment_index, status, prompt, prompt_template, start_image_url, high_lora, low_lora,
                                       faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index,
-                                      faceswap_source_image, faceswap_params, fade_to_black, custom_start_image)
-            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      faceswap_source_image, faceswap_params, fade_to_black, custom_start_image, created_at)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (job_id, segment_index, prompt, template, start_image_url,
               serialize_loras(high_loras), serialize_loras(low_loras),
               1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index,
-              faceswap_source_image, faceswap_params, 1 if fade_to_black else 0, custom_start_image))
+              faceswap_source_image, faceswap_params, 1 if fade_to_black else 0, custom_start_image, utc_now_iso()))
 
 
 def create_segments_for_job(
@@ -1593,20 +1593,21 @@ def create_segments_for_job(
     """
     with get_connection() as conn:
         cursor = conn.cursor()
+        now = utc_now_iso()
         for i in range(total_segments):
             if i == 0:
                 # First segment uses the uploaded image, initial prompt, and LoRA selections
                 cursor.execute("""
-                    INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora)
-                    VALUES (?, ?, 'pending', ?, ?, ?, ?)
+                    INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora, created_at)
+                    VALUES (?, ?, 'pending', ?, ?, ?, ?, ?)
                 """, (job_id, i, initial_prompt, start_image_url,
-                      serialize_loras(high_loras), serialize_loras(low_loras)))
+                      serialize_loras(high_loras), serialize_loras(low_loras), now))
             else:
                 # Subsequent segments start with no prompt - user provides after previous segment completes
                 cursor.execute("""
-                    INSERT INTO job_segments (job_id, segment_index, status)
-                    VALUES (?, ?, 'pending')
-                """, (job_id, i))
+                    INSERT INTO job_segments (job_id, segment_index, status, created_at)
+                    VALUES (?, ?, 'pending', ?)
+                """, (job_id, i, now))
 
 
 def get_job_segments(job_id: int) -> List[Dict[str, Any]]:
