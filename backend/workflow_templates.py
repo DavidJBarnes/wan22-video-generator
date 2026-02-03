@@ -254,6 +254,7 @@ def build_wan_i2v_workflow(
     faceswap_pixel_boost: str = "512x512",
     faceswap_selector_mode: str = "reference",
     faceswap_detector_model: str = "retinaface",
+    faceswap_reference_distance: float = 0.8,
 ) -> Dict[str, Any]:
     """Build a Wan2.2 i2v workflow by injecting values into the pre-converted template.
 
@@ -436,7 +437,7 @@ def build_wan_i2v_workflow(
         # In reference mode, use the source face image as the reference for tracking
         if faceswap_selector_mode == "reference":
             facefusion_inputs["reference_image"] = ["188", 0]  # Same as source
-            facefusion_inputs["reference_face_distance"] = 0.6  # Default similarity threshold
+            facefusion_inputs["reference_face_distance"] = faceswap_reference_distance
 
         workflow["183"] = {
             "class_type": "AdvancedSwapFaceImage",

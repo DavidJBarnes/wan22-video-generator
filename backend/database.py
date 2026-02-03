@@ -644,6 +644,7 @@ def init_db():
             "faceswap_pixel_boost": "512x512",
             "faceswap_selector_mode": "reference",
             "faceswap_detector_model": "retinaface",
+            "faceswap_reference_distance": "0.8",
             # FaceFusion preset definitions (JSON)
             "faceswap_presets": json.dumps({
                 "clean_face": {
@@ -655,7 +656,8 @@ def init_db():
                     "scoreThreshold": 0.5,
                     "pixelBoost": "512x512",
                     "selectorMode": "reference",
-                    "detectorModel": "retinaface"
+                    "detectorModel": "retinaface",
+                    "referenceFaceDistance": 0.8
                 },
                 "occlusion": {
                     "label": "Occlusion - Hands/objects blocking face",
@@ -666,7 +668,8 @@ def init_db():
                     "scoreThreshold": 0.4,
                     "pixelBoost": "768x768",
                     "selectorMode": "reference",
-                    "detectorModel": "retinaface"
+                    "detectorModel": "retinaface",
+                    "referenceFaceDistance": 0.8
                 },
                 "quality": {
                     "label": "High Quality - Close-ups, maximum detail (slower)",
@@ -677,7 +680,8 @@ def init_db():
                     "scoreThreshold": 0.5,
                     "pixelBoost": "1024x1024",
                     "selectorMode": "reference",
-                    "detectorModel": "retinaface"
+                    "detectorModel": "retinaface",
+                    "referenceFaceDistance": 0.8
                 }
             })
         }

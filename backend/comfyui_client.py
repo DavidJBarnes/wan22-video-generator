@@ -341,6 +341,7 @@ class ComfyUIClient:
         faceswap_pixel_boost: str = "512x512",
         faceswap_selector_mode: str = "reference",
         faceswap_detector_model: str = "retinaface",
+        faceswap_reference_distance: float = 0.8,
     ) -> Dict[str, Any]:
         """Build a Wan2.2 i2v workflow using the pre-converted API template.
 
@@ -391,6 +392,7 @@ class ComfyUIClient:
             faceswap_pixel_boost=faceswap_pixel_boost,
             faceswap_selector_mode=faceswap_selector_mode,
             faceswap_detector_model=faceswap_detector_model,
+            faceswap_reference_distance=faceswap_reference_distance,
         )
 
     def build_workflow(

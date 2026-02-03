@@ -716,6 +716,7 @@ class QueueManager:
             faceswap_pixel_boost=faceswap_params.get("pixel_boost") or get_setting("faceswap_pixel_boost", "512x512"),
             faceswap_selector_mode=faceswap_params.get("selector_mode") or get_setting("faceswap_selector_mode", "reference"),
             faceswap_detector_model=faceswap_params.get("detector_model") or get_setting("faceswap_detector_model", "retinaface"),
+            faceswap_reference_distance=float(faceswap_params.get("reference_face_distance") if faceswap_params.get("reference_face_distance") is not None else get_setting("faceswap_reference_distance", "0.8")),
         )
 
         # Queue the prompt
