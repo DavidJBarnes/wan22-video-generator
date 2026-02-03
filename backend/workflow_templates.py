@@ -251,6 +251,7 @@ def build_wan_i2v_workflow(
     faceswap_mask_blur: float = 0.2,
     faceswap_region_mask: bool = True,
     faceswap_score_threshold: float = 0.5,
+    faceswap_weight: float = 1.0,
 ) -> Dict[str, Any]:
     """Build a Wan2.2 i2v workflow by injecting values into the pre-converted template.
 
@@ -270,8 +271,9 @@ def build_wan_i2v_workflow(
                - low_file: LoRA filename for low noise pass
                If empty/None, no user LoRAs are applied (only lightx2v acceleration)
         output_prefix: Filename prefix for output video (sanitized job name)
-        faceswap_enabled: Whether to enable face swapping via ReActor
+        faceswap_enabled: Whether to enable face swapping via FaceFusion
         faceswap_image: Filename of the face image to swap in (in ComfyUI input folder)
+        faceswap_weight: Face swap weight (0.0-1.0, higher = stronger source face)
 
     Returns:
         ComfyUI API workflow dict ready to submit
@@ -413,6 +415,7 @@ def build_wan_i2v_workflow(
                 "target_image": ["87", 0],         # Decoded video frames from VAEDecode
                 "api_token": "-1",                 # Local mode, no API
                 "face_swapper_model": faceswap_model,       # Configurable model
+                "face_swapper_weight": faceswap_weight,     # Weight 0.0-1.0 (higher = stronger source face)
                 "face_detector_model": "scrfd",    # Fast and accurate detector
                 "pixel_boost": "512x512",          # Balance of quality/speed
                 "face_occluder_model": faceswap_occluder,   # Configurable occlusion model
@@ -454,7 +457,7 @@ def build_wan_i2v_workflow(
         }
 
         print(f"[Workflow] Added faceswap nodes: 188 (LoadImage), 183 (FaceFusion), 186 (VHS_VideoCombine)")
-        print(f"[Workflow] FaceFusion: hyperswap_1c_256, xseg_3 occlusion, region_mask=ON, blur=0.2")
+        print(f"[Workflow] FaceFusion: {faceswap_model}, {faceswap_occluder} occlusion, weight={faceswap_weight}, blur={faceswap_mask_blur}")
         print(f"[Workflow] Removed node 108 (SaveVideo)")
 
     # Always add RIFE frame interpolation (required for both 30fps and 60fps output)
