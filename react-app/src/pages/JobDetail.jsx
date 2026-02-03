@@ -687,12 +687,23 @@ export default function JobDetail() {
   function buildDefaultFaceswap(segment, jobParams) {
     // First try to get from segment (previous segment's settings)
     if (segment && segment.faceswap_enabled) {
+      // Parse faceswap_params JSON to get preset (stored as JSON string in database)
+      let preset = 'clean_face';
+      if (segment.faceswap_params) {
+        try {
+          const params = JSON.parse(segment.faceswap_params);
+          preset = params.preset || 'clean_face';
+        } catch (e) {
+          console.warn('Failed to parse faceswap_params:', e);
+        }
+      }
       return {
         enabled: Boolean(segment.faceswap_enabled),
         image: segment.faceswap_image || '',
         facesOrder: segment.faceswap_faces_order || 'left-right',
         facesIndex: segment.faceswap_faces_index || '0',
-        sourceImage: segment.faceswap_source_image || ''
+        sourceImage: segment.faceswap_source_image || '',
+        preset
       };
     }
     // Fall back to job parameters (initial job settings)
@@ -702,7 +713,8 @@ export default function JobDetail() {
         image: jobParams.faceswap_image || '',
         facesOrder: jobParams.faceswap_faces_order || 'left-right',
         facesIndex: jobParams.faceswap_faces_index || '0',
-        sourceImage: jobParams.faceswap_source_image || ''
+        sourceImage: jobParams.faceswap_source_image || '',
+        preset: jobParams.faceswap_preset || 'clean_face'
       };
     }
     return null;
