@@ -428,7 +428,7 @@ def apply_fade_effects(input_path: str, output_path: str, fade_in: bool = False,
 
 
 def stitch_videos(video_paths: List[str], output_path: str, segment_info: Optional[List[dict]] = None,
-                  high_quality: bool = False, offsets: Optional[dict] = None) -> bool:
+                  high_quality: bool = False, offsets: Optional[dict] = None) -> tuple:
     """Stitch multiple videos together using ffmpeg filter_complex.
 
     By default, drops the first frame from segments 1+ to eliminate duplicate frames at boundaries
@@ -449,11 +449,47 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
                 If not provided, defaults to 0 for first segment, 1 for others.
 
     Returns:
-        True if stitching was successful, False otherwise
+        Tuple of (success: bool, error_message: str or None)
+        For backward compatibility, also accepts being called and treated as bool
     """
     if not video_paths:
         print("[VideoUtils] No videos to stitch")
-        return False
+        return False, "No videos to stitch"
+
+    # Check for resolution mismatches before attempting to stitch
+    resolutions = []
+    for i, video_path in enumerate(video_paths):
+        try:
+            cmd = [
+                "ffprobe", "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=width,height",
+                "-of", "csv=p=0",
+                video_path
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0 and result.stdout.strip():
+                w, h = result.stdout.strip().split(",")
+                resolutions.append((int(w), int(h), video_path))
+            else:
+                resolutions.append((None, None, video_path))
+        except Exception as e:
+            print(f"[VideoUtils] Error probing video {video_path}: {e}")
+            resolutions.append((None, None, video_path))
+
+    # Check if all resolutions match
+    valid_resolutions = [(w, h, p) for w, h, p in resolutions if w is not None]
+    if valid_resolutions:
+        first_res = (valid_resolutions[0][0], valid_resolutions[0][1])
+        mismatches = []
+        for i, (w, h, path) in enumerate(resolutions):
+            if w is not None and (w, h) != first_res:
+                mismatches.append(f"segment {i}: {w}x{h}")
+
+        if mismatches:
+            error_msg = f"Resolution mismatch: first segment is {first_res[0]}x{first_res[1]}, but {', '.join(mismatches)}. All segments must have the same dimensions."
+            print(f"[VideoUtils] {error_msg}")
+            return False, error_msg
 
     # Determine which segments need fade effects
     # fade_to_black on segment[i] means:
@@ -534,10 +570,11 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
                 for temp_file in temp_files:
                     if os.path.exists(temp_file):
                         os.remove(temp_file)
-                return True
+                return True, None
             else:
-                print(f"[VideoUtils] ffmpeg error: {result.stderr}")
-                return False
+                error_msg = f"ffmpeg encoding error: {result.stderr[-500:] if result.stderr else 'Unknown error'}"
+                print(f"[VideoUtils] {error_msg}")
+                return False, error_msg
 
         # Multiple segments: use filter_complex to trim frames based on offsets
         # By default, drops first frame from segments 1+ to eliminate duplicate boundary frames
@@ -583,17 +620,21 @@ def stitch_videos(video_paths: List[str], output_path: str, segment_info: Option
         if result.returncode == 0 and os.path.exists(output_path):
             print(
                 f"[VideoUtils] Stitched {len(processed_paths)} videos to {output_path} (dropped {len(processed_paths) - 1} duplicate frames)")
-            return True
+            return True, None
         else:
-            print(f"[VideoUtils] ffmpeg stitch error: {result.stderr}")
-            return False
+            # Extract meaningful error from ffmpeg stderr
+            stderr = result.stderr or ""
+            error_msg = f"ffmpeg stitch error: {stderr[-500:] if stderr else 'Unknown error'}"
+            print(f"[VideoUtils] {error_msg}")
+            return False, error_msg
 
     except Exception as e:
-        print(f"[VideoUtils] Error stitching videos: {e}")
+        error_msg = f"Error stitching videos: {e}"
+        print(f"[VideoUtils] {error_msg}")
         for temp_file in temp_files:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
-        return False
+        return False, error_msg
 
 
 def get_job_output_dir(job_id: int) -> Path:

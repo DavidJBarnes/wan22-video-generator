@@ -1194,13 +1194,24 @@ class QueueManager:
 
         # Stitch videos together with descriptive filename
         final_video_path = get_final_video_path(job_id, job_name)
-        if stitch_videos(video_paths, final_video_path, segment_info=segment_info, offsets=stitch_offsets):
+        stitch_result = stitch_videos(video_paths, final_video_path, segment_info=segment_info, offsets=stitch_offsets)
+
+        # Handle both old (bool) and new (tuple) return format
+        if isinstance(stitch_result, tuple):
+            success, error_msg = stitch_result
+        else:
+            success = stitch_result
+            error_msg = "Failed to stitch videos" if not success else None
+
+        if success:
             # Update job with final video path
             update_job_status(job_id, "completed", output_images=[final_video_path])
             self._notify_update(job_id, "completed")
+            add_job_log(job_id, "INFO", "Job finalized successfully", details=f"Output: {final_video_path}")
             print(f"[QueueManager] Job {job_id} completed! Final video: {final_video_path}")
         else:
-            update_job_status(job_id, "failed", error_message="Failed to stitch videos")
+            add_job_log(job_id, "ERROR", "Failed to stitch videos", details=error_msg)
+            update_job_status(job_id, "failed", error_message=error_msg or "Failed to stitch videos")
             self._notify_update(job_id, "failed")
 
     def _process_single_segment_job(self, job_id: int, job: dict, client: ComfyUIClient):
