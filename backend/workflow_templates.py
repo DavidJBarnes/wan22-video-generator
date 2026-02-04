@@ -427,7 +427,8 @@ def build_wan_i2v_workflow(
                     "detect_gender_input": "no",
                     "source_faces_order": "left-right",
                     "source_faces_index": "0",
-                    "detect_gender_source": "no"
+                    "detect_gender_source": "no",
+                    "console_log_level": 1
                 },
                 "_meta": {"title": "ReActor Options"}
             }
