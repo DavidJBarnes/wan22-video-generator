@@ -633,13 +633,16 @@ class QueueManager:
         faceswap_faces_order = segment.get("faceswap_faces_order", "left-right") or "left-right"
         faceswap_faces_index = segment.get("faceswap_faces_index", "0") or "0"
 
-        # Parse faceswap_params if present (per-segment preset settings)
+        # Parse faceswap_params if present (per-segment settings including method)
         faceswap_params = {}
         if segment.get("faceswap_params"):
             try:
                 faceswap_params = json.loads(segment["faceswap_params"])
             except json.JSONDecodeError:
                 logger.warning(f"[Job {job_id}] Invalid faceswap_params JSON, using global settings")
+
+        # Get faceswap method (reactor or facefusion) - default to reactor
+        faceswap_method = faceswap_params.get("method", "reactor")
 
         # If faceswap_source_image is set (a URL to a segment frame), extract the frame
         # and save it as a temp file to use as the faceswap source
@@ -734,16 +737,24 @@ class QueueManager:
             faceswap_image=faceswap_image,
             faceswap_faces_order=faceswap_faces_order,
             faceswap_faces_index=faceswap_faces_index,
-            # Use per-segment preset settings if provided, otherwise fall back to global settings
-            faceswap_model=faceswap_params.get("model") or get_setting("faceswap_model", "inswapper_128"),
-            faceswap_occluder=faceswap_params.get("occluder") or get_setting("faceswap_occluder", "xseg_1"),
-            faceswap_mask_blur=float(faceswap_params.get("mask_blur") if faceswap_params.get("mask_blur") is not None else get_setting("faceswap_mask_blur", "0.3")),
-            faceswap_region_mask=faceswap_params.get("region_mask") if faceswap_params.get("region_mask") is not None else (get_setting("faceswap_region_mask", "false") == "true"),
-            faceswap_score_threshold=float(faceswap_params.get("score_threshold") if faceswap_params.get("score_threshold") is not None else get_setting("faceswap_score_threshold", "0.5")),
-            faceswap_pixel_boost=faceswap_params.get("pixel_boost") or get_setting("faceswap_pixel_boost", "512x512"),
-            faceswap_selector_mode=faceswap_params.get("selector_mode") or get_setting("faceswap_selector_mode", "reference"),
-            faceswap_detector_model=faceswap_params.get("detector_model") or get_setting("faceswap_detector_model", "retinaface"),
-            faceswap_reference_distance=float(faceswap_params.get("reference_face_distance") if faceswap_params.get("reference_face_distance") is not None else get_setting("faceswap_reference_distance", "0.8")),
+            # Method selection: 'reactor' (default) or 'facefusion' (for occlusions)
+            faceswap_method=faceswap_method,
+            # ReActor-specific settings (used when method='reactor')
+            reactor_swap_model=get_setting("reactor_swap_model", "inswapper_128.onnx"),
+            reactor_face_detection=get_setting("reactor_face_detection", "retinaface_resnet50"),
+            reactor_face_restore=get_setting("reactor_face_restore", "codeformer-v0.1.0.pth"),
+            reactor_restore_visibility=float(get_setting("reactor_restore_visibility", "1.0")),
+            reactor_codeformer_weight=float(get_setting("reactor_codeformer_weight", "0.8")),
+            # FaceFusion-specific settings (used when method='facefusion')
+            faceswap_model=get_setting("facefusion_model", "inswapper_128"),
+            faceswap_occluder=get_setting("facefusion_occluder", "xseg_1"),
+            faceswap_mask_blur=float(get_setting("facefusion_mask_blur", "0.3")),
+            faceswap_region_mask=(get_setting("facefusion_region_mask", "false") == "true"),
+            faceswap_score_threshold=float(get_setting("facefusion_score_threshold", "0.5")),
+            faceswap_pixel_boost=get_setting("facefusion_pixel_boost", "512x512"),
+            faceswap_selector_mode=get_setting("facefusion_selector_mode", "reference"),
+            faceswap_detector_model=get_setting("facefusion_detector_model", "retinaface"),
+            faceswap_reference_distance=float(get_setting("facefusion_reference_distance", "0.8")),
         )
 
         # Queue the prompt
