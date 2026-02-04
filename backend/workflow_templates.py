@@ -237,8 +237,10 @@ def build_wan_i2v_workflow(
     duration_sec: float = 5.0,
     target_fps: int = 30,
     start_image_filename: str = "",
-    high_noise_model: str = "wan2.2_i2v_high_noise_14B_fp16.safetensors",
-    low_noise_model: str = "wan2.2_i2v_low_noise_14B_fp16.safetensors",
+    high_noise_model: str = "",
+    low_noise_model: str = "",
+    vae_model: str = "",
+    text_encoder: str = "",
     seed: Optional[int] = None,
     loras: Optional[List[Dict[str, str]]] = None,
     output_prefix: str = "",
@@ -266,8 +268,10 @@ def build_wan_i2v_workflow(
         duration_sec: Video duration in seconds (default 5.0)
         target_fps: Output fps - 30, 60, or 90 (uses RIFE 2x, 4x, or 6x interpolation)
         start_image_filename: Filename of the uploaded start image
-        high_noise_model: UNET model for high noise pass
-        low_noise_model: UNET model for low noise pass
+        high_noise_model: UNET model for high noise pass (required)
+        low_noise_model: UNET model for low noise pass (required)
+        vae_model: VAE model filename (required)
+        text_encoder: Text encoder/CLIP model filename (required)
         seed: Random seed (auto-generated if not provided)
         loras: Optional list of LoRA pairs (max 3). Each dict has:
                - high_file: LoRA filename for high noise pass
@@ -320,6 +324,16 @@ def build_wan_i2v_workflow(
     workflow["96"]["inputs"]["unet_name"] = low_noise_model
     print(f"[Workflow] Set high noise model: {high_noise_model}")
     print(f"[Workflow] Set low noise model: {low_noise_model}")
+
+    # Override VAE model (node 90)
+    if vae_model:
+        workflow["90"]["inputs"]["vae_name"] = vae_model
+        print(f"[Workflow] Set VAE model: {vae_model}")
+
+    # Override text encoder (node 84)
+    if text_encoder:
+        workflow["84"]["inputs"]["clip_name"] = text_encoder
+        print(f"[Workflow] Set text encoder: {text_encoder}")
 
     # Set random seed (node 86 - KSamplerAdvanced for high noise pass)
     workflow["86"]["inputs"]["noise_seed"] = seed
