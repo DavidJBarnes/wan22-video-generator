@@ -1356,13 +1356,25 @@ export default function JobDetail() {
                   {/* Per-segment Faceswap Info */}
                   <div style={{ marginTop: '8px' }}>
                     <strong>Face Swap:</strong>{' '}
-                    {seg.faceswap_enabled ? (
-                      <span style={{ color: '#7b1fa2' }}>
-                        {seg.faceswap_source_image
-                          ? 'From Frame'
-                          : getFaceswapDisplayName(seg.faceswap_image) || 'Enabled'}
-                      </span>
-                    ) : (
+                    {seg.faceswap_enabled ? (() => {
+                      // Parse method from faceswap_params JSON
+                      let method = 'reactor';
+                      if (seg.faceswap_params) {
+                        try {
+                          const params = JSON.parse(seg.faceswap_params);
+                          method = params.method || 'reactor';
+                        } catch (e) {}
+                      }
+                      const methodLabel = method === 'facefusion' ? 'FF' : 'RA';
+                      const sourceName = seg.faceswap_source_image
+                        ? 'From Frame'
+                        : getFaceswapDisplayName(seg.faceswap_image) || 'Enabled';
+                      return (
+                        <span style={{ color: '#7b1fa2' }}>
+                          {sourceName} <span style={{ opacity: 0.7, fontSize: '0.85em' }}>({methodLabel})</span>
+                        </span>
+                      );
+                    })() : (
                       <span style={{ color: '#999' }}>N/A</span>
                     )}
                   </div>
