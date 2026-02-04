@@ -413,3 +413,8 @@ Never report a ComfyUI job as "failed" without capturing and showing me the actu
 
 ## git and source control
 Always create a relevant git branch (fix/* or feature/*) before starting work. Name branches descriptively, like feature/video-chaining or fix/queue-persistence. Commit with clear messages and push to remote when a task is complete.
+## Remote Access Rules
+- NEVER access 2070.zero (SSH, curl, or any network access) without explicit user permission
+- The application is deployed on 2070.zero, but all code changes and testing should be done locally
+- If remote access is needed, ask the user first
+

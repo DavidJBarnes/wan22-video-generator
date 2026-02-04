@@ -242,6 +242,15 @@ def build_wan_i2v_workflow(
     faceswap_image: str = "",
     faceswap_faces_order: str = "left-right",
     faceswap_faces_index: str = "0",
+    # Method selection: 'reactor' or 'facefusion'
+    faceswap_method: str = "reactor",
+    # ReActor-specific parameters
+    reactor_swap_model: str = "inswapper_128.onnx",
+    reactor_face_detection: str = "retinaface_resnet50",
+    reactor_face_restore: str = "codeformer-v0.1.0.pth",
+    reactor_restore_visibility: float = 1.0,
+    reactor_codeformer_weight: float = 0.8,
+    # FaceFusion-specific parameters (for occlusion handling)
     faceswap_model: str = "inswapper_128",
     faceswap_occluder: str = "xseg_1",
     faceswap_mask_blur: float = 0.3,
@@ -396,7 +405,7 @@ def build_wan_i2v_workflow(
 
     # Handle faceswap or standard output
     if faceswap_enabled:
-        print(f"[Workflow] Faceswap enabled with image: {faceswap_image}")
+        print(f"[Workflow] Faceswap enabled with image: {faceswap_image}, method: {faceswap_method}")
 
         # Add LoadImage node for face swap source (node 188)
         workflow["188"] = {
@@ -407,42 +416,84 @@ def build_wan_i2v_workflow(
             "_meta": {"title": "Face Swap Source"}
         }
 
-        # Add FaceFusion AdvancedSwapFaceImage node (node 183)
-        # Replaces ReActor - has built-in occlusion detection for hands, tongue, etc.
-        # Processes video frames as a batch internally
-        facefusion_inputs = {
-            "source_images": ["188", 0],       # Face to swap in
-            "target_image": ["87", 0],         # Decoded video frames from VAEDecode
-            "api_token": "-1",                 # Local mode, no API
-            "face_swapper_model": faceswap_model,       # Configurable model
-            "face_detector_model": faceswap_detector_model,  # Configurable detector
-            "pixel_boost": faceswap_pixel_boost,  # Resolution for face processing
-            "face_occluder_model": faceswap_occluder,   # Configurable occlusion model
-            "face_parser_model": "bisenet_resnet_34",   # Face parsing for regions
-            "face_mask_blur": faceswap_mask_blur,       # Configurable blur
-            "face_selector_mode": faceswap_selector_mode,  # Configurable: one, many, reference
-            "face_position": int(faceswap_faces_index),  # Which face to swap (0-indexed)
-            "sort_order": faceswap_faces_order.replace("-", "-"),  # Face sorting order
-            "score_threshold": faceswap_score_threshold,  # Configurable detection confidence
-            "use_box_mask": True,              # Use rectangular mask
-            "use_occlusion_mask": True,        # ENABLE OCCLUSION DETECTION
-            "use_area_mask": False,            # Don't use area mask
-            "use_region_mask": faceswap_region_mask,    # Configurable region mask
-            "face_mask_areas": "upper-face,lower-face,mouth",
-            "face_mask_regions": "skin,nose,mouth,upper-lip,lower-lip",
-            "face_mask_padding": "0,0,0,0"     # No padding
-        }
+        if faceswap_method == "reactor":
+            # ReActor face swap - better for most shots, simpler settings
+            # Node 189: ReActorOptions for face selection
+            workflow["189"] = {
+                "class_type": "ReActorOptions",
+                "inputs": {
+                    "input_faces_order": faceswap_faces_order,
+                    "input_faces_index": faceswap_faces_index,
+                    "detect_gender_input": "no",
+                    "source_faces_order": "left-right",
+                    "source_faces_index": "0",
+                    "detect_gender_source": "no",
+                    "console_log_level": 1
+                },
+                "_meta": {"title": "ReActor Options"}
+            }
 
-        # In reference mode, use the source face image as the reference for tracking
-        if faceswap_selector_mode == "reference":
-            facefusion_inputs["reference_image"] = ["188", 0]  # Same as source
-            facefusion_inputs["reference_face_distance"] = faceswap_reference_distance
+            # Node 183: ReActorFaceSwapOpt - main face swap node
+            workflow["183"] = {
+                "class_type": "ReActorFaceSwapOpt",
+                "inputs": {
+                    "enabled": True,
+                    "swap_model": reactor_swap_model,
+                    "facedetection": reactor_face_detection,
+                    "face_restore_model": reactor_face_restore,
+                    "face_restore_visibility": reactor_restore_visibility,
+                    "codeformer_weight": reactor_codeformer_weight,
+                    "input_image": ["87", 0],           # Decoded video frames from VAEDecode
+                    "source_image": ["188", 0],         # Face to swap in
+                    "options": ["189", 0]               # ReActor options
+                },
+                "_meta": {"title": "ReActor Face Swap"}
+            }
 
-        workflow["183"] = {
-            "class_type": "AdvancedSwapFaceImage",
-            "inputs": facefusion_inputs,
-            "_meta": {"title": "FaceFusion Face Swap"}
-        }
+            print(f"[Workflow] Added ReActor nodes: 188 (LoadImage), 189 (Options), 183 (FaceSwap)")
+            print(f"[Workflow] ReActor: model={reactor_swap_model}, detection={reactor_face_detection}")
+            print(f"[Workflow] ReActor: restore={reactor_face_restore}, visibility={reactor_restore_visibility}, codeformer_weight={reactor_codeformer_weight}")
+
+        else:
+            # FaceFusion face swap - better for occlusions (hands, tongue, etc.)
+            # Has built-in occlusion detection via xseg model
+            facefusion_inputs = {
+                "source_images": ["188", 0],       # Face to swap in
+                "target_image": ["87", 0],         # Decoded video frames from VAEDecode
+                "api_token": "-1",                 # Local mode, no API
+                "face_swapper_model": faceswap_model,       # Configurable model
+                "face_detector_model": faceswap_detector_model,  # Configurable detector
+                "pixel_boost": faceswap_pixel_boost,  # Resolution for face processing
+                "face_occluder_model": faceswap_occluder,   # Configurable occlusion model
+                "face_parser_model": "bisenet_resnet_34",   # Face parsing for regions
+                "face_mask_blur": faceswap_mask_blur,       # Configurable blur
+                "face_selector_mode": faceswap_selector_mode,  # Configurable: one, many, reference
+                "face_position": int(faceswap_faces_index),  # Which face to swap (0-indexed)
+                "sort_order": faceswap_faces_order.replace("-", "-"),  # Face sorting order
+                "score_threshold": faceswap_score_threshold,  # Configurable detection confidence
+                "use_box_mask": True,              # Use rectangular mask
+                "use_occlusion_mask": True,        # ENABLE OCCLUSION DETECTION
+                "use_area_mask": False,            # Don't use area mask
+                "use_region_mask": faceswap_region_mask,    # Configurable region mask
+                "face_mask_areas": "upper-face,lower-face,mouth",
+                "face_mask_regions": "skin,nose,mouth,upper-lip,lower-lip",
+                "face_mask_padding": "0,0,0,0"     # No padding
+            }
+
+            # In reference mode, use the source face image as the reference for tracking
+            if faceswap_selector_mode == "reference":
+                facefusion_inputs["reference_image"] = ["188", 0]  # Same as source
+                facefusion_inputs["reference_face_distance"] = faceswap_reference_distance
+
+            workflow["183"] = {
+                "class_type": "AdvancedSwapFaceImage",
+                "inputs": facefusion_inputs,
+                "_meta": {"title": "FaceFusion Face Swap"}
+            }
+
+            print(f"[Workflow] Added FaceFusion nodes: 188 (LoadImage), 183 (FaceFusion)")
+            print(f"[Workflow] FaceFusion: {faceswap_model}, detector={faceswap_detector_model}, mode={faceswap_selector_mode}")
+            print(f"[Workflow] FaceFusion: {faceswap_occluder} occlusion, pixel_boost={faceswap_pixel_boost}")
 
         # Add VHS_VideoCombine node (node 186)
         # Combines face-swapped frames into video (fps updated below with RIFE)
@@ -459,14 +510,10 @@ def build_wan_i2v_workflow(
                 "trim_to_audio": False,
                 "pingpong": False,
                 "save_output": True,
-                "images": ["183", 0]  # Face-swapped frames from FaceFusion (rewired below for RIFE)
+                "images": ["183", 0]  # Face-swapped frames (rewired below for RIFE)
             },
             "_meta": {"title": "Video Combine (Faceswap)"}
         }
-
-        print(f"[Workflow] Added faceswap nodes: 188 (LoadImage), 183 (FaceFusion), 186 (VHS_VideoCombine)")
-        print(f"[Workflow] FaceFusion: {faceswap_model}, detector={faceswap_detector_model}, mode={faceswap_selector_mode}")
-        print(f"[Workflow] FaceFusion: {faceswap_occluder} occlusion, pixel_boost={faceswap_pixel_boost}")
 
     # Always add RIFE frame interpolation (required for both 30fps and 60fps output)
     print(f"[Workflow] Adding RIFE {rife_multiplier}x frame interpolation")

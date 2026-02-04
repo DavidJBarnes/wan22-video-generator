@@ -53,16 +53,13 @@ export default function SubmitPromptModal({
 
   // Faceswap state (initialized from defaults)
   const [faceswapEnabled, setFaceswapEnabled] = useState(defaultFaceswap?.enabled || false);
+  const [faceswapMethod, setFaceswapMethod] = useState(defaultFaceswap?.method || 'reactor');
   const [faceswapImage, setFaceswapImage] = useState(defaultFaceswap?.image || FACESWAP_FACES[0]?.value || '');
   const [faceswapFacesOrder, setFaceswapFacesOrder] = useState(defaultFaceswap?.facesOrder || 'left-right');
   const [faceswapFacesIndex, setFaceswapFacesIndex] = useState(defaultFaceswap?.facesIndex || '0');
   // Faceswap source selection: 'preset' for static face images, 'segment' for segment frames
   const [faceswapSourceType, setFaceswapSourceType] = useState(defaultFaceswap?.sourceImage ? 'segment' : 'preset');
   const [faceswapSourceImage, setFaceswapSourceImage] = useState(defaultFaceswap?.sourceImage || '');
-  // Faceswap preset selection (clean_face, occlusion, quality)
-  const [faceswapPreset, setFaceswapPreset] = useState(defaultFaceswap?.preset || 'clean_face');
-  // Faceswap presets loaded from database
-  const [faceswapPresets, setFaceswapPresets] = useState({});
   const [segmentFrames, setSegmentFrames] = useState([]);
   const [hoverPreview, setHoverPreview] = useState(null);  // {url, x, y} for hover preview
 
@@ -194,22 +191,6 @@ export default function SubmitPromptModal({
     loadPromptListNames();
   }, []);
 
-  // Load faceswap presets from settings
-  useEffect(() => {
-    async function loadFaceswapPresets() {
-      try {
-        const data = await API.getSettings();
-        const s = data.settings || data;
-        if (s.faceswap_presets) {
-          const presets = JSON.parse(s.faceswap_presets);
-          setFaceswapPresets(presets);
-        }
-      } catch (error) {
-        console.error('Failed to load faceswap presets:', error);
-      }
-    }
-    loadFaceswapPresets();
-  }, []);
 
   // Build faceswap frames list - use API frames if available, fallback to job input image
   const faceswapFrames = useMemo(() => {
@@ -310,25 +291,15 @@ export default function SubmitPromptModal({
           low_weight: slot.lowWeight
         }));
 
-      // Build faceswap options with preset settings (loaded from database)
-      const presetSettings = faceswapPresets[faceswapPreset] || faceswapPresets.clean_face || {};
+      // Build faceswap options with method selection
       const faceswapOptions = {
         enabled: faceswapEnabled,
+        method: faceswapMethod,
         image: faceswapEnabled && faceswapSourceType === 'preset' ? faceswapImage : '',
         facesOrder: faceswapEnabled ? faceswapFacesOrder : 'left-right',
         facesIndex: faceswapEnabled ? faceswapFacesIndex : '0',
         // Include segment frame source if selected
-        sourceImage: faceswapEnabled && faceswapSourceType === 'segment' ? faceswapSourceImage : '',
-        // Preset settings for FaceFusion
-        preset: faceswapPreset,
-        model: presetSettings.model,
-        occluder: presetSettings.occluder,
-        maskBlur: presetSettings.maskBlur,
-        regionMask: presetSettings.regionMask,
-        scoreThreshold: presetSettings.scoreThreshold,
-        pixelBoost: presetSettings.pixelBoost,
-        selectorMode: presetSettings.selectorMode,
-        detectorModel: presetSettings.detectorModel
+        sourceImage: faceswapEnabled && faceswapSourceType === 'segment' ? faceswapSourceImage : ''
       };
 
       // Send both resolved prompt and original template (with tags intact)
@@ -569,25 +540,28 @@ export default function SubmitPromptModal({
                   onChange={(e) => setFaceswapEnabled(e.target.checked)}
                 />
               }
-              label={<span style={{ fontWeight: 500 }}>Enable Face Swap (FaceFusion)</span>}
+              label={<span style={{ fontWeight: 500 }}>Enable Face Swap</span>}
             />
             {faceswapEnabled && (
               <>
-                {/* Preset selector */}
-                <FormControl fullWidth variant="outlined" size="small" sx={{ mt: 1, mb: 1 }}>
-                  <InputLabel>Preset</InputLabel>
-                  <Select
-                    value={faceswapPreset}
-                    onChange={(e) => setFaceswapPreset(e.target.value)}
-                    label="Preset"
+                {/* Method selector */}
+                <div style={{ display: 'flex', gap: '8px', marginTop: '8px', marginBottom: '8px' }}>
+                  <Button
+                    variant={faceswapMethod === 'reactor' ? 'contained' : 'outlined'}
+                    size="small"
+                    onClick={() => setFaceswapMethod('reactor')}
                   >
-                    {Object.entries(faceswapPresets).map(([key, preset]) => (
-                      <MenuItem key={key} value={key}>
-                        {preset.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                    ReActor
+                  </Button>
+                  <Button
+                    variant={faceswapMethod === 'facefusion' ? 'contained' : 'outlined'}
+                    size="small"
+                    onClick={() => setFaceswapMethod('facefusion')}
+                    color="secondary"
+                  >
+                    FaceFusion (occlusions)
+                  </Button>
+                </div>
 
                 {/* Source type selector */}
                 <div style={{ display: 'flex', gap: '8px', marginTop: '8px', marginBottom: '8px' }}>

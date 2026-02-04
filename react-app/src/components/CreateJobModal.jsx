@@ -45,13 +45,11 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
   const [namePrefixes, setNamePrefixes] = useState([]);
   const [nameDescriptions, setNameDescriptions] = useState([]);
   const [faceswapEnabled, setFaceswapEnabled] = useState(false);
+  const [faceswapMethod, setFaceswapMethod] = useState('reactor');  // 'reactor' or 'facefusion'
   const [faceswapImage, setFaceswapImage] = useState(FACESWAP_FACES[0]?.value || '');
   const [faceswapFacesOrder, setFaceswapFacesOrder] = useState('left-right');
   const [faceswapFacesIndex, setFaceswapFacesIndex] = useState('0');
   const [faceswapSourceType, setFaceswapSourceType] = useState('preset');  // 'preset' or 'frame'
-  const [faceswapPreset, setFaceswapPreset] = useState('clean_face');
-  // Faceswap presets loaded from database
-  const [faceswapPresets, setFaceswapPresets] = useState({});
   const [selectedPrefix, setSelectedPrefix] = useState(null);
   const [selectedDescription, setSelectedDescription] = useState(null);
   const [autoFinalize, setAutoFinalize] = useState(false);
@@ -113,10 +111,10 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
         // Copy faceswap settings
         if (cloneData.parameters?.faceswap_enabled) {
           setFaceswapEnabled(true);
+          setFaceswapMethod(cloneData.parameters.faceswap_method || 'reactor');
           setFaceswapImage(cloneData.parameters.faceswap_image || FACESWAP_FACES[0]?.value || '');
           setFaceswapFacesOrder(cloneData.parameters.faceswap_faces_order || 'left-right');
           setFaceswapFacesIndex(cloneData.parameters.faceswap_faces_index || '0');
-          setFaceswapPreset(cloneData.parameters.faceswap_preset || 'clean_face');
         }
 
         // Set the input image if available - use thumbnail endpoint for proper URL
@@ -219,12 +217,6 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
         const sortedDescriptions = Array.isArray(descriptions) ? [...descriptions].sort((a, b) => a.localeCompare(b)) : [];
         setNameDescriptions(sortedDescriptions);
       } catch { setNameDescriptions([]); }
-
-      // Load faceswap presets from database
-      try {
-        const presets = JSON.parse(s.faceswap_presets || '{}');
-        setFaceswapPresets(presets);
-      } catch { setFaceswapPresets({}); }
     } catch (error) {
       console.error('[CreateJobModal] Failed to load settings:', error);
     }
@@ -438,6 +430,7 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
           target_fps: targetFps,
           segment_duration: segmentDuration,
           faceswap_enabled: faceswapEnabled,
+          faceswap_method: faceswapEnabled ? faceswapMethod : null,
           faceswap_image: faceswapEnabled && faceswapSourceType === 'preset' ? faceswapImage : null,
           faceswap_faces_order: faceswapEnabled ? faceswapFacesOrder : null,
           faceswap_faces_index: faceswapEnabled ? faceswapFacesIndex : null,
@@ -446,18 +439,6 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
           faceswap_source_image: faceswapEnabled && faceswapSourceType === 'frame'
             ? `${API.baseUrl}/comfyui/view?filename=${encodeURIComponent(imageFilename)}&subfolder=&type=input`
             : null,
-          // FaceFusion preset settings (loaded from database)
-          faceswap_preset: faceswapEnabled ? faceswapPreset : null,
-          ...(faceswapEnabled && faceswapPresets[faceswapPreset] ? {
-            faceswap_model: faceswapPresets[faceswapPreset].model,
-            faceswap_occluder: faceswapPresets[faceswapPreset].occluder,
-            faceswap_mask_blur: faceswapPresets[faceswapPreset].maskBlur,
-            faceswap_region_mask: faceswapPresets[faceswapPreset].regionMask,
-            faceswap_score_threshold: faceswapPresets[faceswapPreset].scoreThreshold,
-            faceswap_pixel_boost: faceswapPresets[faceswapPreset].pixelBoost,
-            faceswap_selector_mode: faceswapPresets[faceswapPreset].selectorMode,
-            faceswap_detector_model: faceswapPresets[faceswapPreset].detectorModel
-          } : {}),
           auto_finalize: autoFinalize
         }
       };
@@ -697,15 +678,24 @@ export default function CreateJobModal({ onClose, onSuccess, preUploadedImageUrl
               />
               {faceswapEnabled && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {/* Preset selector */}
-                  <FormControl variant="outlined" size="small" fullWidth>
-                    <InputLabel>Preset</InputLabel>
-                    <Select value={faceswapPreset} onChange={(e) => setFaceswapPreset(e.target.value)} label="Preset">
-                      {Object.entries(faceswapPresets).map(([key, preset]) => (
-                        <MenuItem key={key} value={key}>{preset.label}</MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
+                  {/* Method selector */}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <Button
+                      variant={faceswapMethod === 'reactor' ? 'contained' : 'outlined'}
+                      size="small"
+                      onClick={() => setFaceswapMethod('reactor')}
+                    >
+                      ReActor
+                    </Button>
+                    <Button
+                      variant={faceswapMethod === 'facefusion' ? 'contained' : 'outlined'}
+                      size="small"
+                      onClick={() => setFaceswapMethod('facefusion')}
+                      color="secondary"
+                    >
+                      FaceFusion (occlusions)
+                    </Button>
+                  </div>
 
                   {/* Source type selector */}
                   <div style={{ display: 'flex', gap: '8px' }}>

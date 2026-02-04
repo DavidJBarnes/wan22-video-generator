@@ -1191,10 +1191,42 @@ def update_job_parameters(
     prompt: Optional[str] = None,
     negative_prompt: Optional[str] = None,
     parameters: Optional[Dict[str, Any]] = None
-):
-    """Update job name, prompt, and parameters (only for pending jobs)."""
+) -> tuple:
+    """Update job name, prompt, and parameters (only for pending jobs).
+
+    Returns:
+        Tuple of (success: bool, error_message: str or None)
+    """
     with get_connection() as conn:
         cursor = conn.cursor()
+
+        # Check if dimensions are being changed when active completed segments exist
+        if parameters is not None and ('width' in parameters or 'height' in parameters):
+            # Get current job parameters
+            cursor.execute("SELECT parameters FROM jobs WHERE id = ?", (job_id,))
+            row = cursor.fetchone()
+            if row and row[0]:
+                try:
+                    current_params = json.loads(row[0])
+                except:
+                    current_params = {}
+
+                current_width = current_params.get('width')
+                current_height = current_params.get('height')
+                new_width = parameters.get('width', current_width)
+                new_height = parameters.get('height', current_height)
+
+                # Check if dimensions are actually changing
+                if (new_width != current_width or new_height != current_height):
+                    # Check for active (non-deleted) completed segments
+                    cursor.execute("""
+                        SELECT COUNT(*) FROM job_segments
+                        WHERE job_id = ? AND status = 'completed' AND deleted_at IS NULL
+                    """, (job_id,))
+                    completed_count = cursor.fetchone()[0]
+
+                    if completed_count > 0:
+                        return False, f"Cannot change dimensions ({current_width}x{current_height} → {new_width}x{new_height}) because {completed_count} completed segment(s) exist. Delete them first or create a new job."
 
         updates = []
         params = []
@@ -1216,7 +1248,7 @@ def update_job_parameters(
             params.append(json.dumps(parameters))
 
         if not updates:
-            return False
+            return False, "No updates provided"
 
         params.append(job_id)
 
@@ -1225,7 +1257,9 @@ def update_job_parameters(
             params
         )
 
-        return cursor.rowcount > 0
+        if cursor.rowcount > 0:
+            return True, None
+        return False, "Job not found or not in editable state"
 
 
 def get_job_merge_offsets(job_id: int) -> Optional[Dict[str, int]]:

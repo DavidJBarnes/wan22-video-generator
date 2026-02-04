@@ -633,13 +633,16 @@ class QueueManager:
         faceswap_faces_order = segment.get("faceswap_faces_order", "left-right") or "left-right"
         faceswap_faces_index = segment.get("faceswap_faces_index", "0") or "0"
 
-        # Parse faceswap_params if present (per-segment preset settings)
+        # Parse faceswap_params if present (per-segment settings including method)
         faceswap_params = {}
         if segment.get("faceswap_params"):
             try:
                 faceswap_params = json.loads(segment["faceswap_params"])
             except json.JSONDecodeError:
                 logger.warning(f"[Job {job_id}] Invalid faceswap_params JSON, using global settings")
+
+        # Get faceswap method (reactor or facefusion) - default to reactor
+        faceswap_method = faceswap_params.get("method", "reactor")
 
         # If faceswap_source_image is set (a URL to a segment frame), extract the frame
         # and save it as a temp file to use as the faceswap source
@@ -734,16 +737,24 @@ class QueueManager:
             faceswap_image=faceswap_image,
             faceswap_faces_order=faceswap_faces_order,
             faceswap_faces_index=faceswap_faces_index,
-            # Use per-segment preset settings if provided, otherwise fall back to global settings
-            faceswap_model=faceswap_params.get("model") or get_setting("faceswap_model", "inswapper_128"),
-            faceswap_occluder=faceswap_params.get("occluder") or get_setting("faceswap_occluder", "xseg_1"),
-            faceswap_mask_blur=float(faceswap_params.get("mask_blur") if faceswap_params.get("mask_blur") is not None else get_setting("faceswap_mask_blur", "0.3")),
-            faceswap_region_mask=faceswap_params.get("region_mask") if faceswap_params.get("region_mask") is not None else (get_setting("faceswap_region_mask", "false") == "true"),
-            faceswap_score_threshold=float(faceswap_params.get("score_threshold") if faceswap_params.get("score_threshold") is not None else get_setting("faceswap_score_threshold", "0.5")),
-            faceswap_pixel_boost=faceswap_params.get("pixel_boost") or get_setting("faceswap_pixel_boost", "512x512"),
-            faceswap_selector_mode=faceswap_params.get("selector_mode") or get_setting("faceswap_selector_mode", "reference"),
-            faceswap_detector_model=faceswap_params.get("detector_model") or get_setting("faceswap_detector_model", "retinaface"),
-            faceswap_reference_distance=float(faceswap_params.get("reference_face_distance") if faceswap_params.get("reference_face_distance") is not None else get_setting("faceswap_reference_distance", "0.8")),
+            # Method selection: 'reactor' (default) or 'facefusion' (for occlusions)
+            faceswap_method=faceswap_method,
+            # ReActor-specific settings (used when method='reactor')
+            reactor_swap_model=get_setting("reactor_swap_model", "inswapper_128.onnx"),
+            reactor_face_detection=get_setting("reactor_face_detection", "retinaface_resnet50"),
+            reactor_face_restore=get_setting("reactor_face_restore", "codeformer-v0.1.0.pth"),
+            reactor_restore_visibility=float(get_setting("reactor_restore_visibility", "1.0")),
+            reactor_codeformer_weight=float(get_setting("reactor_codeformer_weight", "0.8")),
+            # FaceFusion-specific settings (used when method='facefusion')
+            faceswap_model=get_setting("facefusion_model", "inswapper_128"),
+            faceswap_occluder=get_setting("facefusion_occluder", "xseg_1"),
+            faceswap_mask_blur=float(get_setting("facefusion_mask_blur", "0.3")),
+            faceswap_region_mask=(get_setting("facefusion_region_mask", "false") == "true"),
+            faceswap_score_threshold=float(get_setting("facefusion_score_threshold", "0.5")),
+            faceswap_pixel_boost=get_setting("facefusion_pixel_boost", "512x512"),
+            faceswap_selector_mode=get_setting("facefusion_selector_mode", "reference"),
+            faceswap_detector_model=get_setting("facefusion_detector_model", "retinaface"),
+            faceswap_reference_distance=float(get_setting("facefusion_reference_distance", "0.8")),
         )
 
         # Queue the prompt
@@ -917,10 +928,35 @@ class QueueManager:
                         progress_tracker.stop_tracking(job_id)
                         return False
                 else:
-                    error_msg = f"No video output found for segment {segment_index}. ComfyUI reported completion but returned no video. Media URLs: {media_urls}"
-                    logger.error(f"[Job {job_id}] {error_msg}")
-                    add_job_log(job_id, "ERROR", f"Segment {segment_index} has no video output", segment_index=segment_index, details=error_msg)
-                    update_segment_status(job_id, segment_index, "failed", error_message="No video output from ComfyUI")
+                    # No video output - check if there was an execution error (OOM, etc.)
+                    execution_error = client.extract_execution_error_from_data(completion_data)
+                    if execution_error:
+                        # Format error message with details
+                        exc_type = execution_error.get("exception_type", "Unknown")
+                        exc_msg = execution_error.get("exception_message", "Unknown error")
+                        node_id = execution_error.get("node_id")
+                        node_type = execution_error.get("node_type")
+
+                        if node_id:
+                            error_msg = f"ComfyUI error in node {node_id} ({node_type}): {exc_type}: {exc_msg}"
+                        else:
+                            error_msg = f"ComfyUI error: {exc_type}: {exc_msg}"
+
+                        # Log traceback for debugging if available
+                        traceback_lines = execution_error.get("traceback", [])
+                        if traceback_lines:
+                            tb_preview = "\n".join(traceback_lines[-5:])  # Last 5 lines of traceback
+                            logger.error(f"[Job {job_id}] Segment {segment_index} traceback:\n{tb_preview}")
+
+                        logger.error(f"[Job {job_id}] Segment {segment_index} execution error: {error_msg}")
+                        add_job_log(job_id, "ERROR", f"Segment {segment_index} ComfyUI execution error",
+                                   segment_index=segment_index, details=error_msg)
+                        update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
+                    else:
+                        error_msg = f"No video output found for segment {segment_index}. ComfyUI reported completion but returned no video. Media URLs: {media_urls}"
+                        logger.error(f"[Job {job_id}] {error_msg}")
+                        add_job_log(job_id, "ERROR", f"Segment {segment_index} has no video output", segment_index=segment_index, details=error_msg)
+                        update_segment_status(job_id, segment_index, "failed", error_message="No video output from ComfyUI")
                     progress_tracker.stop_tracking(job_id)
                     return False
 
@@ -932,9 +968,26 @@ class QueueManager:
             
             if status.get("status") == "error":
                 error = status.get("error", "Unknown error")
-                logger.error(f"[Job {job_id}] Segment {segment_index} reported error from ComfyUI: {error}")
-                add_job_log(job_id, "ERROR", f"Segment {segment_index} failed - ComfyUI error", segment_index=segment_index, details=error)
-                update_segment_status(job_id, segment_index, "failed", error_message=f"ComfyUI error: {error}")
+                error_details = status.get("error_details", {})
+
+                # Log detailed error information
+                logger.error(f"[Job {job_id}] Segment {segment_index} ComfyUI execution error: {error}")
+
+                # Log traceback if available (for debugging OOM, etc.)
+                traceback_lines = error_details.get("traceback", [])
+                if traceback_lines:
+                    # Log last few lines of traceback which usually contain the actual error
+                    tb_preview = "\n".join(traceback_lines[-5:])
+                    logger.error(f"[Job {job_id}] Traceback:\n{tb_preview}")
+                    # Add abbreviated traceback to job log for UI visibility
+                    last_line = traceback_lines[-1] if traceback_lines else ""
+                    details = f"{error}\n\nLast traceback line: {last_line}"
+                else:
+                    details = error
+
+                add_job_log(job_id, "ERROR", f"Segment {segment_index} failed - ComfyUI execution error",
+                           segment_index=segment_index, details=details)
+                update_segment_status(job_id, segment_index, "failed", error_message=f"ComfyUI: {error}")
                 progress_tracker.stop_tracking(job_id)
                 return False
 
@@ -1141,13 +1194,24 @@ class QueueManager:
 
         # Stitch videos together with descriptive filename
         final_video_path = get_final_video_path(job_id, job_name)
-        if stitch_videos(video_paths, final_video_path, segment_info=segment_info, offsets=stitch_offsets):
+        stitch_result = stitch_videos(video_paths, final_video_path, segment_info=segment_info, offsets=stitch_offsets)
+
+        # Handle both old (bool) and new (tuple) return format
+        if isinstance(stitch_result, tuple):
+            success, error_msg = stitch_result
+        else:
+            success = stitch_result
+            error_msg = "Failed to stitch videos" if not success else None
+
+        if success:
             # Update job with final video path
             update_job_status(job_id, "completed", output_images=[final_video_path])
             self._notify_update(job_id, "completed")
+            add_job_log(job_id, "INFO", "Job finalized successfully", details=f"Output: {final_video_path}")
             print(f"[QueueManager] Job {job_id} completed! Final video: {final_video_path}")
         else:
-            update_job_status(job_id, "failed", error_message="Failed to stitch videos")
+            add_job_log(job_id, "ERROR", "Failed to stitch videos", details=error_msg)
+            update_job_status(job_id, "failed", error_message=error_msg or "Failed to stitch videos")
             self._notify_update(job_id, "failed")
 
     def _process_single_segment_job(self, job_id: int, job: dict, client: ComfyUIClient):
