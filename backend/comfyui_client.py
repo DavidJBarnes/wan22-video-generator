@@ -335,6 +335,15 @@ class ComfyUIClient:
         faceswap_image: str = "",
         faceswap_faces_order: str = "left-right",
         faceswap_faces_index: str = "0",
+        # Method selection: 'reactor' or 'facefusion'
+        faceswap_method: str = "reactor",
+        # ReActor-specific parameters
+        reactor_swap_model: str = "inswapper_128.onnx",
+        reactor_face_detection: str = "retinaface_resnet50",
+        reactor_face_restore: str = "codeformer-v0.1.0.pth",
+        reactor_restore_visibility: float = 1.0,
+        reactor_codeformer_weight: float = 0.8,
+        # FaceFusion-specific parameters (for occlusion handling)
         faceswap_model: str = "inswapper_128",
         faceswap_occluder: str = "xseg_1",
         faceswap_mask_blur: float = 0.3,
@@ -388,6 +397,12 @@ class ComfyUIClient:
             faceswap_image=faceswap_image,
             faceswap_faces_order=faceswap_faces_order,
             faceswap_faces_index=faceswap_faces_index,
+            faceswap_method=faceswap_method,
+            reactor_swap_model=reactor_swap_model,
+            reactor_face_detection=reactor_face_detection,
+            reactor_face_restore=reactor_face_restore,
+            reactor_restore_visibility=reactor_restore_visibility,
+            reactor_codeformer_weight=reactor_codeformer_weight,
             faceswap_model=faceswap_model,
             faceswap_occluder=faceswap_occluder,
             faceswap_mask_blur=faceswap_mask_blur,
