@@ -928,10 +928,35 @@ class QueueManager:
                         progress_tracker.stop_tracking(job_id)
                         return False
                 else:
-                    error_msg = f"No video output found for segment {segment_index}. ComfyUI reported completion but returned no video. Media URLs: {media_urls}"
-                    logger.error(f"[Job {job_id}] {error_msg}")
-                    add_job_log(job_id, "ERROR", f"Segment {segment_index} has no video output", segment_index=segment_index, details=error_msg)
-                    update_segment_status(job_id, segment_index, "failed", error_message="No video output from ComfyUI")
+                    # No video output - check if there was an execution error (OOM, etc.)
+                    execution_error = client.extract_execution_error_from_data(completion_data)
+                    if execution_error:
+                        # Format error message with details
+                        exc_type = execution_error.get("exception_type", "Unknown")
+                        exc_msg = execution_error.get("exception_message", "Unknown error")
+                        node_id = execution_error.get("node_id")
+                        node_type = execution_error.get("node_type")
+
+                        if node_id:
+                            error_msg = f"ComfyUI error in node {node_id} ({node_type}): {exc_type}: {exc_msg}"
+                        else:
+                            error_msg = f"ComfyUI error: {exc_type}: {exc_msg}"
+
+                        # Log traceback for debugging if available
+                        traceback_lines = execution_error.get("traceback", [])
+                        if traceback_lines:
+                            tb_preview = "\n".join(traceback_lines[-5:])  # Last 5 lines of traceback
+                            logger.error(f"[Job {job_id}] Segment {segment_index} traceback:\n{tb_preview}")
+
+                        logger.error(f"[Job {job_id}] Segment {segment_index} execution error: {error_msg}")
+                        add_job_log(job_id, "ERROR", f"Segment {segment_index} ComfyUI execution error",
+                                   segment_index=segment_index, details=error_msg)
+                        update_segment_status(job_id, segment_index, "failed", error_message=error_msg)
+                    else:
+                        error_msg = f"No video output found for segment {segment_index}. ComfyUI reported completion but returned no video. Media URLs: {media_urls}"
+                        logger.error(f"[Job {job_id}] {error_msg}")
+                        add_job_log(job_id, "ERROR", f"Segment {segment_index} has no video output", segment_index=segment_index, details=error_msg)
+                        update_segment_status(job_id, segment_index, "failed", error_message="No video output from ComfyUI")
                     progress_tracker.stop_tracking(job_id)
                     return False
 
@@ -943,9 +968,26 @@ class QueueManager:
             
             if status.get("status") == "error":
                 error = status.get("error", "Unknown error")
-                logger.error(f"[Job {job_id}] Segment {segment_index} reported error from ComfyUI: {error}")
-                add_job_log(job_id, "ERROR", f"Segment {segment_index} failed - ComfyUI error", segment_index=segment_index, details=error)
-                update_segment_status(job_id, segment_index, "failed", error_message=f"ComfyUI error: {error}")
+                error_details = status.get("error_details", {})
+
+                # Log detailed error information
+                logger.error(f"[Job {job_id}] Segment {segment_index} ComfyUI execution error: {error}")
+
+                # Log traceback if available (for debugging OOM, etc.)
+                traceback_lines = error_details.get("traceback", [])
+                if traceback_lines:
+                    # Log last few lines of traceback which usually contain the actual error
+                    tb_preview = "\n".join(traceback_lines[-5:])
+                    logger.error(f"[Job {job_id}] Traceback:\n{tb_preview}")
+                    # Add abbreviated traceback to job log for UI visibility
+                    last_line = traceback_lines[-1] if traceback_lines else ""
+                    details = f"{error}\n\nLast traceback line: {last_line}"
+                else:
+                    details = error
+
+                add_job_log(job_id, "ERROR", f"Segment {segment_index} failed - ComfyUI execution error",
+                           segment_index=segment_index, details=details)
+                update_segment_status(job_id, segment_index, "failed", error_message=f"ComfyUI: {error}")
                 progress_tracker.stop_tracking(job_id)
                 return False
 
