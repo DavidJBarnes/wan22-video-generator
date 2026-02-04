@@ -19,6 +19,11 @@ export default function Settings() {
   const [apiUrl, setApiUrl] = useState('');
   const [comfyuiUrl, setComfyuiUrl] = useState('');
   const [imageRepoPath, setImageRepoPath] = useState('');
+  // ComfyUI model settings
+  const [highNoiseModel, setHighNoiseModel] = useState('');
+  const [lowNoiseModel, setLowNoiseModel] = useState('');
+  const [vaeModel, setVaeModel] = useState('');
+  const [textEncoder, setTextEncoder] = useState('');
   const [defaultTargetFps, setDefaultTargetFps] = useState(30);
   const [defaultNegativePrompt, setDefaultNegativePrompt] = useState('');
   const [queueWaitTimeout, setQueueWaitTimeout] = useState(30);
@@ -116,6 +121,11 @@ export default function Settings() {
       setApiUrl(API.getBaseUrl() === '/api' ? '' : API.getBaseUrl());
       setComfyuiUrl(s.comfyui_url || 'http://localhost:8188');
       setImageRepoPath(s.image_repo_path || '');
+      // ComfyUI model settings
+      setHighNoiseModel(s.high_noise_model || '');
+      setLowNoiseModel(s.low_noise_model || '');
+      setVaeModel(s.vae_model || '');
+      setTextEncoder(s.text_encoder || '');
       setDefaultTargetFps(parseInt(s.default_target_fps) || 30);
       setDefaultNegativePrompt(s.default_negative_prompt || 'blurry, low quality, distorted');
       setQueueWaitTimeout(Math.round((parseInt(s.queue_wait_timeout) || 1800) / 60)); // Convert seconds to minutes
@@ -230,6 +240,11 @@ export default function Settings() {
       const settingsPayload = {
         comfyui_url: comfyuiUrl || 'http://localhost:8188',
         image_repo_path: imageRepoPath,
+        // ComfyUI model settings
+        high_noise_model: highNoiseModel,
+        low_noise_model: lowNoiseModel,
+        vae_model: vaeModel,
+        text_encoder: textEncoder,
         default_target_fps: String(defaultTargetFps),
         default_negative_prompt: defaultNegativePrompt,
         queue_wait_timeout: String(queueWaitTimeout * 60), // Convert minutes to seconds
@@ -371,6 +386,59 @@ export default function Settings() {
             />
             <small style={{ color: '#666', fontSize: '12px' }}>
               Max time for ComfyUI to generate a single video segment. Increase for high-resolution or high-FPS videos.
+            </small>
+          </div>
+
+          <h3 style={{ marginTop: '24px', marginBottom: '16px', fontSize: '16px', borderTop: '1px solid #333', paddingTop: '16px' }}>Model Configuration</h3>
+          <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
+            Specify the model filenames as they appear in your ComfyUI models folder. Jobs will fail if these are not configured.
+          </p>
+          <div className="form-group">
+            <label>High Noise UNET Model</label>
+            <input
+              type="text"
+              value={highNoiseModel}
+              onChange={(e) => setHighNoiseModel(e.target.value)}
+              placeholder="e.g., wan2.2_i2v_high_noise_14B_fp16.safetensors"
+            />
+            <small style={{ color: '#666', fontSize: '12px' }}>
+              UNET model for the first sampling pass (high noise). Located in models/diffusion_models/ or models/unet/
+            </small>
+          </div>
+          <div className="form-group">
+            <label>Low Noise UNET Model</label>
+            <input
+              type="text"
+              value={lowNoiseModel}
+              onChange={(e) => setLowNoiseModel(e.target.value)}
+              placeholder="e.g., wan2.2_i2v_low_noise_14B_fp16.safetensors"
+            />
+            <small style={{ color: '#666', fontSize: '12px' }}>
+              UNET model for the second sampling pass (low noise). Located in models/diffusion_models/ or models/unet/
+            </small>
+          </div>
+          <div className="form-group">
+            <label>VAE Model</label>
+            <input
+              type="text"
+              value={vaeModel}
+              onChange={(e) => setVaeModel(e.target.value)}
+              placeholder="e.g., wan_2.1_vae.safetensors"
+            />
+            <small style={{ color: '#666', fontSize: '12px' }}>
+              VAE model for encoding/decoding. Located in models/vae/
+            </small>
+          </div>
+          <div className="form-group">
+            <label>Text Encoder (CLIP)</label>
+            <input
+              type="text"
+              value={textEncoder}
+              onChange={(e) => setTextEncoder(e.target.value)}
+              placeholder="e.g., umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+            />
+            <small style={{ color: '#666', fontSize: '12px' }}>
+              Text encoder model (T5/CLIP). Located in models/text_encoders/ or models/clip/
             </small>
           </div>
         </div>

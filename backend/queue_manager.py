@@ -690,6 +690,31 @@ class QueueManager:
         if job_seed is not None:
             logger.info(f"[Job {job_id}] Using fixed seed {job_seed} for segment {segment_index}")
 
+        # Validate required model settings
+        high_noise_model = get_setting("high_noise_model")
+        low_noise_model = get_setting("low_noise_model")
+        vae_model = get_setting("vae_model")
+        text_encoder = get_setting("text_encoder")
+
+        missing_models = []
+        if not high_noise_model:
+            missing_models.append("high_noise_model")
+        if not low_noise_model:
+            missing_models.append("low_noise_model")
+        if not vae_model:
+            missing_models.append("vae_model")
+        if not text_encoder:
+            missing_models.append("text_encoder")
+
+        if missing_models:
+            error_msg = f"Missing required model settings: {', '.join(missing_models)}. Configure these in Settings → ComfyUI Configuration."
+            logger.error(f"[Job {job_id}] {error_msg}")
+            add_job_log(job_id, "ERROR", error_msg, segment_index=segment_index)
+            update_segment_status(segment_id, "failed", error_message=error_msg)
+            update_job_status(job_id, "failed", error_message=error_msg)
+            self._notify_update(job_id, "failed")
+            return
+
         workflow = client.build_wan_i2v_workflow(
             prompt=segment.get("prompt") or job.get("prompt", ""),
             negative_prompt=job.get("negative_prompt", get_setting("default_negative_prompt", "")),
@@ -698,8 +723,10 @@ class QueueManager:
             duration_sec=segment_duration,
             target_fps=target_fps,
             start_image_filename=input_image,
-            high_noise_model=get_setting("high_noise_model", "wan2.2_i2v_high_noise_14B_fp16.safetensors"),
-            low_noise_model=get_setting("low_noise_model", "wan2.2_i2v_low_noise_14B_fp16.safetensors"),
+            high_noise_model=high_noise_model,
+            low_noise_model=low_noise_model,
+            vae_model=vae_model,
+            text_encoder=text_encoder,
             seed=job_seed,
             loras=loras if loras else None,
             output_prefix=output_prefix,
@@ -1216,8 +1243,38 @@ class QueueManager:
         # Use the job's fixed seed
         job_seed = job.get("seed")
 
+        # Validate required model settings for video workflows
+        workflow_type = job.get("workflow_type", "txt2img")
+        if workflow_type in ("i2v", "wan_i2v", "wan_video"):
+            high_noise_model = get_setting("high_noise_model")
+            low_noise_model = get_setting("low_noise_model")
+            vae_model = get_setting("vae_model")
+            text_encoder = get_setting("text_encoder")
+
+            missing_models = []
+            if not high_noise_model:
+                missing_models.append("high_noise_model")
+            if not low_noise_model:
+                missing_models.append("low_noise_model")
+            if not vae_model:
+                missing_models.append("vae_model")
+            if not text_encoder:
+                missing_models.append("text_encoder")
+
+            if missing_models:
+                error_msg = f"Missing required model settings: {', '.join(missing_models)}. Configure these in Settings → ComfyUI Configuration."
+                logger.error(f"[Job {job_id}] {error_msg}")
+                update_job_status(job_id, "failed", error_message=error_msg)
+                self._notify_update(job_id, "failed")
+                return
+        else:
+            high_noise_model = ""
+            low_noise_model = ""
+            vae_model = ""
+            text_encoder = ""
+
         workflow = client.build_workflow(
-            workflow_type=job.get("workflow_type", "txt2img"),
+            workflow_type=workflow_type,
             prompt=job.get("prompt", ""),
             negative_prompt=job.get("negative_prompt", get_setting("default_negative_prompt", "")),
             checkpoint=params.get("checkpoint", get_setting("default_checkpoint", "v1-5-pruned.safetensors")),
@@ -1232,8 +1289,10 @@ class QueueManager:
             input_image=job.get("input_image"),
             duration_sec=segment_duration,
             target_fps=target_fps,
-            high_noise_model=get_setting("high_noise_model", "wan2.2_i2v_high_noise_14B_fp16.safetensors"),
-            low_noise_model=get_setting("low_noise_model", "wan2.2_i2v_low_noise_14B_fp16.safetensors"),
+            high_noise_model=high_noise_model,
+            low_noise_model=low_noise_model,
+            vae_model=vae_model,
+            text_encoder=text_encoder,
         )
 
         # Queue the prompt

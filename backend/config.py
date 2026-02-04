@@ -9,23 +9,10 @@ DEFAULT_HEIGHT = 768
 DEFAULT_TARGET_FPS = 30  # Output fps: 30 or 60 (uses RIFE 2x or 4x interpolation)
 GENERATION_FPS = 15  # Internal: base fps before RIFE interpolation
 
-# Model Names
-# Note: Update these to match the models available on your ComfyUI server
-# Common variants: fp16 (full precision) or fp8_scaled (quantized)
-MODELS = {
-    "high_noise": "wan22RemixT2VI2V_i2vHighV20.safetensors",
-    "low_noise": "wan22RemixT2VI2V_i2vLowV20.safetensors",
-    "vae": "wan_2.1_vae.safetensors",
-    "text_encoder": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
-}
-
-# LoRA Configuration (optional)
-LORA_CONFIG = {
-    "enabled": False,
-    "high_noise_lora": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
-    "low_noise_lora": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
-    "strength": 1.0,
-}
+# Model Configuration
+# Note: Model settings are configured via the Settings page (stored in database)
+# Required settings: high_noise_model, low_noise_model, vae_model, text_encoder
+# Jobs will fail if these are not configured in Settings → ComfyUI Configuration
 
 # Generation Parameters (Two-Pass Sampling)
 GENERATION_PARAMS = {
@@ -61,13 +48,6 @@ DEFAULT_NEGATIVE_PROMPT = (
 
 # Output Directories
 # Note: Actual output path is set via JOB_OUTPUT_PATH env var in video_utils.py
-
-# Segment Duration Options (frames at 16 FPS)
-SEGMENT_DURATIONS = {
-    3: 49,   # 3 seconds
-    4: 65,   # 4 seconds
-    5: 81,   # 5 seconds
-}
 
 # Polling Configuration
 POLL_INTERVAL_SECONDS = 2

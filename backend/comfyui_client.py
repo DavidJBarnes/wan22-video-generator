@@ -324,8 +324,10 @@ class ComfyUIClient:
         duration_sec: float = 5.0,
         target_fps: int = 30,
         start_image_filename: str = "",
-        high_noise_model: str = "wan2.2_i2v_high_noise_14B_fp16.safetensors",
-        low_noise_model: str = "wan2.2_i2v_low_noise_14B_fp16.safetensors",
+        high_noise_model: str = "",
+        low_noise_model: str = "",
+        vae_model: str = "",
+        text_encoder: str = "",
         seed: Optional[int] = None,
         loras: Optional[List[Dict[str, str]]] = None,
         output_prefix: str = "",
@@ -377,6 +379,8 @@ class ComfyUIClient:
             start_image_filename=start_image_filename,
             high_noise_model=high_noise_model,
             low_noise_model=low_noise_model,
+            vae_model=vae_model,
+            text_encoder=text_encoder,
             seed=seed,
             loras=loras,
             output_prefix=output_prefix,
@@ -412,8 +416,10 @@ class ComfyUIClient:
         input_image: Optional[str] = None,
         duration_sec: float = 5.0,
         target_fps: int = 30,
-        high_noise_model: str = "wan2.2_i2v_high_noise_14B_fp16.safetensors",
-        low_noise_model: str = "wan2.2_i2v_low_noise_14B_fp16.safetensors",
+        high_noise_model: str = "",
+        low_noise_model: str = "",
+        vae_model: str = "",
+        text_encoder: str = "",
     ) -> Dict[str, Any]:
         """Build a workflow from template with given parameters."""
         import copy
@@ -432,6 +438,8 @@ class ComfyUIClient:
                 start_image_filename=input_image or "",
                 high_noise_model=high_noise_model,
                 low_noise_model=low_noise_model,
+                vae_model=vae_model,
+                text_encoder=text_encoder,
             )
 
         # Get base template for simple workflows
