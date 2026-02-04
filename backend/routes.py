@@ -634,7 +634,7 @@ async def update_job_endpoint(job_id: int, job_data: JobUpdate):
     full_prompt = build_full_prompt(job_data.prompt) if job_data.prompt is not None else None
 
     # Update the job
-    success = update_job_parameters(
+    result = update_job_parameters(
         job_id,
         name=job_data.name,
         prompt=full_prompt,
@@ -642,8 +642,15 @@ async def update_job_endpoint(job_id: int, job_data: JobUpdate):
         parameters=job_data.parameters
     )
 
+    # Handle both old (bool) and new (tuple) return format
+    if isinstance(result, tuple):
+        success, error_msg = result
+    else:
+        success = result
+        error_msg = "Failed to update job"
+
     if not success:
-        raise HTTPException(status_code=400, detail="Failed to update job")
+        raise HTTPException(status_code=400, detail=error_msg or "Failed to update job")
 
     # Also update the first segment's prompt if job prompt changed
     if full_prompt is not None:
