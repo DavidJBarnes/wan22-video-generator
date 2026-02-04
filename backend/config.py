@@ -49,13 +49,6 @@ DEFAULT_NEGATIVE_PROMPT = (
 # Output Directories
 # Note: Actual output path is set via JOB_OUTPUT_PATH env var in video_utils.py
 
-# Segment Duration Options (frames at 16 FPS)
-SEGMENT_DURATIONS = {
-    3: 49,   # 3 seconds
-    4: 65,   # 4 seconds
-    5: 81,   # 5 seconds
-}
-
 # Polling Configuration
 POLL_INTERVAL_SECONDS = 2
 MAX_POLL_ATTEMPTS = 600  # 20 minutes max wait time

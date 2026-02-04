@@ -11,15 +11,24 @@ from typing import Dict, Any, Optional, List
 
 # Wan2.2 14B Image-to-Video workflow in ComfyUI API format
 # Converted from video_wan2_2_14B_i2v.json
-# 
+#
 # Key nodes to override:
-# - "97" (LoadImage): image filename
+# - "84" (CLIPLoader): text encoder model name
+# - "86" (KSamplerAdvanced): noise_seed for randomization
+# - "89" (CLIPTextEncode): negative prompt
+# - "90" (VAELoader): VAE model name
 # - "93" (CLIPTextEncode): positive prompt
-# - "89" (CLIPTextEncode): negative prompt  
-# - "98" (WanImageToVideo): width, height, length (frames)
 # - "95" (UNETLoader): high noise model name
 # - "96" (UNETLoader): low noise model name
-# - "86" (KSamplerAdvanced): noise_seed for randomization
+# - "97" (LoadImage): image filename
+# - "98" (WanImageToVideo): width, height, length (frames)
+#
+# Dynamic nodes added at runtime:
+# - 118-123: User-selected LoRA pairs (up to 3)
+# - 186: VHS_VideoCombine (output video)
+# - 188: Face swap source image (when enabled)
+# - 183: FaceFusion face swap (when enabled)
+# - 200: RIFE frame interpolation
 #
 WAN_I2V_API_WORKFLOW = {
     "84": {
@@ -95,13 +104,7 @@ WAN_I2V_API_WORKFLOW = {
             "clip": ["84", 0]
         }
     },
-    "94": {
-        "class_type": "CreateVideo",
-        "inputs": {
-            "fps": 16,
-            "images": ["87", 0]
-        }
-    },
+    # Note: Nodes 94 (CreateVideo) and 108 (SaveVideo) removed - we always use RIFE + VHS_VideoCombine
     "95": {
         "class_type": "UNETLoader",
         "inputs": {
@@ -164,15 +167,6 @@ WAN_I2V_API_WORKFLOW = {
         "inputs": {
             "shift": 5.0,
             "model": ["101", 0]
-        }
-    },
-    "108": {
-        "class_type": "SaveVideo",
-        "inputs": {
-            "filename_prefix": "video/ComfyUI",
-            "format": "auto",
-            "codec": "auto",
-            "video": ["94", 0]
         }
     },
     # NOTE: User-selectable LoRA nodes (118, 119, 120, 121) are added dynamically
@@ -397,21 +391,12 @@ def build_wan_i2v_workflow(
     else:
         print("[Workflow] No user LoRAs selected (using only lightx2v acceleration)")
 
-    # Note: FPS for the base CreateVideo node is set to generation_fps
-    # This may be overwritten below when RIFE is added (which uses VHS_VideoCombine instead)
-    workflow["94"]["inputs"]["fps"] = generation_fps
-    print(f"[Workflow] Set base FPS: {generation_fps}")
-
     # Override output filename prefix
     safe_prefix = _sanitize_filename(output_prefix) if output_prefix else "ComfyUI"
 
     # Handle faceswap or standard output
     if faceswap_enabled:
         print(f"[Workflow] Faceswap enabled with image: {faceswap_image}")
-
-        # Remove standard video nodes (we'll use VHS_VideoCombine instead)
-        del workflow["94"]   # CreateVideo
-        del workflow["108"]  # SaveVideo
 
         # Add LoadImage node for face swap source (node 188)
         workflow["188"] = {
@@ -482,7 +467,6 @@ def build_wan_i2v_workflow(
         print(f"[Workflow] Added faceswap nodes: 188 (LoadImage), 183 (FaceFusion), 186 (VHS_VideoCombine)")
         print(f"[Workflow] FaceFusion: {faceswap_model}, detector={faceswap_detector_model}, mode={faceswap_selector_mode}")
         print(f"[Workflow] FaceFusion: {faceswap_occluder} occlusion, pixel_boost={faceswap_pixel_boost}")
-        print(f"[Workflow] Removed node 108 (SaveVideo)")
 
     # Always add RIFE frame interpolation (required for both 30fps and 60fps output)
     print(f"[Workflow] Adding RIFE {rife_multiplier}x frame interpolation")
@@ -509,11 +493,7 @@ def build_wan_i2v_workflow(
         workflow["186"]["inputs"]["frame_rate"] = output_fps
         print(f"[Workflow] RIFE wired: FaceFusion(183) → RIFE(200) → VHS_VideoCombine(186) @ {output_fps}fps ({rife_multiplier}x interpolated)")
     else:
-        # Without faceswap: use VHS_VideoCombine instead of CreateVideo+SaveVideo
-        # Remove CreateVideo and SaveVideo nodes
-        del workflow["94"]
-        del workflow["108"]
-
+        # Without faceswap: VAEDecode → RIFE → VHS_VideoCombine
         # Add VHS_VideoCombine node (node 186)
         workflow["186"] = {
             "class_type": "VHS_VideoCombine",
