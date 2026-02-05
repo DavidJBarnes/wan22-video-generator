@@ -768,7 +768,8 @@ export default function Settings() {
                 value={facefusionModel}
                 onChange={(e) => setFacefusionModel(e.target.value)}
               >
-                <option value="inswapper_128">InSwapper 128 (recommended)</option>
+                <option value="hyperswap_1c_256">HyperSwap 256 (best quality)</option>
+                <option value="inswapper_128">InSwapper 128</option>
                 <option value="inswapper_128_fp16">InSwapper 128 FP16 (faster)</option>
               </select>
               <small style={{ color: '#666', fontSize: '12px' }}>
