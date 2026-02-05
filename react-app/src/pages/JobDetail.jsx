@@ -1180,7 +1180,7 @@ export default function JobDetail() {
                         Edit
                       </Button>
                     )}
-                    {!isDeleted && ['completed', 'failed', 'running', 'awaiting_prompt'].includes(seg.status) && (
+                    {!isDeleted && seg.has_workflow_settings && (
                       <IconButton
                         size="small"
                         onClick={() => {

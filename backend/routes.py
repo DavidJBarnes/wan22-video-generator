@@ -1348,6 +1348,10 @@ async def get_job_segments_endpoint(job_id: int):
     # Get real segments from database
     segments = db_get_job_segments(job_id)
 
+    # Add flag indicating if workflow can be accurately exported
+    for seg in segments:
+        seg["has_workflow_settings"] = bool(seg.get("workflow_settings"))
+
     return segments
 
 
