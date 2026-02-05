@@ -347,6 +347,7 @@ class APIClient {
     // Faceswap options (per-segment)
     if (faceswapOptions) {
       formData.append('faceswap_enabled', (faceswapOptions.enabled || false).toString());
+      formData.append('faceswap_method', faceswapOptions.method || 'reactor');
       formData.append('faceswap_image', faceswapOptions.image || '');
       formData.append('faceswap_faces_order', faceswapOptions.facesOrder || 'left-right');
       formData.append('faceswap_faces_index', faceswapOptions.facesIndex || '0');
