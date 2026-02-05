@@ -60,6 +60,11 @@ export function getChipClass(status) {
 }
 
 export function hasFaceswap(job) {
+  // Use computed has_faceswap from backend (checks any segment)
+  // Falls back to job-level parameter for backwards compatibility
+  if (job.has_faceswap !== undefined) {
+    return Boolean(job.has_faceswap);
+  }
   const params = job.parameters || {};
   return Boolean(params.faceswap_enabled);
 }
