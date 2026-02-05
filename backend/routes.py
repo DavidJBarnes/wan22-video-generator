@@ -74,9 +74,11 @@ from database import (
     create_prompt_list,
     update_prompt_list,
     delete_prompt_list,
-    get_prompt_lists_by_names
+    get_prompt_lists_by_names,
+    parse_loras
 )
 from comfyui_client import ComfyUIClient
+from workflow_templates import build_wan_i2v_workflow
 from queue_manager import queue_manager
 from progress_tracker import progress_tracker
 from config import (
@@ -1168,6 +1170,174 @@ async def get_segment_frame(job_id: int, segment_index: int, frame: int = 0):
     )
 
 
+@router.get("/jobs/{job_id}/segments/{segment_index}/workflow")
+async def export_segment_workflow(job_id: int, segment_index: int):
+    """Export the ComfyUI workflow JSON for a specific segment.
+
+    Returns the complete workflow with all actual settings used when the
+    segment was processed, ready to import into ComfyUI for reproduction.
+
+    For segments processed after this feature was added, uses stored settings.
+    For older segments without stored settings, falls back to current settings.
+    """
+    import urllib.parse
+
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    segment = get_segment(job_id, segment_index)
+    if not segment:
+        raise HTTPException(status_code=404, detail=f"Segment {segment_index} not found")
+
+    # Only allow export for segments that have been processed
+    if segment.get("status") not in ("completed", "failed", "running", "awaiting_prompt"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot export workflow for segment with status '{segment.get('status')}'"
+        )
+
+    # Get job parameters
+    params = json.loads(job.get("parameters") or "{}") if isinstance(job.get("parameters"), str) else (job.get("parameters") or {})
+    segment_duration = float(params.get("segment_duration", 5.0))
+    target_fps = int(params.get("target_fps", 30))
+
+    # Determine start image filename
+    if segment_index == 0:
+        start_image_filename = job.get("input_image", "")
+    else:
+        start_image_url = segment.get("start_image_url", "")
+        if start_image_url and 'filename=' in start_image_url:
+            parsed = urllib.parse.urlparse(start_image_url)
+            url_params = urllib.parse.parse_qs(parsed.query)
+            start_image_filename = url_params.get('filename', [''])[0]
+        else:
+            start_image_filename = start_image_url
+
+    # Parse LoRAs from segment or job
+    high_lora_str = segment.get("high_lora") or job.get("high_lora")
+    low_lora_str = segment.get("low_lora") or job.get("low_lora")
+    high_loras = parse_loras(high_lora_str)
+    low_loras = parse_loras(low_lora_str)
+
+    # Build combined loras list for workflow
+    loras = None
+    if high_loras or low_loras:
+        loras = []
+        max_len = max(len(high_loras), len(low_loras))
+        for i in range(max_len):
+            high = high_loras[i] if i < len(high_loras) else {}
+            low = low_loras[i] if i < len(low_loras) else {}
+            loras.append({
+                "high_file": high.get("file", ""),
+                "low_file": low.get("file", ""),
+                "high_weight": high.get("weight", 1.0),
+                "low_weight": low.get("weight", 1.0),
+            })
+
+    # Get faceswap settings from segment
+    faceswap_enabled = bool(segment.get("faceswap_enabled"))
+    faceswap_image = segment.get("faceswap_image", "")
+    faceswap_faces_order = segment.get("faceswap_faces_order", "left-right")
+    faceswap_faces_index = segment.get("faceswap_faces_index", "0")
+
+    # Parse faceswap_params if present
+    faceswap_params_str = segment.get("faceswap_params")
+    faceswap_params = json.loads(faceswap_params_str) if faceswap_params_str else {}
+    faceswap_method = faceswap_params.get("method", "reactor")
+
+    # Get workflow settings - prefer stored snapshot, fall back to current settings
+    workflow_settings_str = segment.get("workflow_settings")
+    if workflow_settings_str:
+        ws = json.loads(workflow_settings_str)
+        high_noise_model = ws.get("high_noise_model", "")
+        low_noise_model = ws.get("low_noise_model", "")
+        vae_model = ws.get("vae_model", "")
+        text_encoder = ws.get("text_encoder", "")
+        reactor_settings = ws.get("reactor", {})
+        facefusion_settings = ws.get("facefusion", {})
+    else:
+        # Fall back to current settings for old segments
+        high_noise_model = get_setting("high_noise_model", "")
+        low_noise_model = get_setting("low_noise_model", "")
+        vae_model = get_setting("vae_model", "")
+        text_encoder = get_setting("text_encoder", "")
+        reactor_settings = {
+            "swap_model": get_setting("reactor_swap_model", "inswapper_128.onnx"),
+            "face_detection": get_setting("reactor_face_detection", "retinaface_resnet50"),
+            "face_restore": get_setting("reactor_face_restore", "codeformer-v0.1.0.pth"),
+            "restore_visibility": float(get_setting("reactor_restore_visibility", "1.0")),
+            "codeformer_weight": float(get_setting("reactor_codeformer_weight", "0.8")),
+        }
+        facefusion_settings = {
+            "model": get_setting("facefusion_model", "inswapper_128"),
+            "occluder": get_setting("facefusion_occluder", "xseg_1"),
+            "mask_blur": float(get_setting("facefusion_mask_blur", "0.3")),
+            "region_mask": get_setting("facefusion_region_mask", "false") == "true",
+            "score_threshold": float(get_setting("facefusion_score_threshold", "0.5")),
+            "pixel_boost": get_setting("facefusion_pixel_boost", "512x512"),
+            "selector_mode": get_setting("facefusion_selector_mode", "reference"),
+            "detector_model": get_setting("facefusion_detector_model", "retinaface"),
+            "reference_distance": float(get_setting("facefusion_reference_distance", "0.8")),
+        }
+
+    # Build output prefix from job id and name
+    job_name = job.get("name", f"job_{job_id}")
+    safe_name = re.sub(r'[^\w\-]', '_', job_name)
+    output_prefix = f"{job_id}_{safe_name}"
+
+    # Build the workflow
+    workflow = build_wan_i2v_workflow(
+        prompt=segment.get("prompt") or job.get("prompt", ""),
+        negative_prompt=job.get("negative_prompt", get_setting("default_negative_prompt", "")),
+        width=int(params.get("width", get_setting("default_width", "640"))),
+        height=int(params.get("height", get_setting("default_height", "640"))),
+        duration_sec=segment_duration,
+        target_fps=target_fps,
+        start_image_filename=start_image_filename,
+        high_noise_model=high_noise_model,
+        low_noise_model=low_noise_model,
+        vae_model=vae_model,
+        text_encoder=text_encoder,
+        seed=job.get("seed"),
+        loras=loras,
+        output_prefix=output_prefix,
+        faceswap_enabled=faceswap_enabled,
+        faceswap_image=faceswap_image,
+        faceswap_faces_order=faceswap_faces_order,
+        faceswap_faces_index=faceswap_faces_index,
+        faceswap_method=faceswap_method,
+        # ReActor settings
+        reactor_swap_model=reactor_settings.get("swap_model", "inswapper_128.onnx"),
+        reactor_face_detection=reactor_settings.get("face_detection", "retinaface_resnet50"),
+        reactor_face_restore=reactor_settings.get("face_restore", "codeformer-v0.1.0.pth"),
+        reactor_restore_visibility=float(reactor_settings.get("restore_visibility", 1.0)),
+        reactor_codeformer_weight=float(reactor_settings.get("codeformer_weight", 0.8)),
+        # FaceFusion settings
+        faceswap_model=facefusion_settings.get("model", "inswapper_128"),
+        faceswap_occluder=facefusion_settings.get("occluder", "xseg_1"),
+        faceswap_mask_blur=float(facefusion_settings.get("mask_blur", 0.3)),
+        faceswap_region_mask=facefusion_settings.get("region_mask", False),
+        faceswap_score_threshold=float(facefusion_settings.get("score_threshold", 0.5)),
+        faceswap_pixel_boost=facefusion_settings.get("pixel_boost", "512x512"),
+        faceswap_selector_mode=facefusion_settings.get("selector_mode", "reference"),
+        faceswap_detector_model=facefusion_settings.get("detector_model", "retinaface"),
+        faceswap_reference_distance=float(facefusion_settings.get("reference_distance", 0.8)),
+    )
+
+    # Return as downloadable JSON
+    workflow_json = json.dumps(workflow, indent=2)
+    filename = f"{job_id}_segment_{segment_index}_workflow.json"
+
+    return Response(
+        content=workflow_json,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
+
+
 @router.get("/jobs/{job_id}/segments")
 async def get_job_segments_endpoint(job_id: int):
     """Get segments for a job from the database."""
@@ -1177,6 +1347,10 @@ async def get_job_segments_endpoint(job_id: int):
 
     # Get real segments from database
     segments = db_get_job_segments(job_id)
+
+    # Add flag indicating if workflow can be accurately exported
+    for seg in segments:
+        seg["has_workflow_settings"] = bool(seg.get("workflow_settings"))
 
     return segments
 

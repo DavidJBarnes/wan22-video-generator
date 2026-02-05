@@ -23,6 +23,7 @@ from database import (
     get_next_pending_segment,
     update_segment_status,
     update_segment_start_image,
+    update_segment_workflow_settings,
     get_completed_segments_count,
     get_last_active_segment_before,
     parse_loras,
@@ -756,6 +757,34 @@ class QueueManager:
             faceswap_detector_model=get_setting("facefusion_detector_model", "retinaface"),
             faceswap_reference_distance=float(get_setting("facefusion_reference_distance", "0.8")),
         )
+
+        # Capture workflow settings snapshot for later export/reconstruction
+        workflow_settings = {
+            "high_noise_model": high_noise_model,
+            "low_noise_model": low_noise_model,
+            "vae_model": vae_model,
+            "text_encoder": text_encoder,
+            "reactor": {
+                "swap_model": get_setting("reactor_swap_model", "inswapper_128.onnx"),
+                "face_detection": get_setting("reactor_face_detection", "retinaface_resnet50"),
+                "face_restore": get_setting("reactor_face_restore", "codeformer-v0.1.0.pth"),
+                "restore_visibility": float(get_setting("reactor_restore_visibility", "1.0")),
+                "codeformer_weight": float(get_setting("reactor_codeformer_weight", "0.8")),
+            },
+            "facefusion": {
+                "model": get_setting("facefusion_model", "inswapper_128"),
+                "occluder": get_setting("facefusion_occluder", "xseg_1"),
+                "mask_blur": float(get_setting("facefusion_mask_blur", "0.3")),
+                "region_mask": get_setting("facefusion_region_mask", "false") == "true",
+                "score_threshold": float(get_setting("facefusion_score_threshold", "0.5")),
+                "pixel_boost": get_setting("facefusion_pixel_boost", "512x512"),
+                "selector_mode": get_setting("facefusion_selector_mode", "reference"),
+                "detector_model": get_setting("facefusion_detector_model", "retinaface"),
+                "reference_distance": float(get_setting("facefusion_reference_distance", "0.8")),
+            },
+        }
+        update_segment_workflow_settings(job_id, segment_index, workflow_settings)
+        logger.info(f"[Job {job_id}] Stored workflow settings snapshot for segment {segment_index}")
 
         # Queue the prompt
         logger.info(f"[Job {job_id}] Queuing segment {segment_index} workflow to ComfyUI...")
