@@ -347,6 +347,12 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Add workflow_settings column for storing execution-time settings snapshot
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN workflow_settings TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Add priority column for queue ordering (lower number = higher priority)
         try:
             cursor.execute("ALTER TABLE jobs ADD COLUMN priority INTEGER DEFAULT 0")
@@ -1995,6 +2001,31 @@ def update_segment_fade_to_black(job_id: int, segment_index: int, fade_to_black:
         cursor.execute(
             "UPDATE job_segments SET fade_to_black = ? WHERE job_id = ? AND segment_index = ?",
             (1 if fade_to_black else 0, job_id, segment_index)
+        )
+        return cursor.rowcount > 0
+
+
+def update_segment_workflow_settings(job_id: int, segment_index: int, workflow_settings: Dict[str, Any]) -> bool:
+    """Store the workflow settings snapshot used when processing a segment.
+
+    This captures all settings at execution time so the workflow can be
+    accurately reconstructed later for export.
+
+    Args:
+        job_id: The job ID
+        segment_index: The segment index
+        workflow_settings: Dict containing all settings used for this segment:
+            - high_noise_model, low_noise_model, vae_model, text_encoder
+            - reactor: dict of all ReActor settings
+            - facefusion: dict of all FaceFusion settings
+
+    Returns True if the segment was updated, False otherwise.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE job_segments SET workflow_settings = ? WHERE job_id = ? AND segment_index = ?",
+            (json.dumps(workflow_settings), job_id, segment_index)
         )
         return cursor.rowcount > 0
 

@@ -8,6 +8,7 @@ import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrow
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import DownloadIcon from '@mui/icons-material/Download';
 import API from '../api/client';
 import { useLoras } from '../contexts/LoraContext';
 import { formatDate, showToast } from '../utils/helpers';
@@ -1178,6 +1179,18 @@ export default function JobDetail() {
                       >
                         Edit
                       </Button>
+                    )}
+                    {!isDeleted && ['completed', 'failed', 'running', 'awaiting_prompt'].includes(seg.status) && (
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          window.location.href = `/api/jobs/${id}/segments/${seg.segment_index}/workflow`;
+                        }}
+                        title="Download ComfyUI Workflow"
+                        sx={{ color: 'text.secondary' }}
+                      >
+                        <DownloadIcon fontSize="small" />
+                      </IconButton>
                     )}
                     {canRestore && (
                       <Button
