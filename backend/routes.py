@@ -577,6 +577,7 @@ async def create_new_job(job: JobCreate):
         high_loras=high_loras if high_loras else None,
         low_loras=low_loras if low_loras else None,
         faceswap_enabled=params.get("faceswap_enabled", False),
+        faceswap_method=params.get("faceswap_method", "reactor"),
         faceswap_image=params.get("faceswap_image", ""),
         faceswap_faces_order=params.get("faceswap_faces_order", "left-right"),
         faceswap_faces_index=params.get("faceswap_faces_index", "0"),
@@ -1254,6 +1255,7 @@ async def update_segment_prompt_endpoint(
     loras: Optional[str] = Form(None),  # JSON array: '[{"high_file": "...", "low_file": "..."}]'
     auto_finalize: Optional[bool] = Form(False),  # Auto-finalize after this segment completes
     faceswap_enabled: Optional[bool] = Form(False),  # Enable faceswap for this segment
+    faceswap_method: Optional[str] = Form("reactor"),  # Faceswap method: reactor or facefusion
     faceswap_image: Optional[str] = Form(None),  # Face image filename
     faceswap_faces_order: Optional[str] = Form("left-right"),  # Faces order
     faceswap_faces_index: Optional[str] = Form("0"),  # Faces index
@@ -1381,6 +1383,7 @@ async def update_segment_prompt_endpoint(
             high_loras=high_loras if high_loras else None,
             low_loras=low_loras if low_loras else None,
             faceswap_enabled=faceswap_enabled or False,
+            faceswap_method=faceswap_method or "reactor",
             faceswap_image=faceswap_image or "",
             faceswap_faces_order=faceswap_faces_order or "left-right",
             faceswap_faces_index=faceswap_faces_index or "0",
@@ -1405,6 +1408,7 @@ async def update_segment_prompt_endpoint(
             high_loras=high_loras if high_loras else None,
             low_loras=low_loras if low_loras else None,
             faceswap_enabled=faceswap_enabled,
+            faceswap_method=faceswap_method,
             faceswap_image=faceswap_image,
             faceswap_faces_order=faceswap_faces_order,
             faceswap_faces_index=faceswap_faces_index,

@@ -1445,6 +1445,7 @@ def create_first_segment(
     high_loras: Optional[List[str]] = None,
     low_loras: Optional[List[str]] = None,
     faceswap_enabled: bool = False,
+    faceswap_method: str = "reactor",
     faceswap_image: Optional[str] = None,
     faceswap_faces_order: str = "left-right",
     faceswap_faces_index: str = "0",
@@ -1487,12 +1488,13 @@ def create_first_segment(
         faceswap_detector_model: Face detector model
         fade_to_black: Whether to apply fade-to-black transition at segment end
     """
-    # Build faceswap_params JSON if any preset settings are provided
+    # Build faceswap_params JSON - always include method, plus any preset settings
     faceswap_params = None
-    if any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
+    if faceswap_method or any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
             faceswap_region_mask is not None, faceswap_score_threshold is not None,
             faceswap_pixel_boost, faceswap_selector_mode, faceswap_detector_model]):
         faceswap_params = json.dumps({
+            "method": faceswap_method or "reactor",
             "preset": faceswap_preset,
             "model": faceswap_model,
             "occluder": faceswap_occluder,
@@ -1526,6 +1528,7 @@ def create_next_segment(
     high_loras: Optional[List[str]] = None,
     low_loras: Optional[List[str]] = None,
     faceswap_enabled: bool = False,
+    faceswap_method: str = "reactor",
     faceswap_image: Optional[str] = None,
     faceswap_faces_order: str = "left-right",
     faceswap_faces_index: str = "0",
@@ -1574,12 +1577,13 @@ def create_next_segment(
     # Store template as-is, or use prompt if no template provided
     template = prompt_template if prompt_template is not None else prompt
 
-    # Build faceswap_params JSON if any preset settings are provided
+    # Build faceswap_params JSON - always include method, plus any preset settings
     faceswap_params = None
-    if any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
+    if faceswap_method or any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
             faceswap_region_mask is not None, faceswap_score_threshold is not None,
             faceswap_pixel_boost, faceswap_selector_mode, faceswap_detector_model]):
         faceswap_params = json.dumps({
+            "method": faceswap_method or "reactor",
             "preset": faceswap_preset,
             "model": faceswap_model,
             "occluder": faceswap_occluder,
@@ -1776,6 +1780,7 @@ def update_segment_prompt(
     high_loras: Optional[List[str]] = None,
     low_loras: Optional[List[str]] = None,
     faceswap_enabled: Optional[bool] = None,
+    faceswap_method: Optional[str] = None,
     faceswap_image: Optional[str] = None,
     faceswap_faces_order: Optional[str] = None,
     faceswap_faces_index: Optional[str] = None,
@@ -1856,11 +1861,12 @@ def update_segment_prompt(
             # Empty string means clear (revert to job-level default), otherwise store the URL
             params.append(faceswap_source_image if faceswap_source_image else None)
 
-        # Build faceswap_params JSON if any preset settings are provided
-        if any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
+        # Build faceswap_params JSON - always include method, plus any preset settings
+        if faceswap_method or any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
                 faceswap_region_mask is not None, faceswap_score_threshold is not None,
                 faceswap_pixel_boost, faceswap_selector_mode, faceswap_detector_model]):
             faceswap_params = json.dumps({
+                "method": faceswap_method or "reactor",
                 "preset": faceswap_preset,
                 "model": faceswap_model,
                 "occluder": faceswap_occluder,
