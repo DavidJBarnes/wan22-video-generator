@@ -779,21 +779,27 @@ export default function ImageRepo() {
                   <div className="repo-item-preview folder-preview">
                     {folder.preview_images?.length > 0 ? (
                       <div className={`folder-collage collage-${Math.min(folder.preview_images.length, 3)}`}>
-                        {folder.preview_images.slice(0, 3).map((imgPath, i) => (
-                          <LazyImage
-                            key={i}
-                            src={API.getRepoThumbnail(imgPath, 100)}
-                            alt=""
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                              const collage = e.target.parentElement;
-                              const visibleImages = collage.querySelectorAll('img:not([style*="display: none"])');
-                              if (visibleImages.length === 0) {
-                                collage.classList.add('all-failed');
-                              }
-                            }}
-                          />
-                        ))}
+                        {folder.preview_images.slice(0, 3).map((img, i) => {
+                          // Handle both old format (string) and new format (object with path/mtime)
+                          const imgPath = typeof img === 'string' ? img : img.path;
+                          const imgMtime = typeof img === 'object' ? img.mtime : null;
+                          return (
+                            <LazyImage
+                              key={i}
+                              src={API.getRepoThumbnail(imgPath, 100)}
+                              localSrc={API.getLocalImageThumbnail(imgPath, 100, imgMtime)}
+                              alt=""
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                const collage = e.target.parentElement;
+                                const visibleImages = collage.querySelectorAll('img:not([style*="display: none"])');
+                                if (visibleImages.length === 0) {
+                                  collage.classList.add('all-failed');
+                                }
+                              }}
+                            />
+                          );
+                        })}
                         <div className="folder-fallback">📁</div>
                       </div>
                     ) : (
@@ -818,6 +824,7 @@ export default function ImageRepo() {
                     <div className="repo-item-preview">
                       <LazyImage
                         src={API.getRepoThumbnail(image.path, 200)}
+                        localSrc={API.getLocalImageThumbnail(image.path, 200, image.mtime)}
                         alt={image.name}
                         onError={(e) => {
                           e.target.src = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22%3E%3Crect fill=%22%23ddd%22 width=%22200%22 height=%22200%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23999%22%3E🖼️%3C/text%3E%3C/svg%3E';

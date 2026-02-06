@@ -3,9 +3,11 @@ import { useState, useEffect, useRef } from 'react';
 /**
  * LazyImage - An image component that only loads when visible in the viewport.
  * Uses Intersection Observer for efficient lazy loading.
+ * Supports local/remote fallback for faster loading from local server.
  *
  * Props:
- * - src: The image source URL
+ * - src: The image source URL (remote)
+ * - localSrc: Optional local server URL (tried first, falls back to src on error)
  * - alt: Alt text for the image
  * - thumbnailSrc: Optional smaller thumbnail to load first (for progressive loading)
  * - className: CSS class name
@@ -16,6 +18,7 @@ import { useState, useEffect, useRef } from 'react';
  */
 export default function LazyImage({
   src,
+  localSrc,
   alt = '',
   thumbnailSrc,
   className = '',
@@ -27,7 +30,17 @@ export default function LazyImage({
   const [isLoaded, setIsLoaded] = useState(false);
   const [isInView, setIsInView] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [triedLocal, setTriedLocal] = useState(false);
+  const [currentSrc, setCurrentSrc] = useState(localSrc || src);
   const imgRef = useRef(null);
+
+  // Update currentSrc when props change
+  useEffect(() => {
+    setTriedLocal(false);
+    setCurrentSrc(localSrc || src);
+    setHasError(false);
+    setIsLoaded(false);
+  }, [src, localSrc]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -60,6 +73,12 @@ export default function LazyImage({
   };
 
   const handleError = (e) => {
+    // If we were trying local and it failed, fall back to remote
+    if (localSrc && !triedLocal) {
+      setTriedLocal(true);
+      setCurrentSrc(src);
+      return;
+    }
     setHasError(true);
     if (onError) {
       onError(e);
@@ -91,7 +110,7 @@ export default function LazyImage({
   return (
     <img
       ref={imgRef}
-      src={src}
+      src={currentSrc}
       alt={alt}
       className={className}
       style={{

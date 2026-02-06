@@ -34,51 +34,28 @@ export default function VideoPlayer({
   onError,
   ...rest
 }) {
-  const [currentSrc, setCurrentSrc] = useState(null);
-  const [isLocal, setIsLocal] = useState(false);
+  // Start with local if available, otherwise remote
+  const [currentSrc, setCurrentSrc] = useState(() => localSrc || src);
   const [triedLocal, setTriedLocal] = useState(false);
   const videoRef = useRef(null);
 
-  // Determine initial source
+  // Reset when src/localSrc props change
   useEffect(() => {
-    const localUrl = localSrc || null;
+    setTriedLocal(false);
+    setCurrentSrc(localSrc || src);
+  }, [src, localSrc]);
 
-    if (localUrl && !triedLocal) {
-      // Try local first
-      console.log('[VideoPlayer] Trying local source:', localUrl);
-      setCurrentSrc(localUrl);
-      setIsLocal(true);
-    } else {
-      // Use remote
-      console.log('[VideoPlayer] Using remote source:', src);
-      setCurrentSrc(src);
-      setIsLocal(false);
-    }
-  }, [src, localSrc, triedLocal]);
-
-  const handleError = (e) => {
-    console.log('[VideoPlayer] Error event:', currentSrc, e);
-    if (isLocal && !triedLocal) {
-      // Local failed, fall back to remote
-      console.log('[VideoPlayer] Local source failed, falling back to remote:', src);
+  const handleError = () => {
+    // If we were trying local, fall back to remote
+    if (localSrc && !triedLocal && currentSrc === localSrc) {
       setTriedLocal(true);
       setCurrentSrc(src);
-      setIsLocal(false);
     } else if (onError) {
-      // Remote also failed
-      console.log('[VideoPlayer] Remote also failed');
       onError();
     }
   };
 
-  const handleCanPlay = () => {
-    console.log('[VideoPlayer] Video can play:', currentSrc, 'isLocal:', isLocal);
-  };
-
   const handleLoadedData = (e) => {
-    if (isLocal) {
-      console.log('[VideoPlayer] Loaded from local server');
-    }
     if (onLoadedData) {
       onLoadedData(e);
     }
@@ -99,7 +76,6 @@ export default function VideoPlayer({
       poster={poster}
       onError={handleError}
       onLoadedData={handleLoadedData}
-      onCanPlay={handleCanPlay}
       {...rest}
     />
   );
@@ -117,34 +93,42 @@ export default function VideoPlayer({
  * @param {Object} props.style - Inline styles
  */
 export function VideoPreview({ jobId, filename, poster, className, style, ...rest }) {
-  const [currentSrc, setCurrentSrc] = useState(null);
-  const [triedLocal, setTriedLocal] = useState(false);
-  const videoRef = useRef(null);
-
   const remoteSrc = API.getJobVideo(jobId);
   const localSrc = API.getLocalJobVideo(jobId, filename);
+  const localPoster = API.getLocalJobThumbnail(jobId);
 
+  const [currentSrc, setCurrentSrc] = useState(() => localSrc || remoteSrc);
+  const [triedLocal, setTriedLocal] = useState(false);
+  const [currentPoster, setCurrentPoster] = useState(() => localPoster || poster);
+  const [triedLocalPoster, setTriedLocalPoster] = useState(false);
+  const videoRef = useRef(null);
+
+  // Reset when jobId changes
   useEffect(() => {
-    if (localSrc && !triedLocal) {
-      console.log(`[VideoPreview] Job ${jobId}: trying local`, localSrc);
-      setCurrentSrc(localSrc);
-    } else {
-      console.log(`[VideoPreview] Job ${jobId}: using remote`, remoteSrc);
-      setCurrentSrc(remoteSrc);
-    }
-  }, [localSrc, remoteSrc, triedLocal, jobId]);
+    setTriedLocal(false);
+    setTriedLocalPoster(false);
+    setCurrentSrc(localSrc || remoteSrc);
+    setCurrentPoster(localPoster || poster);
+  }, [jobId, localSrc, remoteSrc, localPoster, poster]);
 
-  const handleError = (e) => {
-    console.log('[VideoPreview] Error loading video:', currentSrc, e);
-    if (localSrc && !triedLocal) {
-      console.log('[VideoPreview] Local source failed, falling back to remote');
+  // Test local poster availability
+  useEffect(() => {
+    if (localPoster && !triedLocalPoster) {
+      const img = new Image();
+      img.onload = () => setCurrentPoster(localPoster);
+      img.onerror = () => {
+        setTriedLocalPoster(true);
+        setCurrentPoster(poster);
+      };
+      img.src = localPoster;
+    }
+  }, [localPoster, poster, triedLocalPoster]);
+
+  const handleError = () => {
+    if (localSrc && !triedLocal && currentSrc === localSrc) {
       setTriedLocal(true);
       setCurrentSrc(remoteSrc);
     }
-  };
-
-  const handleCanPlay = () => {
-    console.log('[VideoPreview] Video can play:', currentSrc);
   };
 
   const handleMouseEnter = () => {
@@ -166,14 +150,13 @@ export function VideoPreview({ jobId, filename, poster, className, style, ...res
     <video
       ref={videoRef}
       src={currentSrc}
-      poster={poster}
+      poster={currentPoster}
       className={className}
       style={style}
       muted
       loop
       playsInline
       onError={handleError}
-      onCanPlay={handleCanPlay}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       {...rest}
