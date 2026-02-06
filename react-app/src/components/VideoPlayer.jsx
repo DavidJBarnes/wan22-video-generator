@@ -34,34 +34,23 @@ export default function VideoPlayer({
   onError,
   ...rest
 }) {
-  const [currentSrc, setCurrentSrc] = useState(null);
-  const [isLocal, setIsLocal] = useState(false);
+  // Start with local if available, otherwise remote
+  const [currentSrc, setCurrentSrc] = useState(() => localSrc || src);
   const [triedLocal, setTriedLocal] = useState(false);
   const videoRef = useRef(null);
 
-  // Determine initial source
+  // Reset when src/localSrc props change
   useEffect(() => {
-    const localUrl = localSrc || null;
-
-    if (localUrl && !triedLocal) {
-      // Try local first
-      setCurrentSrc(localUrl);
-      setIsLocal(true);
-    } else {
-      // Use remote
-      setCurrentSrc(src);
-      setIsLocal(false);
-    }
-  }, [src, localSrc, triedLocal]);
+    setTriedLocal(false);
+    setCurrentSrc(localSrc || src);
+  }, [src, localSrc]);
 
   const handleError = () => {
-    if (isLocal && !triedLocal) {
-      // Local failed, fall back to remote
+    // If we were trying local, fall back to remote
+    if (localSrc && !triedLocal && currentSrc === localSrc) {
       setTriedLocal(true);
       setCurrentSrc(src);
-      setIsLocal(false);
     } else if (onError) {
-      // Remote also failed
       onError();
     }
   };
@@ -104,26 +93,25 @@ export default function VideoPlayer({
  * @param {Object} props.style - Inline styles
  */
 export function VideoPreview({ jobId, filename, poster, className, style, ...rest }) {
-  const [currentSrc, setCurrentSrc] = useState(null);
-  const [triedLocal, setTriedLocal] = useState(false);
-  const [currentPoster, setCurrentPoster] = useState(poster);
-  const [triedLocalPoster, setTriedLocalPoster] = useState(false);
-  const videoRef = useRef(null);
-
   const remoteSrc = API.getJobVideo(jobId);
   const localSrc = API.getLocalJobVideo(jobId, filename);
   const localPoster = API.getLocalJobThumbnail(jobId);
 
-  // Try local video source first
-  useEffect(() => {
-    if (localSrc && !triedLocal) {
-      setCurrentSrc(localSrc);
-    } else {
-      setCurrentSrc(remoteSrc);
-    }
-  }, [localSrc, remoteSrc, triedLocal, jobId]);
+  const [currentSrc, setCurrentSrc] = useState(() => localSrc || remoteSrc);
+  const [triedLocal, setTriedLocal] = useState(false);
+  const [currentPoster, setCurrentPoster] = useState(() => localPoster || poster);
+  const [triedLocalPoster, setTriedLocalPoster] = useState(false);
+  const videoRef = useRef(null);
 
-  // Try local poster/thumbnail first
+  // Reset when jobId changes
+  useEffect(() => {
+    setTriedLocal(false);
+    setTriedLocalPoster(false);
+    setCurrentSrc(localSrc || remoteSrc);
+    setCurrentPoster(localPoster || poster);
+  }, [jobId, localSrc, remoteSrc, localPoster, poster]);
+
+  // Test local poster availability
   useEffect(() => {
     if (localPoster && !triedLocalPoster) {
       const img = new Image();
@@ -133,13 +121,11 @@ export function VideoPreview({ jobId, filename, poster, className, style, ...res
         setCurrentPoster(poster);
       };
       img.src = localPoster;
-    } else if (!localPoster) {
-      setCurrentPoster(poster);
     }
-  }, [localPoster, poster, triedLocalPoster, jobId]);
+  }, [localPoster, poster, triedLocalPoster]);
 
   const handleError = () => {
-    if (localSrc && !triedLocal) {
+    if (localSrc && !triedLocal && currentSrc === localSrc) {
       setTriedLocal(true);
       setCurrentSrc(remoteSrc);
     }
