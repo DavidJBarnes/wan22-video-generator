@@ -13,28 +13,26 @@ import { showToast } from '../utils/helpers';
 import './Layout.css';
 
 export default function Layout() {
-  const [comfyStatus, setComfyStatus] = useState({ reachable: false });
-  const [runningJobsCount, setRunningJobsCount] = useState(0);
   const [syncRunning, setSyncRunning] = useState(false);
+  const [comfyStatus, setComfyStatus] = useState({ reachable: false });
 
-  // Poll ComfyUI status and jobs
+  // Lightweight polling for just ComfyUI status (not full jobs list)
   useEffect(() => {
-    async function checkStatus() {
-      const [status, jobsData] = await Promise.all([
-        API.checkComfyStatus(),
-        API.getJobs().catch(() => ({ jobs: [] }))
-      ]);
-      setComfyStatus(status);
-      const jobs = jobsData.jobs || jobsData || [];
-      setRunningJobsCount(jobs.filter(j => j.status === 'running').length);
-    }
+    const checkStatus = async () => {
+      try {
+        const status = await API.checkComfyStatus();
+        setComfyStatus(status);
+      } catch {
+        setComfyStatus({ reachable: false });
+      }
+    };
 
     checkStatus();
-    const interval = setInterval(checkStatus, 3000);
+    const interval = setInterval(checkStatus, 5000); // 5s is enough for status
     return () => clearInterval(interval);
   }, []);
 
-  // Update page title based on ComfyUI status (matches Dashboard display)
+  // Update page title based on ComfyUI status
   useEffect(() => {
     const baseTitle = 'Wan2.2 Video Gen';
 
@@ -46,13 +44,12 @@ export default function Layout() {
     const queueRunning = comfyStatus.queue?.queue_running?.length || 0;
     const queuePending = comfyStatus.queue?.queue_pending?.length || 0;
 
-    // Show "Running" if ComfyUI queue has items OR our app has running jobs
-    if (queueRunning > 0 || queuePending > 0 || runningJobsCount > 0) {
+    if (queueRunning > 0 || queuePending > 0) {
       document.title = `Running... | ${baseTitle}`;
     } else {
       document.title = `Idle | ${baseTitle}`;
     }
-  }, [comfyStatus, runningJobsCount]);
+  }, [comfyStatus]);
 
   const handleSync = async () => {
     const localServerUrl = API.getLocalServerUrl();
