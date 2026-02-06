@@ -2,8 +2,8 @@
 """
 Local static file server for wan22-data directory.
 
-Serves files with CORS headers so the frontend can load videos/images locally
-instead of over the network. This dramatically improves playback for large videos.
+Serves files with CORS headers and Range request support so the frontend
+can load videos/images locally instead of over the network.
 
 Usage:
     python serve.py [--port PORT] [--data-dir PATH]
@@ -17,15 +17,17 @@ Examples:
 import argparse
 import os
 import sys
+import re
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from functools import partial
 
 
-class CORSRequestHandler(SimpleHTTPRequestHandler):
-    """HTTP request handler with CORS headers for cross-origin requests."""
+class RangeRequestHandler(SimpleHTTPRequestHandler):
+    """HTTP request handler with CORS headers and Range request support."""
 
     def __init__(self, *args, directory=None, **kwargs):
+        self.data_directory = directory
         super().__init__(*args, directory=directory, **kwargs)
 
     def end_headers(self):
@@ -33,13 +35,114 @@ class CORSRequestHandler(SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Range')
-        self.send_header('Access-Control-Expose-Headers', 'Content-Length, Content-Range')
+        self.send_header('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges')
         super().end_headers()
 
     def do_OPTIONS(self):
         """Handle CORS preflight requests."""
         self.send_response(200)
         self.end_headers()
+
+    def do_GET(self):
+        """Handle GET requests with Range header support."""
+        # Get the file path
+        path = self.translate_path(self.path)
+
+        if os.path.isdir(path):
+            # Let parent handle directory listings
+            return super().do_GET()
+
+        if not os.path.exists(path):
+            self.send_error(404, "File not found")
+            return
+
+        # Check for Range header
+        range_header = self.headers.get('Range')
+
+        if range_header:
+            self.handle_range_request(path, range_header)
+        else:
+            # No range request - serve full file
+            super().do_GET()
+
+    def handle_range_request(self, path, range_header):
+        """Handle HTTP Range requests for partial content."""
+        try:
+            file_size = os.path.getsize(path)
+
+            # Parse Range header (e.g., "bytes=0-1023" or "bytes=1024-")
+            match = re.match(r'bytes=(\d*)-(\d*)', range_header)
+            if not match:
+                self.send_error(400, "Invalid Range header")
+                return
+
+            start_str, end_str = match.groups()
+
+            if start_str:
+                start = int(start_str)
+                end = int(end_str) if end_str else file_size - 1
+            else:
+                # Suffix range: "-500" means last 500 bytes
+                start = file_size - int(end_str)
+                end = file_size - 1
+
+            # Validate range
+            if start < 0 or end >= file_size or start > end:
+                self.send_response(416)  # Range Not Satisfiable
+                self.send_header('Content-Range', f'bytes */{file_size}')
+                self.end_headers()
+                return
+
+            # Calculate content length
+            content_length = end - start + 1
+
+            # Get content type
+            content_type = self.guess_type(path)
+
+            # Send partial content response
+            self.send_response(206)  # Partial Content
+            self.send_header('Content-Type', content_type)
+            self.send_header('Content-Length', str(content_length))
+            self.send_header('Content-Range', f'bytes {start}-{end}/{file_size}')
+            self.send_header('Accept-Ranges', 'bytes')
+            self.end_headers()
+
+            # Send the requested byte range
+            with open(path, 'rb') as f:
+                f.seek(start)
+                remaining = content_length
+                chunk_size = 64 * 1024  # 64KB chunks
+
+                while remaining > 0:
+                    chunk = f.read(min(chunk_size, remaining))
+                    if not chunk:
+                        break
+                    try:
+                        self.wfile.write(chunk)
+                    except (BrokenPipeError, ConnectionResetError):
+                        # Client disconnected - this is normal for video seeking
+                        return
+                    remaining -= len(chunk)
+
+        except Exception as e:
+            self.log_error(f"Error handling range request: {e}")
+            self.send_error(500, str(e))
+
+    def do_HEAD(self):
+        """Handle HEAD requests with Accept-Ranges header."""
+        path = self.translate_path(self.path)
+
+        if os.path.isfile(path):
+            file_size = os.path.getsize(path)
+            content_type = self.guess_type(path)
+
+            self.send_response(200)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Content-Length', str(file_size))
+            self.send_header('Accept-Ranges', 'bytes')
+            self.end_headers()
+        else:
+            super().do_HEAD()
 
     def log_message(self, format, *args):
         """Custom log format with color coding."""
@@ -119,13 +222,13 @@ URL mapping examples:
         sys.exit(1)
 
     # Create handler with the data directory
-    handler = partial(CORSRequestHandler, directory=str(data_dir))
+    handler = partial(RangeRequestHandler, directory=str(data_dir))
 
     # Start server
     server = HTTPServer((args.bind, args.port), handler)
 
     print(f"\n{'='*60}")
-    print(f"  Local Video Server")
+    print(f"  Local Video Server (with Range request support)")
     print(f"{'='*60}")
     print(f"  Serving:  {data_dir}")
     print(f"  URL:      http://localhost:{args.port}")
