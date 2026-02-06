@@ -97,6 +97,74 @@ export default function VideoPlayer({
 }
 
 /**
+ * Video preview component with hover-to-play and local/remote fallback.
+ * Used in video cards/grids where videos play on hover.
+ *
+ * @param {Object} props
+ * @param {number} props.jobId - Job ID
+ * @param {string} props.filename - Video filename (optional, for local lookup)
+ * @param {string} props.poster - Poster/thumbnail URL
+ * @param {string} props.className - CSS class
+ * @param {Object} props.style - Inline styles
+ */
+export function VideoPreview({ jobId, filename, poster, className, style, ...rest }) {
+  const [currentSrc, setCurrentSrc] = useState(null);
+  const [triedLocal, setTriedLocal] = useState(false);
+  const videoRef = useRef(null);
+
+  const remoteSrc = API.getJobVideo(jobId);
+  const localSrc = API.getLocalJobVideo(jobId, filename);
+
+  useEffect(() => {
+    if (localSrc && !triedLocal) {
+      setCurrentSrc(localSrc);
+    } else {
+      setCurrentSrc(remoteSrc);
+    }
+  }, [localSrc, remoteSrc, triedLocal]);
+
+  const handleError = () => {
+    if (localSrc && !triedLocal) {
+      console.log('[VideoPreview] Local source failed, falling back to remote');
+      setTriedLocal(true);
+      setCurrentSrc(remoteSrc);
+    }
+  };
+
+  const handleMouseEnter = () => {
+    if (videoRef.current) {
+      videoRef.current.play().catch(() => {});
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
+    }
+  };
+
+  if (!currentSrc) return null;
+
+  return (
+    <video
+      ref={videoRef}
+      src={currentSrc}
+      poster={poster}
+      className={className}
+      style={style}
+      muted
+      loop
+      playsInline
+      onError={handleError}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      {...rest}
+    />
+  );
+}
+
+/**
  * Segment video player with automatic local/remote handling.
  *
  * @param {Object} props

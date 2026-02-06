@@ -17,6 +17,7 @@ import {
 import PaginationControl from '../components/PaginationControl';
 import API from '../api/client';
 import { formatDate } from '../utils/helpers';
+import { JobVideoPlayer, VideoPreview } from '../components/VideoPlayer';
 import './Videos.css';
 
 const VIDEOS_PER_PAGE = 12;
@@ -66,27 +67,34 @@ export default function Videos() {
       setAllVideos(completedJobs);
       setLoading(false);
 
-      // Fetch LoRA data for all videos in parallel
-      const loraPromises = completedJobs.map(async (job) => {
-        try {
-          const segments = await API.getSegments(job.id);
-          const loras = new Set();
-          segments.forEach(seg => {
-            if (seg.high_lora) loras.add(seg.high_lora);
-            if (seg.low_lora) loras.add(seg.low_lora);
-          });
-          return { jobId: job.id, loras: Array.from(loras) };
-        } catch {
-          return { jobId: job.id, loras: [] };
-        }
-      });
-
-      const loraResults = await Promise.all(loraPromises);
+      // Fetch LoRA data in batches to avoid overwhelming browser connections
+      const BATCH_SIZE = 10;
       const loraMap = {};
-      loraResults.forEach(({ jobId, loras }) => {
-        loraMap[jobId] = loras;
-      });
-      setVideoLoras(loraMap);
+
+      for (let i = 0; i < completedJobs.length; i += BATCH_SIZE) {
+        const batch = completedJobs.slice(i, i + BATCH_SIZE);
+        const batchPromises = batch.map(async (job) => {
+          try {
+            const segments = await API.getSegments(job.id);
+            const loras = new Set();
+            segments.forEach(seg => {
+              if (seg.high_lora) loras.add(seg.high_lora);
+              if (seg.low_lora) loras.add(seg.low_lora);
+            });
+            return { jobId: job.id, loras: Array.from(loras) };
+          } catch {
+            return { jobId: job.id, loras: [] };
+          }
+        });
+
+        const batchResults = await Promise.all(batchPromises);
+        batchResults.forEach(({ jobId, loras }) => {
+          loraMap[jobId] = loras;
+        });
+
+        // Update state incrementally so UI shows progress
+        setVideoLoras({ ...loraMap });
+      }
     } catch (error) {
       console.error('Failed to load videos:', error);
       setLoading(false);
@@ -254,15 +262,11 @@ export default function Videos() {
               <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={job.id}>
                 <Card className="video-card">
                   <CardActionArea onClick={() => setSelectedVideo(job)}>
-                    <CardMedia
-                      component="video"
-                      src={API.getJobVideo(job.id)}
+                    <VideoPreview
+                      jobId={job.id}
+                      filename={job.output_images?.[0]}
                       poster={API.getJobThumbnail(job.id)}
                       className="video-preview"
-                      muted
-                      loop
-                      onMouseEnter={(e) => e.target.play()}
-                      onMouseLeave={(e) => { e.target.pause(); e.target.currentTime = 0; }}
                     />
                     <CardContent className="video-card-content">
                       <Typography variant="subtitle1" noWrap title={job.name}>
@@ -312,8 +316,9 @@ export default function Videos() {
               <Typography variant="h6" className="video-modal-title">
                 {selectedVideo.name}
               </Typography>
-              <video
-                src={API.getJobVideo(selectedVideo.id)}
+              <JobVideoPlayer
+                jobId={selectedVideo.id}
+                filename={selectedVideo.output_images?.[0]}
                 controls
                 autoPlay
                 loop={loopVideo}
@@ -347,10 +352,10 @@ export default function Videos() {
       {/* Fullscreen Shuffle Mode */}
       {shuffleMode && currentShuffleVideo && (
         <div className="shuffle-overlay">
-          <video
-            ref={shuffleVideoRef}
+          <JobVideoPlayer
             key={currentShuffleVideo.id}
-            src={API.getJobVideo(currentShuffleVideo.id)}
+            jobId={currentShuffleVideo.id}
+            filename={currentShuffleVideo.output_images?.[0]}
             className="shuffle-video"
             autoPlay
             loop={shuffleLoop}
