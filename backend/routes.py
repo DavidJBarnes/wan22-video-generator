@@ -1508,8 +1508,8 @@ async def update_segment_prompt_endpoint(
 
     # Build full prompt - will skip prepending identity if already present
     full_prompt = build_full_prompt(prompt)
-    # Also build full template if provided (apply same identity prepending)
-    full_template = build_full_prompt(prompt_template) if prompt_template else None
+    # Template should preserve the user's exact input (including tags like <faces>)
+    # Do NOT apply build_full_prompt to it - just use as-is for prepopulating next segment
 
     # Parse LoRA selections from JSON string
     # Format: [{"high_file": "...", "high_weight": 1.0, "low_file": "...", "low_weight": 1.0}, ...]
@@ -1584,7 +1584,7 @@ async def update_segment_prompt_endpoint(
             segment_index,
             full_prompt,
             start_image_url,
-            prompt_template=full_template,
+            prompt_template=prompt_template,
             high_loras=high_loras if high_loras else None,
             low_loras=low_loras if low_loras else None,
             faceswap_enabled=faceswap_enabled or False,
@@ -1610,7 +1610,7 @@ async def update_segment_prompt_endpoint(
         # Segment exists - update its prompt, LoRA, and faceswap settings
         update_segment_prompt(
             job_id, segment_index, full_prompt,
-            prompt_template=full_template,
+            prompt_template=prompt_template,
             high_loras=high_loras if high_loras else None,
             low_loras=low_loras if low_loras else None,
             faceswap_enabled=faceswap_enabled,
