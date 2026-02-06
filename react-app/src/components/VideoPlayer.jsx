@@ -151,6 +151,7 @@ export function VideoPreview({ jobId, filename, poster, className, style, ...res
       muted
       loop
       playsInline
+      preload="none"
       onError={handleError}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
