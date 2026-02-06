@@ -71,7 +71,8 @@ class RangeRequestHandler(SimpleHTTPRequestHandler):
                 ["bash", str(SYNC_SCRIPT)],
                 capture_output=True,
                 text=True,
-                timeout=300  # 5 minute timeout
+                timeout=300,  # 5 minute timeout
+                cwd=Path.home()  # Run from home dir to avoid getcwd errors
             )
 
             response = {
