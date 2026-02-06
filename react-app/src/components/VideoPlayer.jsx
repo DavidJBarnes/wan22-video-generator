@@ -45,16 +45,19 @@ export default function VideoPlayer({
 
     if (localUrl && !triedLocal) {
       // Try local first
+      console.log('[VideoPlayer] Trying local source:', localUrl);
       setCurrentSrc(localUrl);
       setIsLocal(true);
     } else {
       // Use remote
+      console.log('[VideoPlayer] Using remote source:', src);
       setCurrentSrc(src);
       setIsLocal(false);
     }
   }, [src, localSrc, triedLocal]);
 
-  const handleError = () => {
+  const handleError = (e) => {
+    console.log('[VideoPlayer] Error event:', currentSrc, e);
     if (isLocal && !triedLocal) {
       // Local failed, fall back to remote
       console.log('[VideoPlayer] Local source failed, falling back to remote:', src);
@@ -63,8 +66,13 @@ export default function VideoPlayer({
       setIsLocal(false);
     } else if (onError) {
       // Remote also failed
+      console.log('[VideoPlayer] Remote also failed');
       onError();
     }
+  };
+
+  const handleCanPlay = () => {
+    console.log('[VideoPlayer] Video can play:', currentSrc, 'isLocal:', isLocal);
   };
 
   const handleLoadedData = (e) => {
@@ -91,6 +99,7 @@ export default function VideoPlayer({
       poster={poster}
       onError={handleError}
       onLoadedData={handleLoadedData}
+      onCanPlay={handleCanPlay}
       {...rest}
     />
   );
