@@ -15,12 +15,17 @@ Examples:
 """
 
 import argparse
+import json
 import os
+import subprocess
 import sys
 import re
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from functools import partial
+
+# Sync script location
+SYNC_SCRIPT = Path.home() / "projects" / "scripts" / "sync.sh"
 
 
 class RangeRequestHandler(SimpleHTTPRequestHandler):
@@ -33,15 +38,78 @@ class RangeRequestHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
         """Add CORS headers to all responses."""
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Range')
+        self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Range, Content-Type')
         self.send_header('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges')
         super().end_headers()
 
     def do_OPTIONS(self):
         """Handle CORS preflight requests."""
         self.send_response(200)
+        self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS')
         self.end_headers()
+
+    def do_POST(self):
+        """Handle POST requests (for sync endpoint)."""
+        if self.path == '/sync':
+            self.handle_sync()
+        else:
+            self.send_error(404, "Not found")
+
+    def handle_sync(self):
+        """Run the sync script and return output."""
+        if not SYNC_SCRIPT.exists():
+            self.send_response(404)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": False,
+                "error": f"Sync script not found: {SYNC_SCRIPT}"
+            }).encode())
+            return
+
+        try:
+            print(f"\033[94m[Sync] Running {SYNC_SCRIPT}...\033[0m")
+            result = subprocess.run(
+                ["bash", str(SYNC_SCRIPT)],
+                capture_output=True,
+                text=True,
+                timeout=300  # 5 minute timeout
+            )
+
+            response = {
+                "success": result.returncode == 0,
+                "returncode": result.returncode,
+                "stdout": result.stdout,
+                "stderr": result.stderr
+            }
+
+            if result.returncode == 0:
+                print(f"\033[92m[Sync] Completed successfully\033[0m")
+            else:
+                print(f"\033[91m[Sync] Failed with code {result.returncode}\033[0m")
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(response).encode())
+
+        except subprocess.TimeoutExpired:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": False,
+                "error": "Sync timed out after 5 minutes"
+            }).encode())
+        except Exception as e:
+            self.send_response(500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "success": False,
+                "error": str(e)
+            }).encode())
 
     def do_GET(self):
         """Handle GET requests with Range header support."""
