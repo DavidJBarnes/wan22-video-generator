@@ -8,6 +8,8 @@ class APIClient {
   constructor() {
     // Load custom API URL from localStorage if set
     this.baseUrl = localStorage.getItem('api_url') || DEFAULT_API_URL;
+    // Load local server URL for faster video/image loading
+    this.localServerUrl = localStorage.getItem('local_server_url') || '';
   }
 
   /**
@@ -29,6 +31,59 @@ class APIClient {
    */
   getBaseUrl() {
     return this.baseUrl;
+  }
+
+  /**
+   * Set a custom local server URL for faster video/image loading
+   * @param {string} url - The local server URL (e.g., 'http://localhost:8765')
+   */
+  setLocalServerUrl(url) {
+    if (url && url.trim()) {
+      this.localServerUrl = url.trim().replace(/\/$/, ''); // Remove trailing slash
+      localStorage.setItem('local_server_url', this.localServerUrl);
+    } else {
+      this.localServerUrl = '';
+      localStorage.removeItem('local_server_url');
+    }
+  }
+
+  /**
+   * Get the current local server URL
+   */
+  getLocalServerUrl() {
+    return this.localServerUrl;
+  }
+
+  /**
+   * Get local URL for a segment video (if local server is configured)
+   * @param {number} jobId - Job ID
+   * @param {number} segmentIndex - Segment index
+   * @returns {string|null} Local URL or null if not configured
+   */
+  getLocalSegmentVideo(jobId, segmentIndex) {
+    if (!this.localServerUrl) return null;
+    return `${this.localServerUrl}/job_output/job_${jobId}/segment_${segmentIndex}.webm`;
+  }
+
+  /**
+   * Get local URL for a job's final video (if local server is configured)
+   * @param {number} jobId - Job ID
+   * @param {string} filename - Video filename (from job data)
+   * @returns {string|null} Local URL or null if not configured
+   */
+  getLocalJobVideo(jobId, filename) {
+    if (!this.localServerUrl || !filename) return null;
+    return `${this.localServerUrl}/job_output/job_${jobId}/${filename}`;
+  }
+
+  /**
+   * Get local URL for a thumbnail (if local server is configured)
+   * @param {number} jobId - Job ID
+   * @returns {string|null} Local URL or null if not configured
+   */
+  getLocalThumbnail(jobId) {
+    if (!this.localServerUrl) return null;
+    return `${this.localServerUrl}/thumbnail_cache/job_${jobId}_thumb.jpg`;
   }
 
   async request(endpoint, options = {}) {

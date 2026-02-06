@@ -17,6 +17,7 @@ export default function Settings() {
 
   // Form fields
   const [apiUrl, setApiUrl] = useState('');
+  const [localServerUrl, setLocalServerUrl] = useState('');
   const [comfyuiUrl, setComfyuiUrl] = useState('');
   const [imageRepoPath, setImageRepoPath] = useState('');
   // ComfyUI model settings
@@ -80,8 +81,9 @@ export default function Settings() {
       const s = data.settings || data;
       setSettings(s);
 
-      // api_url is client-side only, stored in localStorage via API client
+      // api_url and local_server_url are client-side only, stored in localStorage via API client
       setApiUrl(API.getBaseUrl() === '/api' ? '' : API.getBaseUrl());
+      setLocalServerUrl(API.getLocalServerUrl() || '');
       setComfyuiUrl(s.comfyui_url || 'http://localhost:8188');
       setImageRepoPath(s.image_repo_path || '');
       // ComfyUI model settings
@@ -252,8 +254,9 @@ export default function Settings() {
 
       await API.updateSettings(settingsPayload);
 
-      // Update client-side API URL after successful save
+      // Update client-side settings after successful save
       API.setBaseUrl(apiUrl);
+      API.setLocalServerUrl(localServerUrl);
 
       showToast('Settings saved successfully', 'success');
       setSaving(false);
@@ -438,6 +441,33 @@ export default function Settings() {
             </div>
             <small style={{ color: '#666', fontSize: '12px' }}>
               Backend API URL (e.g., http://2070.zero:9090/api). Click "Apply & Reload" to save and refresh.
+            </small>
+          </div>
+
+          <div className="form-group" style={{ marginTop: '16px' }}>
+            <label>Local Video Server URL</label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="text"
+                value={localServerUrl}
+                onChange={(e) => setLocalServerUrl(e.target.value)}
+                placeholder="e.g., http://localhost:8765"
+                style={{ flex: 1 }}
+              />
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => {
+                  API.setLocalServerUrl(localServerUrl);
+                  showToast(localServerUrl ? 'Local server URL saved' : 'Local server URL cleared', 'success');
+                }}
+              >
+                Apply
+              </Button>
+            </div>
+            <small style={{ color: '#666', fontSize: '12px' }}>
+              Optional: URL of local server serving synced videos (e.g., from rsync).
+              Run <code>python local-server/serve.py</code> to start. Videos load from local first, fall back to remote.
             </small>
           </div>
         </div>
