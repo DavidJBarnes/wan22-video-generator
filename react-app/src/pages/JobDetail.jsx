@@ -109,6 +109,25 @@ export default function JobDetail() {
     [segments]
   );
 
+  // Calculate total video duration (actual for completed, configured for pending)
+  const totalVideoDuration = useMemo(() => {
+    const jobDuration = job?.parameters?.segment_duration || 5;
+    const activeSegments = segments.filter(s => !s.deleted_at);
+
+    return activeSegments.reduce((sum, s) => {
+      // Use actual_duration if available (from ffprobe), otherwise configured duration
+      if (s.actual_duration) return sum + s.actual_duration;
+      if (s.duration) return sum + s.duration;
+      return sum + jobDuration;
+    }, 0);
+  }, [segments, job?.parameters?.segment_duration]);
+
+  // Check if any duration is estimated (pending segments without actual_duration)
+  const hasPendingSegments = useMemo(() =>
+    segments.some(s => !s.deleted_at && s.status !== 'completed'),
+    [segments]
+  );
+
   // Memoize LoRA lookup function - depends on loraLibrary
   const getLoraByFilename = useCallback((filename) => {
     if (!filename) return null;
@@ -1007,8 +1026,14 @@ export default function JobDetail() {
             <div className="value">{width}x{height}</div>
           </div>
           <div className="detail-meta-item">
-            <label>Segment Duration</label>
-            <div className="value">{segmentDuration}s per segment</div>
+            <label>Total Video Time</label>
+            <div className="value">
+              {hasPendingSegments ? '~' : ''}
+              {totalVideoDuration >= 60
+                ? `${Math.floor(totalVideoDuration / 60)}m ${Math.round(totalVideoDuration % 60)}s`
+                : `${Math.round(totalVideoDuration)}s`
+              }
+            </div>
           </div>
           <div className="detail-meta-item">
             <label>Output FPS</label>
@@ -1165,11 +1190,12 @@ export default function JobDetail() {
                     <strong style={isDeleted ? { textDecoration: 'line-through', color: '#999' } : {}}>
                       Segment {displayNumber}
                     </strong>
-                    {(seg.duration || job?.parameters?.segment_duration) && (
-                      <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666', fontWeight: 'normal' }}>
-                        ({seg.duration || job?.parameters?.segment_duration}s)
-                      </span>
-                    )}
+                    <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666', fontWeight: 'normal' }}>
+                      ({seg.actual_duration
+                        ? `${seg.actual_duration.toFixed(1)}s`
+                        : `~${seg.duration || job?.parameters?.segment_duration || 5}s`
+                      })
+                    </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <StatusChip status={isDeleted ? 'deleted' : seg.status} />

@@ -13,7 +13,7 @@ import tempfile
 import httpx
 from pathlib import Path
 
-from video_utils import get_segment_video_path, optimize_video_for_web, OUTPUT_DIR, extract_frame, get_video_info
+from video_utils import get_segment_video_path, optimize_video_for_web, OUTPUT_DIR, extract_frame, get_video_info, get_video_info_batch
 
 from database import (
     get_all_jobs,
@@ -1355,6 +1355,17 @@ async def get_job_segments_endpoint(job_id: int):
     # Add flag indicating if workflow can be accurately exported
     for seg in segments:
         seg["has_workflow_settings"] = bool(seg.get("workflow_settings"))
+
+    # Get actual video durations for completed segments (in parallel for efficiency)
+    completed_segments = [s for s in segments if s.get("status") == "completed" and s.get("video_path")]
+    if completed_segments:
+        video_paths = [s["video_path"] for s in completed_segments]
+        video_infos = get_video_info_batch(video_paths)
+
+        # Map durations back to segments
+        for seg, info in zip(completed_segments, video_infos):
+            if info and info.get("duration"):
+                seg["actual_duration"] = round(info["duration"], 2)
 
     return segments
 
