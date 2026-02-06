@@ -54,6 +54,12 @@ export default function Settings() {
   const [facefusionDetectorModel, setFacefusionDetectorModel] = useState('retinaface');
   const [facefusionReferenceDistance, setFacefusionReferenceDistance] = useState(0.8);
 
+  // Local server & sync state
+  const [localServerRunning, setLocalServerRunning] = useState(false);
+  const [localServerLoading, setLocalServerLoading] = useState(false);
+  const [syncRunning, setSyncRunning] = useState(false);
+  const [syncOutput, setSyncOutput] = useState('');
+
   // VR 180 stereo settings (validated for Quest 3S)
   const [vrEyeSeparation, setVrEyeSeparation] = useState(0.015);
   const [vrDepthStrength, setVrDepthStrength] = useState(0.5);
@@ -73,7 +79,67 @@ export default function Settings() {
   useEffect(() => {
     loadSettings();
     loadHiddenLoras();
+    checkLocalServerStatus();
   }, []);
+
+  async function checkLocalServerStatus() {
+    try {
+      const status = await API.request('/local-server/status');
+      setLocalServerRunning(status.running);
+    } catch (error) {
+      console.error('Failed to check local server status:', error);
+    }
+  }
+
+  async function handleStartLocalServer() {
+    setLocalServerLoading(true);
+    try {
+      const result = await API.request('/local-server/start', { method: 'POST' });
+      if (result.success) {
+        showToast('Local server started', 'success');
+        setLocalServerRunning(true);
+      } else {
+        showToast(result.error || 'Failed to start', 'error');
+      }
+    } catch (error) {
+      showToast(error.message || 'Failed to start local server', 'error');
+    }
+    setLocalServerLoading(false);
+  }
+
+  async function handleStopLocalServer() {
+    setLocalServerLoading(true);
+    try {
+      const result = await API.request('/local-server/stop', { method: 'POST' });
+      if (result.success) {
+        showToast('Local server stopped', 'success');
+        setLocalServerRunning(false);
+      } else {
+        showToast(result.error || 'Failed to stop', 'error');
+      }
+    } catch (error) {
+      showToast(error.message || 'Failed to stop local server', 'error');
+    }
+    setLocalServerLoading(false);
+  }
+
+  async function handleRunSync() {
+    setSyncRunning(true);
+    setSyncOutput('');
+    try {
+      const result = await API.request('/sync/run', { method: 'POST' });
+      setSyncOutput(result.stdout || result.stderr || 'Sync completed');
+      if (result.success) {
+        showToast('Sync completed successfully', 'success');
+      } else {
+        showToast('Sync completed with errors', 'warning');
+      }
+    } catch (error) {
+      setSyncOutput(error.message || 'Sync failed');
+      showToast('Sync failed', 'error');
+    }
+    setSyncRunning(false);
+  }
 
   async function loadSettings() {
     try {
@@ -467,8 +533,86 @@ export default function Settings() {
             </div>
             <small style={{ color: '#666', fontSize: '12px' }}>
               Optional: URL of local server serving synced videos (e.g., from rsync).
-              Run <code>python local-server/serve.py</code> to start. Videos load from local first, fall back to remote.
+              Videos load from local first, fall back to remote.
             </small>
+          </div>
+
+          <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #333' }}>
+            <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>Local Server Control</h3>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <div style={{
+                width: '12px',
+                height: '12px',
+                borderRadius: '50%',
+                backgroundColor: localServerRunning ? '#4caf50' : '#f44336'
+              }} />
+              <span style={{ color: '#666', fontSize: '14px' }}>
+                {localServerRunning ? 'Running' : 'Stopped'}
+              </span>
+              {localServerRunning ? (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  color="error"
+                  onClick={handleStopLocalServer}
+                  disabled={localServerLoading}
+                >
+                  {localServerLoading ? 'Stopping...' : 'Stop Server'}
+                </Button>
+              ) : (
+                <Button
+                  variant="contained"
+                  size="small"
+                  onClick={handleStartLocalServer}
+                  disabled={localServerLoading}
+                >
+                  {localServerLoading ? 'Starting...' : 'Start Server'}
+                </Button>
+              )}
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={checkLocalServerStatus}
+              >
+                Refresh
+              </Button>
+            </div>
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '8px', display: 'block' }}>
+              Starts/stops the local video server in a tmux session.
+            </small>
+          </div>
+
+          <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #333' }}>
+            <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>Data Sync</h3>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <Button
+                variant="contained"
+                onClick={handleRunSync}
+                disabled={syncRunning}
+              >
+                {syncRunning ? 'Syncing...' : 'Run Sync'}
+              </Button>
+              {syncRunning && <CircularProgress size={20} />}
+            </div>
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '8px', display: 'block' }}>
+              Runs ~/projects/scripts/sync.sh to pull data from remote server.
+            </small>
+            {syncOutput && (
+              <pre style={{
+                marginTop: '12px',
+                padding: '12px',
+                backgroundColor: '#1e1e1e',
+                color: '#d4d4d4',
+                borderRadius: '4px',
+                fontSize: '12px',
+                maxHeight: '200px',
+                overflow: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all'
+              }}>
+                {syncOutput}
+              </pre>
+            )}
           </div>
         </div>
 

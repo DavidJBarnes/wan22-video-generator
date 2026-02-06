@@ -7,12 +7,15 @@ import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary';
 import BrushIcon from '@mui/icons-material/Brush';
 import ShuffleIcon from '@mui/icons-material/Shuffle';
 import SettingsIcon from '@mui/icons-material/Settings';
+import SyncIcon from '@mui/icons-material/Sync';
 import API from '../api/client';
+import { showToast } from '../utils/helpers';
 import './Layout.css';
 
 export default function Layout() {
   const [comfyStatus, setComfyStatus] = useState({ reachable: false });
   const [runningJobsCount, setRunningJobsCount] = useState(0);
+  const [syncRunning, setSyncRunning] = useState(false);
 
   // Poll ComfyUI status and jobs
   useEffect(() => {
@@ -51,6 +54,31 @@ export default function Layout() {
     }
   }, [comfyStatus, runningJobsCount]);
 
+  const handleSync = async () => {
+    const localServerUrl = API.getLocalServerUrl();
+    if (!localServerUrl) {
+      showToast('Local server not configured. Set it in Settings.', 'error');
+      return;
+    }
+
+    setSyncRunning(true);
+    try {
+      const response = await fetch(`${localServerUrl}/sync`, { method: 'POST' });
+      const data = await response.json();
+
+      if (data.success) {
+        showToast('Sync completed successfully', 'success');
+      } else {
+        showToast(`Sync failed: ${data.error || 'Unknown error'}`, 'error');
+        console.error('Sync output:', data.stderr || data.stdout);
+      }
+    } catch (err) {
+      showToast(`Sync error: ${err.message}`, 'error');
+    } finally {
+      setSyncRunning(false);
+    }
+  };
+
   return (
     <div className="app-container">
       <div className="sidebar">
@@ -76,6 +104,14 @@ export default function Layout() {
         <NavLink to="/settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
           <SettingsIcon /> Settings
         </NavLink>
+        <button
+          className={`nav-item sync-button ${syncRunning ? 'syncing' : ''}`}
+          onClick={handleSync}
+          disabled={syncRunning}
+        >
+          <SyncIcon className={syncRunning ? 'spinning' : ''} />
+          {syncRunning ? 'Syncing...' : 'Sync'}
+        </button>
       </div>
 
       <div className="main-content">
