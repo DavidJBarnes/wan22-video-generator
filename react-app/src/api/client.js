@@ -68,11 +68,13 @@ class APIClient {
   /**
    * Get local URL for a job's final video (if local server is configured)
    * @param {number} jobId - Job ID
-   * @param {string} filename - Video filename (from job data)
+   * @param {string} filePathOrName - Video filename or full path (from job.output_images)
    * @returns {string|null} Local URL or null if not configured
    */
-  getLocalJobVideo(jobId, filename) {
-    if (!this.localServerUrl || !filename) return null;
+  getLocalJobVideo(jobId, filePathOrName) {
+    if (!this.localServerUrl || !filePathOrName) return null;
+    // Extract just the filename if a full path was provided
+    const filename = filePathOrName.split('/').pop();
     return `${this.localServerUrl}/job_output/job_${jobId}/${filename}`;
   }
 
