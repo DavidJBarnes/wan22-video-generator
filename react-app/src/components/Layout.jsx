@@ -9,30 +9,15 @@ import ShuffleIcon from '@mui/icons-material/Shuffle';
 import SettingsIcon from '@mui/icons-material/Settings';
 import SyncIcon from '@mui/icons-material/Sync';
 import API from '../api/client';
+import { useJobs } from '../contexts/JobsContext';
 import { showToast } from '../utils/helpers';
 import './Layout.css';
 
 export default function Layout() {
-  const [comfyStatus, setComfyStatus] = useState({ reachable: false });
-  const [runningJobsCount, setRunningJobsCount] = useState(0);
   const [syncRunning, setSyncRunning] = useState(false);
 
-  // Poll ComfyUI status and jobs
-  useEffect(() => {
-    async function checkStatus() {
-      const [status, jobsData] = await Promise.all([
-        API.checkComfyStatus(),
-        API.getJobs().catch(() => ({ jobs: [] }))
-      ]);
-      setComfyStatus(status);
-      const jobs = jobsData.jobs || jobsData || [];
-      setRunningJobsCount(jobs.filter(j => j.status === 'running').length);
-    }
-
-    checkStatus();
-    const interval = setInterval(checkStatus, 3000);
-    return () => clearInterval(interval);
-  }, []);
+  // Use shared jobs context instead of separate polling
+  const { comfyStatus, stats } = useJobs();
 
   // Update page title based on ComfyUI status (matches Dashboard display)
   useEffect(() => {
@@ -47,12 +32,12 @@ export default function Layout() {
     const queuePending = comfyStatus.queue?.queue_pending?.length || 0;
 
     // Show "Running" if ComfyUI queue has items OR our app has running jobs
-    if (queueRunning > 0 || queuePending > 0 || runningJobsCount > 0) {
+    if (queueRunning > 0 || queuePending > 0 || stats.runningCount > 0) {
       document.title = `Running... | ${baseTitle}`;
     } else {
       document.title = `Idle | ${baseTitle}`;
     }
-  }, [comfyStatus, runningJobsCount]);
+  }, [comfyStatus, stats.runningCount]);
 
   const handleSync = async () => {
     const localServerUrl = API.getLocalServerUrl();
