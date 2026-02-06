@@ -2353,7 +2353,11 @@ async def browse_image_repo(path: str = "", tag: Optional[str] = None):
                             continue
                         if img_file.is_file() and img_file.suffix.lower() in ['.jpg', '.jpeg', '.png']:
                             img_rel = img_file.relative_to(repo_root_path)
-                            preview_images.append(str(img_rel).replace("\\", "/"))
+                            img_stat = img_file.stat()
+                            preview_images.append({
+                                "path": str(img_rel).replace("\\", "/"),
+                                "mtime": img_stat.st_mtime
+                            })
                             if len(preview_images) >= 3:
                                 break
                 except (PermissionError, OSError):
@@ -2368,10 +2372,12 @@ async def browse_image_repo(path: str = "", tag: Optional[str] = None):
                 # Only include jpg and png files
                 if item.suffix.lower() in ['.jpg', '.jpeg', '.png']:
                     rel_path = item.relative_to(repo_root_path)
+                    stat = item.stat()
                     images.append({
                         "name": item.name,
                         "path": str(rel_path).replace("\\", "/"),  # Normalize path separators
-                        "size": item.stat().st_size
+                        "size": stat.st_size,
+                        "mtime": stat.st_mtime  # For local thumbnail hash computation
                     })
     except PermissionError:
         raise HTTPException(status_code=403, detail="Permission denied accessing directory")
