@@ -345,10 +345,10 @@ def enrich_job_with_segments(job: Dict[str, Any]) -> Dict[str, Any]:
         completed = sum(1 for s in segments if s.get("status") == "completed" and not s.get("deleted_at"))
         # Check if any non-deleted segment has faceswap enabled
         has_faceswap = any(s.get("faceswap_enabled") and not s.get("deleted_at") for s in segments)
-        # Calculate total duration from non-deleted segments
+        # Calculate total duration from COMPLETED, non-deleted segments only
         total_duration = 0.0
         for s in segments:
-            if s.get("deleted_at"):
+            if s.get("deleted_at") or s.get("status") != "completed":
                 continue
             if s.get("actual_duration"):
                 total_duration += s["actual_duration"]
@@ -367,7 +367,8 @@ def enrich_job_with_segments(job: Dict[str, Any]) -> Dict[str, Any]:
     job["completed_segments"] = completed
     job["deleted_segments"] = deleted
     job["has_faceswap"] = has_faceswap
-    job["total_duration"] = round(total_duration, 1)
+    # Only show duration if there are completed segments
+    job["total_duration"] = round(total_duration, 1) if completed > 0 else None
     # Progress based on non-deleted segments
     active_total = total - deleted
     job["progress_percent"] = round((completed / active_total) * 100) if active_total > 0 else 0
