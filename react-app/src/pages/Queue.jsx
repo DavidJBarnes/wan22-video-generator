@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   FormControl,
   InputLabel,
@@ -16,7 +16,13 @@ import StatusChip from '../components/StatusChip';
 import './Queue.css';
 
 export default function Queue() {
-  const { jobs: allJobs, loading, refreshJobs } = useJobs();
+  const { jobs: allJobs, loading, refreshJobs, startPolling, stopPolling } = useJobs();
+
+  // Subscribe to polling while Queue is mounted
+  useEffect(() => {
+    startPolling();
+    return () => stopPolling();
+  }, [startPolling, stopPolling]);
 
   const [statusFilter, setStatusFilter] = useState(() => {
     const saved = localStorage.getItem('queueStatusFilter');

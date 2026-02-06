@@ -15,6 +15,7 @@ export function JobsProvider({ children }) {
   const [error, setError] = useState(null);
   const [lastFetched, setLastFetched] = useState(null);
   const intervalRef = useRef(null);
+  const subscriberCountRef = useRef(0);
 
   // Determine if any jobs are actively running
   const hasActiveJobs = useMemo(() => {
@@ -33,7 +34,7 @@ export function JobsProvider({ children }) {
   const fetchJobs = useCallback(async () => {
     try {
       const [jobsData, comfy] = await Promise.all([
-        API.getJobs(100), // Fetch recent jobs for stats (no need for all 10000)
+        API.getJobs(100),
         API.checkComfyStatus()
       ]);
 
@@ -51,34 +52,51 @@ export function JobsProvider({ children }) {
     }
   }, []);
 
-  // Force refresh (for after mutations)
-  const refreshJobs = useCallback(() => {
-    return fetchJobs();
-  }, [fetchJobs]);
+  // Start polling - called by components that need jobs data
+  const startPolling = useCallback(() => {
+    subscriberCountRef.current += 1;
 
-  // Initial fetch
-  useEffect(() => {
-    fetchJobs();
-  }, [fetchJobs]);
-
-  // Dynamic polling interval based on activity
-  useEffect(() => {
-    const pollInterval = hasActiveJobs ? ACTIVE_POLL_INTERVAL : IDLE_POLL_INTERVAL;
-
-    // Clear existing interval
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
+    // First subscriber triggers initial fetch and starts polling
+    if (subscriberCountRef.current === 1) {
+      fetchJobs();
+      const pollInterval = hasActiveJobs ? ACTIVE_POLL_INTERVAL : IDLE_POLL_INTERVAL;
+      intervalRef.current = setInterval(fetchJobs, pollInterval);
     }
+  }, [fetchJobs, hasActiveJobs]);
 
-    // Set up new interval
-    intervalRef.current = setInterval(fetchJobs, pollInterval);
+  // Stop polling - called when component unmounts
+  const stopPolling = useCallback(() => {
+    subscriberCountRef.current = Math.max(0, subscriberCountRef.current - 1);
 
+    // Last subscriber stops polling
+    if (subscriberCountRef.current === 0 && intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
+  // Update polling interval when activity changes (only if actively polling)
+  useEffect(() => {
+    if (subscriberCountRef.current > 0 && intervalRef.current) {
+      clearInterval(intervalRef.current);
+      const pollInterval = hasActiveJobs ? ACTIVE_POLL_INTERVAL : IDLE_POLL_INTERVAL;
+      intervalRef.current = setInterval(fetchJobs, pollInterval);
+    }
+  }, [hasActiveJobs, fetchJobs]);
+
+  // Cleanup on unmount
+  useEffect(() => {
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [hasActiveJobs, fetchJobs]);
+  }, []);
+
+  // Force refresh (for after mutations)
+  const refreshJobs = useCallback(() => {
+    return fetchJobs();
+  }, [fetchJobs]);
 
   // Memoize the context value
   const contextValue = useMemo(() => ({
@@ -91,7 +109,9 @@ export function JobsProvider({ children }) {
     hasActiveJobs,
     lastFetched,
     refreshJobs,
-  }), [jobs, comfyStatus, loading, error, stats, avgRunTime, hasActiveJobs, lastFetched, refreshJobs]);
+    startPolling,
+    stopPolling,
+  }), [jobs, comfyStatus, loading, error, stats, avgRunTime, hasActiveJobs, lastFetched, refreshJobs, startPolling, stopPolling]);
 
   return (
     <JobsContext.Provider value={contextValue}>

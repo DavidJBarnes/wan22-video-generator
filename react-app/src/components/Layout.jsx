@@ -9,17 +9,30 @@ import ShuffleIcon from '@mui/icons-material/Shuffle';
 import SettingsIcon from '@mui/icons-material/Settings';
 import SyncIcon from '@mui/icons-material/Sync';
 import API from '../api/client';
-import { useJobs } from '../contexts/JobsContext';
 import { showToast } from '../utils/helpers';
 import './Layout.css';
 
 export default function Layout() {
   const [syncRunning, setSyncRunning] = useState(false);
+  const [comfyStatus, setComfyStatus] = useState({ reachable: false });
 
-  // Use shared jobs context instead of separate polling
-  const { comfyStatus, stats } = useJobs();
+  // Lightweight polling for just ComfyUI status (not full jobs list)
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const status = await API.checkComfyStatus();
+        setComfyStatus(status);
+      } catch {
+        setComfyStatus({ reachable: false });
+      }
+    };
 
-  // Update page title based on ComfyUI status (matches Dashboard display)
+    checkStatus();
+    const interval = setInterval(checkStatus, 5000); // 5s is enough for status
+    return () => clearInterval(interval);
+  }, []);
+
+  // Update page title based on ComfyUI status
   useEffect(() => {
     const baseTitle = 'Wan2.2 Video Gen';
 
@@ -31,13 +44,12 @@ export default function Layout() {
     const queueRunning = comfyStatus.queue?.queue_running?.length || 0;
     const queuePending = comfyStatus.queue?.queue_pending?.length || 0;
 
-    // Show "Running" if ComfyUI queue has items OR our app has running jobs
-    if (queueRunning > 0 || queuePending > 0 || stats.runningCount > 0) {
+    if (queueRunning > 0 || queuePending > 0) {
       document.title = `Running... | ${baseTitle}`;
     } else {
       document.title = `Idle | ${baseTitle}`;
     }
-  }, [comfyStatus, stats.runningCount]);
+  }, [comfyStatus]);
 
   const handleSync = async () => {
     const localServerUrl = API.getLocalServerUrl();

@@ -23,7 +23,13 @@ import StatusChip from '../components/StatusChip';
 import './Dashboard.css';
 
 export default function Dashboard() {
-  const { jobs: allJobs, comfyStatus, loading, stats, avgRunTime, refreshJobs } = useJobs();
+  const { jobs: allJobs, comfyStatus, loading, stats, avgRunTime, refreshJobs, startPolling, stopPolling } = useJobs();
+
+  // Subscribe to polling while Dashboard is mounted
+  useEffect(() => {
+    startPolling();
+    return () => stopPolling();
+  }, [startPolling, stopPolling]);
 
   const [runningJobProgress, setRunningJobProgress] = useState(null);
 
