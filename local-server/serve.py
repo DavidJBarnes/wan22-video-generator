@@ -59,13 +59,10 @@ class RangeRequestHandler(SimpleHTTPRequestHandler):
     def handle_sync(self):
         """Run the sync script and return output."""
         if not SYNC_SCRIPT.exists():
-            self.send_response(404)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({
+            self._send_json_response(404, {
                 "success": False,
                 "error": f"Sync script not found: {SYNC_SCRIPT}"
-            }).encode())
+            })
             return
 
         try:
@@ -81,35 +78,41 @@ class RangeRequestHandler(SimpleHTTPRequestHandler):
                 "success": result.returncode == 0,
                 "returncode": result.returncode,
                 "stdout": result.stdout,
-                "stderr": result.stderr
+                "stderr": result.stderr,
+                "error": result.stderr.strip() if result.returncode != 0 else None
             }
 
             if result.returncode == 0:
                 print(f"\033[92m[Sync] Completed successfully\033[0m")
             else:
                 print(f"\033[91m[Sync] Failed with code {result.returncode}\033[0m")
+                if result.stderr:
+                    print(f"\033[91m[Sync] stderr: {result.stderr[:500]}\033[0m")
 
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps(response).encode())
+            self._send_json_response(200, response)
 
         except subprocess.TimeoutExpired:
-            self.send_response(500)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({
+            self._send_json_response(500, {
                 "success": False,
                 "error": "Sync timed out after 5 minutes"
-            }).encode())
+            })
+        except (BrokenPipeError, ConnectionResetError):
+            pass
         except Exception as e:
-            self.send_response(500)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({
+            self._send_json_response(500, {
                 "success": False,
                 "error": str(e)
-            }).encode())
+            })
+
+    def _send_json_response(self, status_code, data):
+        """Send JSON response, handling client disconnects gracefully."""
+        try:
+            self.send_response(status_code)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(data).encode())
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def do_GET(self):
         """Handle GET requests with Range header support."""

@@ -66,8 +66,9 @@ export default function Layout() {
       if (data.success) {
         showToast('Sync completed successfully', 'success');
       } else {
-        showToast(`Sync failed: ${data.error || 'Unknown error'}`, 'error');
-        console.error('Sync output:', data.stderr || data.stdout);
+        const errorMsg = data.error || data.stderr || `Exit code ${data.returncode}`;
+        showToast(`Sync failed: ${errorMsg}`, 'error');
+        console.error('Sync output:', data.stdout, data.stderr);
       }
     } catch (err) {
       showToast(`Sync error: ${err.message}`, 'error');
