@@ -133,7 +133,7 @@ export default function JobTable({
               <TableCell style={{ fontWeight: 'bold' }}>Faceswap</TableCell>
               <TableCell style={{ fontWeight: 'bold' }}>Segment Run</TableCell>
               <TableCell style={{ fontWeight: 'bold' }}>Status</TableCell>
-              <TableCell style={{ fontWeight: 'bold' }}>Segments</TableCell>
+              <TableCell style={{ fontWeight: 'bold' }}>Duration</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -228,12 +228,11 @@ export default function JobTable({
                         <StatusChip status={job.status} />
                       </TableCell>
                       <TableCell>
-                        {job.completed_segments ?? 0} completed
-                        {(job.deleted_segments ?? 0) > 0 && (
-                          <span style={{ color: '#d32f2f', marginLeft: '8px' }}>
-                            + {job.deleted_segments} deleted
-                          </span>
-                        )}
+                        {job.total_duration > 0 ? (
+                          job.total_duration >= 60
+                            ? `${Math.floor(job.total_duration / 60)}m ${Math.round(job.total_duration % 60)}s`
+                            : `${Math.round(job.total_duration)}s`
+                        ) : '-'}
                       </TableCell>
                     </TableRow>
                   );
