@@ -13,7 +13,7 @@ import tempfile
 import httpx
 from pathlib import Path
 
-from video_utils import get_segment_video_path, optimize_video_for_web, OUTPUT_DIR, extract_frame, get_video_info
+from video_utils import get_segment_video_path, optimize_video_for_web, OUTPUT_DIR, extract_frame, get_video_info, get_video_info_batch
 
 from database import (
     get_all_jobs,
@@ -1356,6 +1356,17 @@ async def get_job_segments_endpoint(job_id: int):
     for seg in segments:
         seg["has_workflow_settings"] = bool(seg.get("workflow_settings"))
 
+    # Get actual video durations for completed segments (in parallel for efficiency)
+    completed_segments = [s for s in segments if s.get("status") == "completed" and s.get("video_path")]
+    if completed_segments:
+        video_paths = [s["video_path"] for s in completed_segments]
+        video_infos = get_video_info_batch(video_paths)
+
+        # Map durations back to segments
+        for seg, info in zip(completed_segments, video_infos):
+            if info and info.get("duration"):
+                seg["actual_duration"] = round(info["duration"], 2)
+
     return segments
 
 
@@ -1448,7 +1459,8 @@ async def update_segment_prompt_endpoint(
     faceswap_selector_mode: Optional[str] = Form(None),  # Face selector mode (one, many, reference)
     faceswap_detector_model: Optional[str] = Form(None),  # Face detector model
     fade_to_black: Optional[bool] = Form(False),  # Apply fade-to-black transition at segment end
-    custom_start_image: Optional[str] = Form(None)  # Custom start image path from image repo
+    custom_start_image: Optional[str] = Form(None),  # Custom start image path from image repo
+    segment_duration: Optional[float] = Form(None)  # Per-segment duration in seconds (overrides job-level)
 ):
     """Create or update a segment with a prompt and resume job processing (on-demand workflow).
 
@@ -1474,6 +1486,7 @@ async def update_segment_prompt_endpoint(
         faceswap_detector_model: Face detector model (retinaface, scrfd, etc.).
         fade_to_black: Apply fade-to-black transition at the end of this segment.
         custom_start_image: Path to custom start image from image repo (overrides default).
+        segment_duration: Duration in seconds for this segment (overrides job-level setting).
     """
     job = get_job(job_id)
     if not job:
@@ -1576,7 +1589,8 @@ async def update_segment_prompt_endpoint(
             faceswap_selector_mode=faceswap_selector_mode,
             faceswap_detector_model=faceswap_detector_model,
             fade_to_black=fade_to_black or False,
-            custom_start_image=custom_start_image
+            custom_start_image=custom_start_image,
+            duration=segment_duration
         )
     else:
         # Segment exists - update its prompt, LoRA, and faceswap settings
@@ -1601,7 +1615,8 @@ async def update_segment_prompt_endpoint(
             faceswap_selector_mode=faceswap_selector_mode,
             faceswap_detector_model=faceswap_detector_model,
             fade_to_black=fade_to_black,
-            custom_start_image=custom_start_image
+            custom_start_image=custom_start_image,
+            duration=segment_duration
         )
 
     # Update auto_finalize in job parameters

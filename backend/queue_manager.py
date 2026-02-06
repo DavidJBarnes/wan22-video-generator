@@ -478,8 +478,13 @@ class QueueManager:
             add_job_log(job_id, "WARN", "Missing dimensions in params", segment_index=segment_index,
                        details=f"params={params}")
         target_fps = int(params.get("target_fps", get_setting("default_target_fps", "30")))
-        segment_duration = float(params.get("segment_duration", 5))
-        
+        # Use segment-level duration if set, otherwise fall back to job-level
+        segment_duration = segment.get("duration")
+        if segment_duration is None:
+            segment_duration = float(params.get("segment_duration", 5))
+        else:
+            segment_duration = float(segment_duration)
+
         # Determine the start image for this segment
         # Check for custom start image first (overrides default behavior)
         custom_start_image = segment.get("custom_start_image")
