@@ -1165,6 +1165,11 @@ export default function JobDetail() {
                     <strong style={isDeleted ? { textDecoration: 'line-through', color: '#999' } : {}}>
                       Segment {displayNumber}
                     </strong>
+                    {(seg.duration || job?.parameters?.segment_duration) && (
+                      <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666', fontWeight: 'normal' }}>
+                        ({seg.duration || job?.parameters?.segment_duration}s)
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <StatusChip status={isDeleted ? 'deleted' : seg.status} />
@@ -1705,6 +1710,7 @@ export default function JobDetail() {
           defaultLoras={buildDefaultLoras(lastCompletedSegment)}
           defaultFaceswap={buildDefaultFaceswap(lastCompletedSegment, job?.parameters)}
           defaultStartImageUrl={lastCompletedSegment?.end_frame_url || null}
+          defaultDuration={lastCompletedSegment?.duration || job?.parameters?.segment_duration || 5}
           jobInputImage={job?.input_image}
           segments={segments}
           onClose={() => setShowPromptModal(false)}
@@ -1724,6 +1730,7 @@ export default function JobDetail() {
           defaultFaceswap={buildDefaultFaceswap(editingSegment, job?.parameters)}
           defaultStartImageUrl={editingSegment.start_image_url || null}
           defaultCustomStartImage={editingSegment.custom_start_image || null}
+          defaultDuration={editingSegment.duration || job?.parameters?.segment_duration || 5}
           isEditing={true}
           jobInputImage={job?.input_image}
           segments={segments}

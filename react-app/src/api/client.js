@@ -313,7 +313,7 @@ class APIClient {
     return `${this.baseUrl}/jobs/${jobId}/segments/${segmentIndex}/video`;
   }
 
-  async submitSegmentPrompt(jobId, segmentIndex, prompt, loras = [], autoFinalize = false, faceswapOptions = null, fadeToBlack = false, customStartImage = null, promptTemplate = null) {
+  async submitSegmentPrompt(jobId, segmentIndex, prompt, loras = [], autoFinalize = false, faceswapOptions = null, fadeToBlack = false, customStartImage = null, promptTemplate = null, segmentDuration = null) {
     const formData = new FormData();
     formData.append('prompt', prompt);
     // Send the original template with tags intact (for prepopulating next segment)
@@ -388,6 +388,11 @@ class APIClient {
     // Custom start image (overrides default previous segment's last frame)
     if (customStartImage) {
       formData.append('custom_start_image', customStartImage);
+    }
+
+    // Per-segment duration (overrides job-level setting)
+    if (segmentDuration !== null && segmentDuration !== undefined) {
+      formData.append('segment_duration', segmentDuration.toString());
     }
 
     return this.request(`/jobs/${jobId}/segments/${segmentIndex}/prompt`, {
