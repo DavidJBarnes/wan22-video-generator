@@ -334,6 +334,8 @@ def enrich_job_with_segments(job: Dict[str, Any]) -> Dict[str, Any]:
     """Add computed segment fields to a job dict."""
     job_id = job["id"]
     segments = db_get_job_segments(job_id)
+    params = job.get("parameters") or {}
+    default_segment_duration = float(params.get("segment_duration", 5))
 
     # Get total segments from actual segments or from parameters
     if segments:
@@ -343,17 +345,29 @@ def enrich_job_with_segments(job: Dict[str, Any]) -> Dict[str, Any]:
         completed = sum(1 for s in segments if s.get("status") == "completed" and not s.get("deleted_at"))
         # Check if any non-deleted segment has faceswap enabled
         has_faceswap = any(s.get("faceswap_enabled") and not s.get("deleted_at") for s in segments)
+        # Calculate total duration from non-deleted segments
+        total_duration = 0.0
+        for s in segments:
+            if s.get("deleted_at"):
+                continue
+            if s.get("actual_duration"):
+                total_duration += s["actual_duration"]
+            elif s.get("duration"):
+                total_duration += s["duration"]
+            else:
+                total_duration += default_segment_duration
     else:
-        params = job.get("parameters") or {}
         total = int(params.get("total_segments", 1))
         completed = 0
         deleted = 0
         has_faceswap = bool(params.get("faceswap_enabled"))
+        total_duration = 0.0
 
     job["total_segments"] = total
     job["completed_segments"] = completed
     job["deleted_segments"] = deleted
     job["has_faceswap"] = has_faceswap
+    job["total_duration"] = round(total_duration, 1)
     # Progress based on non-deleted segments
     active_total = total - deleted
     job["progress_percent"] = round((completed / active_total) * 100) if active_total > 0 else 0
