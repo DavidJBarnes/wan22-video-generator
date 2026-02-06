@@ -20,12 +20,21 @@ import os
 import subprocess
 import sys
 import re
+import threading
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from functools import partial
 
 # Sync script location
 SYNC_SCRIPT = Path.home() / "projects" / "scripts" / "sync.sh"
+
+# Global sync state
+sync_state = {
+    "running": False,
+    "result": None,
+    "lock": threading.Lock()
+}
 
 
 class RangeRequestHandler(SimpleHTTPRequestHandler):
@@ -52,12 +61,12 @@ class RangeRequestHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         """Handle POST requests (for sync endpoint)."""
         if self.path == '/sync':
-            self.handle_sync()
+            self.start_sync()
         else:
             self.send_error(404, "Not found")
 
-    def handle_sync(self):
-        """Run the sync script and return output."""
+    def start_sync(self):
+        """Start sync in background thread, return immediately."""
         if not SYNC_SCRIPT.exists():
             self._send_json_response(404, {
                 "success": False,
@@ -65,6 +74,28 @@ class RangeRequestHandler(SimpleHTTPRequestHandler):
             })
             return
 
+        with sync_state["lock"]:
+            if sync_state["running"]:
+                self._send_json_response(200, {
+                    "success": True,
+                    "status": "already_running"
+                })
+                return
+
+            sync_state["running"] = True
+            sync_state["result"] = None
+
+        # Start sync in background thread
+        thread = threading.Thread(target=self._run_sync_background, daemon=True)
+        thread.start()
+
+        self._send_json_response(200, {
+            "success": True,
+            "status": "started"
+        })
+
+    def _run_sync_background(self):
+        """Run sync script in background (called from thread)."""
         try:
             print(f"\033[94m[Sync] Running {SYNC_SCRIPT}...\033[0m")
             result = subprocess.run(
@@ -72,7 +103,7 @@ class RangeRequestHandler(SimpleHTTPRequestHandler):
                 capture_output=True,
                 text=True,
                 timeout=300,  # 5 minute timeout
-                cwd=Path.home()  # Run from home dir to avoid getcwd errors
+                cwd=Path.home()
             )
 
             response = {
@@ -90,20 +121,28 @@ class RangeRequestHandler(SimpleHTTPRequestHandler):
                 if result.stderr:
                     print(f"\033[91m[Sync] stderr: {result.stderr[:500]}\033[0m")
 
-            self._send_json_response(200, response)
+            with sync_state["lock"]:
+                sync_state["result"] = response
+                sync_state["running"] = False
 
         except subprocess.TimeoutExpired:
-            self._send_json_response(500, {
-                "success": False,
-                "error": "Sync timed out after 5 minutes"
-            })
-        except (BrokenPipeError, ConnectionResetError):
-            pass
+            with sync_state["lock"]:
+                sync_state["result"] = {"success": False, "error": "Sync timed out after 5 minutes"}
+                sync_state["running"] = False
         except Exception as e:
-            self._send_json_response(500, {
-                "success": False,
-                "error": str(e)
-            })
+            with sync_state["lock"]:
+                sync_state["result"] = {"success": False, "error": str(e)}
+                sync_state["running"] = False
+
+    def get_sync_status(self):
+        """Return current sync status."""
+        with sync_state["lock"]:
+            if sync_state["running"]:
+                return {"status": "running"}
+            elif sync_state["result"]:
+                return {"status": "completed", **sync_state["result"]}
+            else:
+                return {"status": "idle"}
 
     def _send_json_response(self, status_code, data):
         """Send JSON response, handling client disconnects gracefully."""
@@ -117,6 +156,11 @@ class RangeRequestHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         """Handle GET requests with Range header support."""
+        # Handle sync status check
+        if self.path == '/sync':
+            self._send_json_response(200, self.get_sync_status())
+            return
+
         # Get the file path
         path = self.translate_path(self.path)
 
@@ -296,8 +340,12 @@ URL mapping examples:
     # Create handler with the data directory
     handler = partial(RangeRequestHandler, directory=str(data_dir))
 
+    # Threaded server to handle requests while sync runs in background
+    class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+        daemon_threads = True
+
     # Start server
-    server = HTTPServer((args.bind, args.port), handler)
+    server = ThreadedHTTPServer((args.bind, args.port), handler)
 
     print(f"\n{'='*60}")
     print(f"  Local Video Server (with Range request support)")

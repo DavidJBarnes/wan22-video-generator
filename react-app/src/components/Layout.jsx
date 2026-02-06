@@ -60,19 +60,46 @@ export default function Layout() {
 
     setSyncRunning(true);
     try {
-      const response = await fetch(`${localServerUrl}/sync`, { method: 'POST' });
-      const data = await response.json();
+      // Start sync (non-blocking)
+      const startResponse = await fetch(`${localServerUrl}/sync`, { method: 'POST' });
+      const startData = await startResponse.json();
 
-      if (data.success) {
-        showToast('Sync completed successfully', 'success');
-      } else {
-        const errorMsg = data.error || data.stderr || `Exit code ${data.returncode}`;
-        showToast(`Sync failed: ${errorMsg}`, 'error');
-        console.error('Sync output:', data.stdout, data.stderr);
+      if (!startData.success) {
+        showToast(`Sync failed: ${startData.error}`, 'error');
+        setSyncRunning(false);
+        return;
       }
+
+      if (startData.status === 'already_running') {
+        showToast('Sync already in progress', 'info');
+      } else {
+        showToast('Sync started...', 'info');
+      }
+
+      // Poll for completion
+      const pollStatus = async () => {
+        const statusResponse = await fetch(`${localServerUrl}/sync`);
+        const status = await statusResponse.json();
+
+        if (status.status === 'running') {
+          setTimeout(pollStatus, 1000);
+        } else if (status.status === 'completed') {
+          setSyncRunning(false);
+          if (status.success) {
+            showToast('Sync completed successfully', 'success');
+          } else {
+            const errorMsg = status.error || status.stderr || `Exit code ${status.returncode}`;
+            showToast(`Sync failed: ${errorMsg}`, 'error');
+            console.error('Sync output:', status.stdout, status.stderr);
+          }
+        } else {
+          setSyncRunning(false);
+        }
+      };
+
+      pollStatus();
     } catch (err) {
       showToast(`Sync error: ${err.message}`, 'error');
-    } finally {
       setSyncRunning(false);
     }
   };
