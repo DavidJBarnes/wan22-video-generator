@@ -19,6 +19,7 @@ import LoraEditModal from '../components/LoraEditModal';
 import SegmentNotesModal from '../components/SegmentNotesModal';
 import MergeConfigModal from '../components/MergeConfigModal';
 import StatusChip from '../components/StatusChip';
+import { JobVideoPlayer, SegmentVideoPlayer } from '../components/VideoPlayer';
 import './JobDetail.css';
 
 // Helper functions moved to module level for memoization
@@ -772,14 +773,13 @@ export default function JobDetail() {
           <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
             {/* Left side: Video and buttons */}
             <div style={{ flex: '0 0 auto' }}>
-              <video
+              <JobVideoPlayer
                 key={`video-${id}-${job.completed_at}`}
+                jobId={id}
+                filename={job.output_images?.[0]}
                 controls
                 style={{ width: '100%', maxWidth: width >= height ? '500px' : '300px', borderRadius: '4px' }}
-                src={API.getJobVideo(id)}
-              >
-                Your browser does not support video playback.
-              </video>
+              />
               <div style={{ marginTop: '12px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 <Button
                   variant="contained"
@@ -1853,8 +1853,10 @@ export default function JobDetail() {
             onClick={(e) => e.stopPropagation()}
             style={{ maxWidth: '800px' }}
           >
-            <video
-              src={`${API.getSegmentVideo(id, segmentVideoIndex)}?t=${segmentVideoKey}`}
+            <SegmentVideoPlayer
+              key={`seg-${segmentVideoIndex}-${segmentVideoKey}`}
+              jobId={id}
+              segmentIndex={segmentVideoIndex}
               controls
               autoPlay
               playsInline
