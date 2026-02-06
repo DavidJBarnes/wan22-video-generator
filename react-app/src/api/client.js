@@ -79,13 +79,37 @@ class APIClient {
   }
 
   /**
-   * Get local URL for a thumbnail (if local server is configured)
+   * Get local URL for a job thumbnail (if local server is configured)
+   * Uses segment_0_last_frame.png from the job output folder
    * @param {number} jobId - Job ID
    * @returns {string|null} Local URL or null if not configured
    */
-  getLocalThumbnail(jobId) {
+  getLocalJobThumbnail(jobId) {
     if (!this.localServerUrl) return null;
-    return `${this.localServerUrl}/thumbnail_cache/job_${jobId}_thumb.jpg`;
+    return `${this.localServerUrl}/job_output/job_${jobId}/segment_0_last_frame.png`;
+  }
+
+  /**
+   * Get local URL for an image repo thumbnail (if local server is configured)
+   * Note: Image repo thumbnails use MD5 hashes, so we need the hash from the server
+   * @param {string} hash - MD5 hash of the thumbnail
+   * @returns {string|null} Local URL or null if not configured
+   */
+  getLocalImageThumbnail(hash) {
+    if (!this.localServerUrl || !hash) return null;
+    return `${this.localServerUrl}/image_thumbnails/${hash}.jpg`;
+  }
+
+  /**
+   * Get local URL for an image from the repository
+   * @param {string} path - Relative path to the image
+   * @returns {string|null} Local URL or null if not configured
+   */
+  getLocalRepoImage(path) {
+    if (!this.localServerUrl || !path) return null;
+    // The image repo is typically at a configured path, but locally we might have a mirror
+    // For now, assume images are in an 'images' subfolder or need path configuration
+    return null; // TODO: Need to know the local image repo structure
   }
 
   async request(endpoint, options = {}) {

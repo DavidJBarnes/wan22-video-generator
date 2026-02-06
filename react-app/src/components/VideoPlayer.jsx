@@ -106,11 +106,15 @@ export default function VideoPlayer({
 export function VideoPreview({ jobId, filename, poster, className, style, ...rest }) {
   const [currentSrc, setCurrentSrc] = useState(null);
   const [triedLocal, setTriedLocal] = useState(false);
+  const [currentPoster, setCurrentPoster] = useState(poster);
+  const [triedLocalPoster, setTriedLocalPoster] = useState(false);
   const videoRef = useRef(null);
 
   const remoteSrc = API.getJobVideo(jobId);
   const localSrc = API.getLocalJobVideo(jobId, filename);
+  const localPoster = API.getLocalJobThumbnail(jobId);
 
+  // Try local video source first
   useEffect(() => {
     if (localSrc && !triedLocal) {
       setCurrentSrc(localSrc);
@@ -118,6 +122,21 @@ export function VideoPreview({ jobId, filename, poster, className, style, ...res
       setCurrentSrc(remoteSrc);
     }
   }, [localSrc, remoteSrc, triedLocal, jobId]);
+
+  // Try local poster/thumbnail first
+  useEffect(() => {
+    if (localPoster && !triedLocalPoster) {
+      const img = new Image();
+      img.onload = () => setCurrentPoster(localPoster);
+      img.onerror = () => {
+        setTriedLocalPoster(true);
+        setCurrentPoster(poster);
+      };
+      img.src = localPoster;
+    } else if (!localPoster) {
+      setCurrentPoster(poster);
+    }
+  }, [localPoster, poster, triedLocalPoster, jobId]);
 
   const handleError = () => {
     if (localSrc && !triedLocal) {
@@ -145,13 +164,12 @@ export function VideoPreview({ jobId, filename, poster, className, style, ...res
     <video
       ref={videoRef}
       src={currentSrc}
-      poster={poster}
+      poster={currentPoster}
       className={className}
       style={style}
       muted
       loop
       playsInline
-      preload="none"
       onError={handleError}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
