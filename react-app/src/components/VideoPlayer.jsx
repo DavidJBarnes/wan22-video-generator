@@ -117,18 +117,25 @@ export function VideoPreview({ jobId, filename, poster, className, style, ...res
 
   useEffect(() => {
     if (localSrc && !triedLocal) {
+      console.log(`[VideoPreview] Job ${jobId}: trying local`, localSrc);
       setCurrentSrc(localSrc);
     } else {
+      console.log(`[VideoPreview] Job ${jobId}: using remote`, remoteSrc);
       setCurrentSrc(remoteSrc);
     }
-  }, [localSrc, remoteSrc, triedLocal]);
+  }, [localSrc, remoteSrc, triedLocal, jobId]);
 
-  const handleError = () => {
+  const handleError = (e) => {
+    console.log('[VideoPreview] Error loading video:', currentSrc, e);
     if (localSrc && !triedLocal) {
       console.log('[VideoPreview] Local source failed, falling back to remote');
       setTriedLocal(true);
       setCurrentSrc(remoteSrc);
     }
+  };
+
+  const handleCanPlay = () => {
+    console.log('[VideoPreview] Video can play:', currentSrc);
   };
 
   const handleMouseEnter = () => {
@@ -157,6 +164,7 @@ export function VideoPreview({ jobId, filename, poster, className, style, ...res
       loop
       playsInline
       onError={handleError}
+      onCanPlay={handleCanPlay}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       {...rest}
