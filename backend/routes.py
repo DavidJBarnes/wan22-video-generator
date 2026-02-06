@@ -3447,82 +3447,9 @@ async def delete_vr_video_endpoint(vr_video_id: int):
     return {"deleted": True, "file_deleted": file_deleted}
 
 
-# ============== Local Server & Sync Endpoints ==============
+# ============== Sync Endpoints ==============
 
-LOCAL_SERVER_TMUX_SESSION = "local-video-server"
-LOCAL_SERVER_SCRIPT = Path(__file__).parent.parent / "local-server" / "serve.py"
 SYNC_SCRIPT = Path.home() / "projects" / "scripts" / "sync.sh"
-
-
-@router.get("/local-server/status")
-async def get_local_server_status():
-    """Check if local video server tmux session is running."""
-    try:
-        result = subprocess.run(
-            ["tmux", "has-session", "-t", LOCAL_SERVER_TMUX_SESSION],
-            capture_output=True,
-            text=True
-        )
-        running = result.returncode == 0
-        return {"running": running, "session_name": LOCAL_SERVER_TMUX_SESSION}
-    except FileNotFoundError:
-        return {"running": False, "error": "tmux not installed"}
-    except Exception as e:
-        return {"running": False, "error": str(e)}
-
-
-@router.post("/local-server/start")
-async def start_local_server():
-    """Start the local video server in a tmux session."""
-    # Check if already running
-    try:
-        result = subprocess.run(
-            ["tmux", "has-session", "-t", LOCAL_SERVER_TMUX_SESSION],
-            capture_output=True,
-            text=True
-        )
-        if result.returncode == 0:
-            return {"success": False, "error": "Local server is already running"}
-    except FileNotFoundError:
-        raise HTTPException(status_code=500, detail="tmux not installed")
-
-    # Check if script exists
-    if not LOCAL_SERVER_SCRIPT.exists():
-        raise HTTPException(status_code=500, detail=f"Local server script not found: {LOCAL_SERVER_SCRIPT}")
-
-    # Start in tmux session
-    try:
-        cmd = f"python {LOCAL_SERVER_SCRIPT}"
-        result = subprocess.run(
-            ["tmux", "new-session", "-d", "-s", LOCAL_SERVER_TMUX_SESSION, cmd],
-            capture_output=True,
-            text=True
-        )
-        if result.returncode != 0:
-            raise HTTPException(status_code=500, detail=f"Failed to start tmux session: {result.stderr}")
-
-        return {"success": True, "message": f"Local server started in tmux session '{LOCAL_SERVER_TMUX_SESSION}'"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/local-server/stop")
-async def stop_local_server():
-    """Stop the local video server tmux session."""
-    try:
-        result = subprocess.run(
-            ["tmux", "kill-session", "-t", LOCAL_SERVER_TMUX_SESSION],
-            capture_output=True,
-            text=True
-        )
-        if result.returncode != 0:
-            return {"success": False, "error": "Session not found or already stopped"}
-
-        return {"success": True, "message": "Local server stopped"}
-    except FileNotFoundError:
-        raise HTTPException(status_code=500, detail="tmux not installed")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/sync/run")
