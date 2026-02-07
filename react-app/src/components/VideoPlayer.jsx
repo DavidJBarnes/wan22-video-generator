@@ -207,6 +207,8 @@ export function SegmentVideoPlayer({ jobId, segmentIndex, videoPath, ...rest }) 
 
   console.log(`[SegmentVideoPlayer] Job ${jobId} Seg ${segmentIndex}: local=${localSrc || 'NOT CONFIGURED'}, remote=${remoteSrc}, videoPath=${videoPath || 'none'}`);
 
+  console.log(`[SegmentVideoPlayer] Job ${jobId} Seg ${segmentIndex}: local=${localSrc || 'NOT CONFIGURED'}, remote=${remoteSrc}`);
+
   return (
     <VideoPlayer
       src={remoteSrc}

@@ -268,19 +268,15 @@ class APIClient {
   getLocalSegmentVideo(jobId, segmentIndex, videoPath) {
     if (!this.localServerUrl || this.localServerAvailable === false) return null;
 
-    let url;
     // If videoPath is provided, extract the actual filename
     // Keep as .mp4 since that's what exists on disk - the local server serves raw files
     if (videoPath) {
       const filename = videoPath.split('/').pop();
-      url = `${this.localServerUrl}/job_output/job_${jobId}/${filename}`;
-    } else {
-      // Fallback to index-based naming (legacy behavior) - try mp4 first
-      url = `${this.localServerUrl}/job_output/job_${jobId}/segment_${segmentIndex}.mp4`;
+      return `${this.localServerUrl}/job_output/job_${jobId}/${filename}`;
     }
 
-    // Add cache-buster to prevent 404 responses being cached
-    return `${url}?t=${Date.now()}`;
+    // Fallback to index-based naming (legacy behavior) - try mp4 first
+    return `${this.localServerUrl}/job_output/job_${jobId}/segment_${segmentIndex}.mp4`;
   }
 
   /**

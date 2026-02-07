@@ -71,6 +71,7 @@ export default function JobDetail() {
   const [selectedLoraForEdit, setSelectedLoraForEdit] = useState(null);
   const [segmentVideoIndex, setSegmentVideoIndex] = useState(null);
   const [segmentVideoPath, setSegmentVideoPath] = useState(null);
+  const [segmentVideoDisplayNum, setSegmentVideoDisplayNum] = useState(null);
   const [segmentVideoKey, setSegmentVideoKey] = useState(null);
   const [progress, setProgress] = useState(null);
   const [elapsedTime, setElapsedTime] = useState(null);
@@ -1442,6 +1443,7 @@ export default function JobDetail() {
                         onClick={() => {
                           setSegmentVideoIndex(seg.segment_index);
                           setSegmentVideoPath(seg.video_path);
+                          setSegmentVideoDisplayNum(displayNumber);
                           setSegmentVideoKey(Date.now());
                         }}
                         style={{
@@ -1848,7 +1850,7 @@ export default function JobDetail() {
       {segmentVideoIndex !== null && (
         <div
           className="lightbox-overlay"
-          onClick={() => { setSegmentVideoIndex(null); setSegmentVideoPath(null); }}
+          onClick={() => { setSegmentVideoIndex(null); setSegmentVideoPath(null); setSegmentVideoDisplayNum(null); }}
         >
           <div
             className="lightbox-content"
@@ -1867,12 +1869,12 @@ export default function JobDetail() {
             />
             <button
               className="lightbox-close"
-              onClick={() => { setSegmentVideoIndex(null); setSegmentVideoPath(null); }}
+              onClick={() => { setSegmentVideoIndex(null); setSegmentVideoPath(null); setSegmentVideoDisplayNum(null); }}
             >
               ×
             </button>
             <div className="lightbox-info">
-              Segment {segmentVideoIndex + 1} • Click outside or press × to close
+              Segment {segmentVideoDisplayNum} • Click outside or press × to close
             </div>
           </div>
         </div>
