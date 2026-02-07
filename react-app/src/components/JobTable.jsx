@@ -19,6 +19,7 @@ import API from '../api/client';
 import { formatDate, showToast, hasFaceswap } from '../utils/helpers';
 import StatusChip from './StatusChip';
 import PaginationControl from './PaginationControl';
+import { JobThumbnail } from './VideoPlayer';
 
 /**
  * Reusable job table component used on Queue and Dashboard pages.
@@ -212,11 +213,9 @@ export default function JobTable({
                         </TableCell>
                       )}
                       <TableCell>
-                        <img
+                        <JobThumbnail
+                          jobId={job.id}
                           className="thumbnail"
-                          src={API.getJobThumbnail(job.id)}
-                          onError={(e) => e.target.style.display = 'none'}
-                          alt=""
                         />
                       </TableCell>
                       <TableCell>{job.name}</TableCell>

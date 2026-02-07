@@ -209,3 +209,52 @@ export function JobVideoPlayer({ jobId, filename, ...rest }) {
     />
   );
 }
+
+/**
+ * Job thumbnail component with local/remote fallback.
+ * Tries local server first, falls back to API on error.
+ *
+ * @param {Object} props
+ * @param {number} props.jobId - Job ID
+ * @param {string} props.className - CSS class
+ * @param {Object} props.style - Inline styles
+ * @param {string} props.alt - Alt text
+ * @param {function} props.onError - Error callback (after fallback exhausted)
+ */
+export function JobThumbnail({ jobId, className, style, alt = '', onError, ...rest }) {
+  const remoteSrc = API.getJobThumbnail(jobId);
+  const localSrc = API.getLocalJobThumbnail(jobId);
+
+  const [currentSrc, setCurrentSrc] = useState(() => localSrc || remoteSrc);
+  const [triedLocal, setTriedLocal] = useState(false);
+
+  // Reset when jobId changes
+  useEffect(() => {
+    setTriedLocal(false);
+    setCurrentSrc(localSrc || remoteSrc);
+  }, [jobId, localSrc, remoteSrc]);
+
+  const handleError = (e) => {
+    if (localSrc && !triedLocal && currentSrc === localSrc) {
+      setTriedLocal(true);
+      setCurrentSrc(remoteSrc);
+    } else {
+      // Hide image on final error
+      e.target.style.display = 'none';
+      if (onError) onError(e);
+    }
+  };
+
+  if (!currentSrc) return null;
+
+  return (
+    <img
+      src={currentSrc}
+      className={className}
+      style={style}
+      alt={alt}
+      onError={handleError}
+      {...rest}
+    />
+  );
+}
