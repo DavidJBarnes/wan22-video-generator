@@ -261,11 +261,22 @@ class APIClient {
   /**
    * Get local URL for a segment video (if local server is configured)
    * @param {number} jobId - Job ID
-   * @param {number} segmentIndex - Segment index
+   * @param {number} segmentIndex - Segment index (used as fallback if videoPath not provided)
+   * @param {string} videoPath - Optional video path from segment record to extract actual filename
    * @returns {string|null} Local URL or null if not configured
    */
-  getLocalSegmentVideo(jobId, segmentIndex) {
+  getLocalSegmentVideo(jobId, segmentIndex, videoPath) {
     if (!this.localServerUrl || this.localServerAvailable === false) return null;
+
+    // If videoPath is provided, extract the actual filename and convert to webm
+    if (videoPath) {
+      const filename = videoPath.split('/').pop();
+      // Convert .mp4 to .webm for browser compatibility
+      const webmFilename = filename.replace(/\.mp4$/, '.webm');
+      return `${this.localServerUrl}/job_output/job_${jobId}/${webmFilename}`;
+    }
+
+    // Fallback to index-based naming (legacy behavior)
     return `${this.localServerUrl}/job_output/job_${jobId}/segment_${segmentIndex}.webm`;
   }
 

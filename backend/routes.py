@@ -1093,7 +1093,18 @@ async def get_segment_video(job_id: int, segment_index: int):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    video_path = get_segment_video_path(job_id, segment_index)
+    # Get the segment from the database and use its stored video_path
+    # This is more reliable than regenerating the path, especially if segments
+    # were deleted and recreated with different indices
+    segment = get_segment(job_id, segment_index)
+    if not segment:
+        raise HTTPException(status_code=404, detail="Segment not found")
+
+    video_path = segment.get("video_path")
+
+    # Fall back to generated path only if segment has no stored video_path
+    if not video_path:
+        video_path = get_segment_video_path(job_id, segment_index)
 
     if not video_path or not os.path.exists(video_path):
         raise HTTPException(status_code=404, detail="Segment video not found")

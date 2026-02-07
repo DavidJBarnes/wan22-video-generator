@@ -70,6 +70,7 @@ export default function JobDetail() {
   const { loras: loraLibrary } = useLoras();
   const [selectedLoraForEdit, setSelectedLoraForEdit] = useState(null);
   const [segmentVideoIndex, setSegmentVideoIndex] = useState(null);
+  const [segmentVideoPath, setSegmentVideoPath] = useState(null);
   const [segmentVideoKey, setSegmentVideoKey] = useState(null);
   const [progress, setProgress] = useState(null);
   const [elapsedTime, setElapsedTime] = useState(null);
@@ -1440,6 +1441,7 @@ export default function JobDetail() {
                         type="button"
                         onClick={() => {
                           setSegmentVideoIndex(seg.segment_index);
+                          setSegmentVideoPath(seg.video_path);
                           setSegmentVideoKey(Date.now());
                         }}
                         style={{
@@ -1846,7 +1848,7 @@ export default function JobDetail() {
       {segmentVideoIndex !== null && (
         <div
           className="lightbox-overlay"
-          onClick={() => setSegmentVideoIndex(null)}
+          onClick={() => { setSegmentVideoIndex(null); setSegmentVideoPath(null); }}
         >
           <div
             className="lightbox-content"
@@ -1857,6 +1859,7 @@ export default function JobDetail() {
               key={`seg-${segmentVideoIndex}-${segmentVideoKey}`}
               jobId={id}
               segmentIndex={segmentVideoIndex}
+              videoPath={segmentVideoPath}
               controls
               autoPlay
               playsInline
@@ -1864,7 +1867,7 @@ export default function JobDetail() {
             />
             <button
               className="lightbox-close"
-              onClick={() => setSegmentVideoIndex(null)}
+              onClick={() => { setSegmentVideoIndex(null); setSegmentVideoPath(null); }}
             >
               ×
             </button>
