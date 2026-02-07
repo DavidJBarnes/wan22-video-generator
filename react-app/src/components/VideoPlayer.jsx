@@ -196,13 +196,16 @@ export function VideoPreview({ jobId, filename, poster, className, style, ...res
  * @param {Object} props
  * @param {number} props.jobId - Job ID
  * @param {number} props.segmentIndex - Segment index
+ * @param {string} props.videoPath - Optional video path from segment record (for correct local URL)
  * @param {string} props.className - CSS class
  * @param {Object} props.style - Inline styles
  * @param {boolean} props.controls - Show controls (default: true)
  */
-export function SegmentVideoPlayer({ jobId, segmentIndex, ...rest }) {
+export function SegmentVideoPlayer({ jobId, segmentIndex, videoPath, ...rest }) {
   const remoteSrc = API.getSegmentVideo(jobId, segmentIndex);
-  const localSrc = API.getLocalSegmentVideo(jobId, segmentIndex);
+  const localSrc = API.getLocalSegmentVideo(jobId, segmentIndex, videoPath);
+
+  console.log(`[SegmentVideoPlayer] Job ${jobId} Seg ${segmentIndex}: local=${localSrc || 'NOT CONFIGURED'}, remote=${remoteSrc}, videoPath=${videoPath || 'none'}`);
 
   console.log(`[SegmentVideoPlayer] Job ${jobId} Seg ${segmentIndex}: local=${localSrc || 'NOT CONFIGURED'}, remote=${remoteSrc}`);
 
