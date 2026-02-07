@@ -51,7 +51,17 @@ export default function VideoPlayer({
     setCurrentSrc(newSrc);
   }, [src, localSrc]);
 
-  const handleError = () => {
+  const handleError = (e) => {
+    // Log detailed error info
+    const video = e.target;
+    const error = video.error;
+    console.log(`[VideoPlayer] Error for ${currentSrc}:`, {
+      code: error?.code,
+      message: error?.message,
+      networkState: video.networkState,
+      readyState: video.readyState
+    });
+
     // If we were trying local, fall back to remote
     if (localSrc && !triedLocal && currentSrc === localSrc) {
       console.log(`[VideoPlayer] Local failed, falling back to REMOTE → ${src}`);
@@ -76,6 +86,7 @@ export default function VideoPlayer({
     <video
       ref={videoRef}
       src={currentSrc}
+      crossOrigin="anonymous"
       className={className}
       style={style}
       controls={controls}
@@ -135,9 +146,14 @@ export function VideoPreview({ jobId, filename, poster, className, style, ...res
 
   const handleError = () => {
     if (localSrc && !triedLocal && currentSrc === localSrc) {
+      console.log(`[VideoPreview] Local failed, falling back to REMOTE`);
       setTriedLocal(true);
       setCurrentSrc(remoteSrc);
     }
+  };
+
+  const handleLoadedData = () => {
+    console.log(`[VideoPreview] Loaded from ${triedLocal ? 'REMOTE' : (localSrc ? 'LOCAL' : 'REMOTE')}`);
   };
 
   const handleMouseEnter = () => {
@@ -166,6 +182,7 @@ export function VideoPreview({ jobId, filename, poster, className, style, ...res
       loop
       playsInline
       onError={handleError}
+      onLoadedData={handleLoadedData}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       {...rest}
