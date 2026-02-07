@@ -205,9 +205,11 @@ export function SegmentVideoPlayer({ jobId, segmentIndex, videoPath, ...rest }) 
   const remoteSrc = API.getSegmentVideo(jobId, segmentIndex);
   const localSrc = API.getLocalSegmentVideo(jobId, segmentIndex, videoPath);
 
-  console.log(`[SegmentVideoPlayer] Job ${jobId} Seg ${segmentIndex}: local=${localSrc || 'NOT CONFIGURED'}, remote=${remoteSrc}, videoPath=${videoPath || 'none'}`);
-
-  console.log(`[SegmentVideoPlayer] Job ${jobId} Seg ${segmentIndex}: local=${localSrc || 'NOT CONFIGURED'}, remote=${remoteSrc}`);
+  console.log(`[SegmentVideoPlayer] Job ${jobId} Seg ${segmentIndex}:`, {
+    videoPath: videoPath || 'none',
+    localSrc: localSrc || 'NOT CONFIGURED',
+    remoteSrc
+  });
 
   return (
     <VideoPlayer
