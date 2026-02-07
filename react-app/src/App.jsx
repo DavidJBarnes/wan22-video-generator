@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { LoraProvider } from './contexts/LoraContext';
 import { JobsProvider } from './contexts/JobsContext';
@@ -10,8 +11,13 @@ import ImageRepo from './pages/ImageRepo';
 import LoraLibrary from './pages/LoraLibrary';
 import Prompts from './pages/Prompts';
 import Settings from './pages/Settings';
+import API from './api/client';
 
 function App() {
+  // Check local server availability once on app start
+  useEffect(() => {
+    API.checkLocalServerAvailable();
+  }, []);
   return (
     <JobsProvider>
       <LoraProvider>

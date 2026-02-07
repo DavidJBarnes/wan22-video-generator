@@ -168,6 +168,49 @@ class APIClient {
     this.baseUrl = localStorage.getItem('api_url') || DEFAULT_API_URL;
     // Load local server URL for faster video/image loading
     this.localServerUrl = localStorage.getItem('local_server_url') || '';
+    // Track if local server is available (checked once on first use)
+    this.localServerAvailable = null; // null = not checked, true/false = result
+    this.localServerCheckPromise = null;
+  }
+
+  /**
+   * Check if local server is available (cached after first check)
+   */
+  async checkLocalServerAvailable() {
+    if (!this.localServerUrl) return false;
+    if (this.localServerAvailable !== null) return this.localServerAvailable;
+
+    // Prevent multiple simultaneous checks
+    if (this.localServerCheckPromise) return this.localServerCheckPromise;
+
+    this.localServerCheckPromise = (async () => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 1000); // 1s timeout
+        const response = await fetch(this.localServerUrl, {
+          method: 'HEAD',
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        this.localServerAvailable = response.ok;
+        console.log(`[API] Local server ${this.localServerAvailable ? 'AVAILABLE' : 'UNAVAILABLE'}`);
+      } catch {
+        this.localServerAvailable = false;
+        console.log('[API] Local server UNAVAILABLE (connection failed)');
+      }
+      return this.localServerAvailable;
+    })();
+
+    return this.localServerCheckPromise;
+  }
+
+  /**
+   * Get local URL only if local server is confirmed available
+   */
+  getLocalUrlIfAvailable(path) {
+    // Return null if not configured or known to be unavailable
+    if (!this.localServerUrl || this.localServerAvailable === false) return null;
+    return `${this.localServerUrl}${path}`;
   }
 
   /**
@@ -203,6 +246,9 @@ class APIClient {
       this.localServerUrl = '';
       localStorage.removeItem('local_server_url');
     }
+    // Reset availability check when URL changes
+    this.localServerAvailable = null;
+    this.localServerCheckPromise = null;
   }
 
   /**
@@ -219,7 +265,7 @@ class APIClient {
    * @returns {string|null} Local URL or null if not configured
    */
   getLocalSegmentVideo(jobId, segmentIndex) {
-    if (!this.localServerUrl) return null;
+    if (!this.localServerUrl || this.localServerAvailable === false) return null;
     return `${this.localServerUrl}/job_output/job_${jobId}/segment_${segmentIndex}.webm`;
   }
 
@@ -230,7 +276,7 @@ class APIClient {
    * @returns {string|null} Local URL or null if not configured
    */
   getLocalJobVideo(jobId, filePathOrName) {
-    if (!this.localServerUrl || !filePathOrName) return null;
+    if (!this.localServerUrl || !filePathOrName || this.localServerAvailable === false) return null;
     // Extract just the filename if a full path was provided
     const filename = filePathOrName.split('/').pop();
     return `${this.localServerUrl}/job_output/job_${jobId}/${filename}`;
@@ -243,7 +289,7 @@ class APIClient {
    * @returns {string|null} Local URL or null if not configured
    */
   getLocalJobThumbnail(jobId) {
-    if (!this.localServerUrl) return null;
+    if (!this.localServerUrl || this.localServerAvailable === false) return null;
     return `${this.localServerUrl}/job_output/job_${jobId}/segment_0_last_frame.png`;
   }
 
@@ -267,7 +313,7 @@ class APIClient {
    * @returns {string|null} Local URL or null if not configured/no mtime
    */
   getLocalImageThumbnail(path, size, mtime) {
-    if (!this.localServerUrl || !path || !mtime) return null;
+    if (!this.localServerUrl || !path || !mtime || this.localServerAvailable === false) return null;
     const hash = this.computeThumbnailHash(path, size, mtime);
     return `${this.localServerUrl}/thumbnail_cache/${hash}.jpg`;
   }
