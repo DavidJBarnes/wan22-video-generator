@@ -35,27 +35,36 @@ export default function VideoPlayer({
   ...rest
 }) {
   // Start with local if available, otherwise remote
-  const [currentSrc, setCurrentSrc] = useState(() => localSrc || src);
+  const [currentSrc, setCurrentSrc] = useState(() => {
+    const initial = localSrc || src;
+    console.log(`[VideoPlayer] Init: ${localSrc ? 'LOCAL' : 'REMOTE'} → ${initial}`);
+    return initial;
+  });
   const [triedLocal, setTriedLocal] = useState(false);
   const videoRef = useRef(null);
 
   // Reset when src/localSrc props change
   useEffect(() => {
     setTriedLocal(false);
-    setCurrentSrc(localSrc || src);
+    const newSrc = localSrc || src;
+    console.log(`[VideoPlayer] Reset: ${localSrc ? 'LOCAL' : 'REMOTE'} → ${newSrc}`);
+    setCurrentSrc(newSrc);
   }, [src, localSrc]);
 
   const handleError = () => {
     // If we were trying local, fall back to remote
     if (localSrc && !triedLocal && currentSrc === localSrc) {
+      console.log(`[VideoPlayer] Local failed, falling back to REMOTE → ${src}`);
       setTriedLocal(true);
       setCurrentSrc(src);
     } else if (onError) {
+      console.log(`[VideoPlayer] Final error for ${currentSrc}`);
       onError();
     }
   };
 
   const handleLoadedData = (e) => {
+    console.log(`[VideoPlayer] Loaded successfully from ${triedLocal ? 'REMOTE' : (localSrc ? 'LOCAL' : 'REMOTE')}: ${currentSrc}`);
     if (onLoadedData) {
       onLoadedData(e);
     }
@@ -178,6 +187,8 @@ export function SegmentVideoPlayer({ jobId, segmentIndex, ...rest }) {
   const remoteSrc = API.getSegmentVideo(jobId, segmentIndex);
   const localSrc = API.getLocalSegmentVideo(jobId, segmentIndex);
 
+  console.log(`[SegmentVideoPlayer] Job ${jobId} Seg ${segmentIndex}: local=${localSrc || 'NOT CONFIGURED'}, remote=${remoteSrc}`);
+
   return (
     <VideoPlayer
       src={remoteSrc}
@@ -205,6 +216,61 @@ export function JobVideoPlayer({ jobId, filename, ...rest }) {
     <VideoPlayer
       src={remoteSrc}
       localSrc={localSrc}
+      {...rest}
+    />
+  );
+}
+
+/**
+ * Job thumbnail component with local/remote fallback.
+ * Tries local server first, falls back to API on error.
+ *
+ * @param {Object} props
+ * @param {number} props.jobId - Job ID
+ * @param {string} props.className - CSS class
+ * @param {Object} props.style - Inline styles
+ * @param {string} props.alt - Alt text
+ * @param {function} props.onError - Error callback (after fallback exhausted)
+ */
+export function JobThumbnail({ jobId, className, style, alt = '', onError, ...rest }) {
+  const remoteSrc = API.getJobThumbnail(jobId);
+  const localSrc = API.getLocalJobThumbnail(jobId);
+
+  const [currentSrc, setCurrentSrc] = useState(() => {
+    const initial = localSrc || remoteSrc;
+    console.log(`[JobThumbnail] Job ${jobId}: ${localSrc ? 'LOCAL' : 'REMOTE'} → ${initial}`);
+    return initial;
+  });
+  const [triedLocal, setTriedLocal] = useState(false);
+
+  // Reset when jobId changes
+  useEffect(() => {
+    setTriedLocal(false);
+    setCurrentSrc(localSrc || remoteSrc);
+  }, [jobId, localSrc, remoteSrc]);
+
+  const handleError = (e) => {
+    if (localSrc && !triedLocal && currentSrc === localSrc) {
+      console.log(`[JobThumbnail] Job ${jobId}: Local failed, falling back to REMOTE`);
+      setTriedLocal(true);
+      setCurrentSrc(remoteSrc);
+    } else {
+      console.log(`[JobThumbnail] Job ${jobId}: Final error, hiding image`);
+      // Hide image on final error
+      e.target.style.display = 'none';
+      if (onError) onError(e);
+    }
+  };
+
+  if (!currentSrc) return null;
+
+  return (
+    <img
+      src={currentSrc}
+      className={className}
+      style={style}
+      alt={alt}
+      onError={handleError}
       {...rest}
     />
   );
