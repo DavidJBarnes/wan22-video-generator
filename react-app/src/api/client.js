@@ -268,16 +268,19 @@ class APIClient {
   getLocalSegmentVideo(jobId, segmentIndex, videoPath) {
     if (!this.localServerUrl || this.localServerAvailable === false) return null;
 
-    // If videoPath is provided, extract the actual filename and convert to webm
+    let url;
+    // If videoPath is provided, extract the actual filename
+    // Keep as .mp4 since that's what exists on disk - the local server serves raw files
     if (videoPath) {
       const filename = videoPath.split('/').pop();
-      // Convert .mp4 to .webm for browser compatibility
-      const webmFilename = filename.replace(/\.mp4$/, '.webm');
-      return `${this.localServerUrl}/job_output/job_${jobId}/${webmFilename}`;
+      url = `${this.localServerUrl}/job_output/job_${jobId}/${filename}`;
+    } else {
+      // Fallback to index-based naming (legacy behavior) - try mp4 first
+      url = `${this.localServerUrl}/job_output/job_${jobId}/segment_${segmentIndex}.mp4`;
     }
 
-    // Fallback to index-based naming (legacy behavior)
-    return `${this.localServerUrl}/job_output/job_${jobId}/segment_${segmentIndex}.webm`;
+    // Add cache-buster to prevent 404 responses being cached
+    return `${url}?t=${Date.now()}`;
   }
 
   /**
