@@ -389,26 +389,33 @@ export default function Settings() {
           </p>
           <div className="form-group">
             <label>High Noise UNET Model</label>
-            <input
-              type="text"
+            <select
               value={highNoiseModel}
               onChange={(e) => setHighNoiseModel(e.target.value)}
-              placeholder="e.g., wan2.2_i2v_high_noise_14B_fp16.safetensors"
-            />
+            >
+              <option value="">-- Select High Noise Model --</option>
+              <option value="wan2.2_i2v_high_noise_14B_fp16.safetensors">wan2.2_i2v_high_noise_14B_fp16.safetensors</option>
+              <option value="wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors">wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors</option>
+              <option value="wan22RemixT2VI2V_i2vHighV20.safetensors">wan22RemixT2VI2V_i2vHighV20.safetensors</option>
+              <option value="wan22RemixT2VI2V_i2vHighV21.safetensors">wan22RemixT2VI2V_i2vHighV21.safetensors</option>
+            </select>
             <small style={{ color: '#666', fontSize: '12px' }}>
-              UNET model for the first sampling pass (high noise). Located in models/diffusion_models/ or models/unet/
+              UNET model for the first sampling pass (high noise). Located in models/diffusion_models/
             </small>
           </div>
           <div className="form-group">
             <label>Low Noise UNET Model</label>
-            <input
-              type="text"
+            <select
               value={lowNoiseModel}
               onChange={(e) => setLowNoiseModel(e.target.value)}
-              placeholder="e.g., wan2.2_i2v_low_noise_14B_fp16.safetensors"
-            />
+            >
+              <option value="">-- Select Low Noise Model --</option>
+              <option value="wan2.2_i2v_low_noise_14B_fp16.safetensors">wan2.2_i2v_low_noise_14B_fp16.safetensors</option>
+              <option value="wan22RemixT2VI2V_i2vLowV20.safetensors">wan22RemixT2VI2V_i2vLowV20.safetensors</option>
+              <option value="wan22RemixT2VI2V_i2vLowV21.safetensors">wan22RemixT2VI2V_i2vLowV21.safetensors</option>
+            </select>
             <small style={{ color: '#666', fontSize: '12px' }}>
-              UNET model for the second sampling pass (low noise). Located in models/diffusion_models/ or models/unet/
+              UNET model for the second sampling pass (low noise). Located in models/diffusion_models/
             </small>
           </div>
           <div className="form-group">
