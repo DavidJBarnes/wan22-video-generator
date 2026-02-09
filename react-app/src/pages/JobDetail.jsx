@@ -343,6 +343,16 @@ export default function JobDetail() {
       setLogs(logsData.logs || []);
       setLoading(false);
 
+      // Debug: log segment data to help diagnose video loading issues
+      console.log(`[JobDetail] Loaded ${segmentsData.length} segments:`,
+        segmentsData.map(s => ({
+          idx: s.segment_index,
+          status: s.status,
+          deleted: !!s.deleted_at,
+          videoPath: s.video_path || 'none'
+        }))
+      );
+
       // Calculate next segment index for prompt submission
       const segmentWithoutPrompt = segmentsData.find(s => !s.prompt && s.status === 'pending');
       setNextSegmentIndex(segmentWithoutPrompt ? segmentWithoutPrompt.segment_index : segmentsData.length);
@@ -1441,6 +1451,13 @@ export default function JobDetail() {
                       <button
                         type="button"
                         onClick={() => {
+                          console.log(`[JobDetail] Clicked segment video:`, {
+                            displayNumber,
+                            segmentIndex: seg.segment_index,
+                            videoPath: seg.video_path,
+                            segmentId: seg.id,
+                            status: seg.status
+                          });
                           setSegmentVideoIndex(seg.segment_index);
                           setSegmentVideoPath(seg.video_path);
                           setSegmentVideoDisplayNum(displayNumber);
@@ -1874,7 +1891,7 @@ export default function JobDetail() {
               ×
             </button>
             <div className="lightbox-info">
-              Segment {segmentVideoDisplayNum} • Click outside or press × to close
+              Segment {segmentVideoDisplayNum} (file: segment_{segmentVideoIndex}) • Click outside or press × to close
             </div>
           </div>
         </div>
