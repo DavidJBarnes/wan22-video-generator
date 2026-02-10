@@ -457,8 +457,8 @@ class QueueManager:
                        segment_index=segment_index, details=health['error'])
             # Don't fail immediately, wait for reconnection (existing logic handles this)
 
-        # Update segment status to running
-        update_segment_status(job_id, segment_index, "running")
+        # Note: Don't set status to "running" here - wait until we actually submit to ComfyUI
+        # This prevents segments from showing as "running" while waiting for ComfyUI queue to clear
 
         # Re-fetch job from database to ensure we have fresh parameters
         # This fixes an issue where params could be empty when processing segments > 0
