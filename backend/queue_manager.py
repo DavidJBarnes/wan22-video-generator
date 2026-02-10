@@ -248,6 +248,9 @@ class QueueManager:
         job_id = job["id"]
         self._current_job_id = job_id
 
+        # Mark job as running immediately so it shows in the UI
+        update_job_status(job_id, "running")
+
         print(f"[QueueManager] Processing job {job_id}: {job['name']}")
         print(f"[QueueManager] Job details: workflow_type={job.get('workflow_type')}, input_image={job.get('input_image')}")
         add_job_log(job_id, "INFO", "Job processing started", details=f"workflow_type={job.get('workflow_type')}")
@@ -264,7 +267,8 @@ class QueueManager:
             if not connected:
                 print(f"[QueueManager] ComfyUI not available: {msg}")
                 add_job_log(job_id, "WARN", "ComfyUI not available, waiting", details=msg)
-                # Don't fail the job, just wait
+                # Don't fail the job, just wait - reset status to pending
+                update_job_status(job_id, "pending")
                 self._current_job_id = None
                 return
 
