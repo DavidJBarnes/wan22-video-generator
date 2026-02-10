@@ -5,11 +5,18 @@
 
 cd "$(dirname "$0")/backend"
 
-# Activate virtual environment if it exists
+# Activate Python environment
+# Try venv first, then conda/miniconda
 if [ -d "venv" ]; then
     source venv/bin/activate
 elif [ -d ".venv" ]; then
     source .venv/bin/activate
+elif [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
+    source "$HOME/miniconda3/etc/profile.d/conda.sh"
+    conda activate base
+elif [ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]; then
+    source "$HOME/anaconda3/etc/profile.d/conda.sh"
+    conda activate base
 fi
 
 # =============================================================================
