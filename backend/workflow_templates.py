@@ -475,7 +475,7 @@ def build_wan_i2v_workflow(
                 "score_threshold": faceswap_score_threshold,  # Configurable detection confidence
                 "use_box_mask": True,              # Use rectangular mask
                 "use_occlusion_mask": True,        # ENABLE OCCLUSION DETECTION
-                "use_area_mask": False,            # Don't use area mask
+                "use_area_mask": True,             # Enable area mask (respects face_mask_areas)
                 "use_region_mask": faceswap_region_mask,    # Configurable region mask
                 "face_mask_areas": faceswap_mask_areas,
                 "face_mask_regions": faceswap_mask_regions,
