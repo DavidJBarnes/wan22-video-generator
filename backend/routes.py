@@ -1356,11 +1356,12 @@ async def export_segment_workflow(job_id: int, segment_index: int):
         reactor_face_restore=reactor_settings.get("face_restore", "codeformer-v0.1.0.pth"),
         reactor_restore_visibility=float(reactor_settings.get("restore_visibility", 1.0)),
         reactor_codeformer_weight=float(reactor_settings.get("codeformer_weight", 0.8)),
-        # FaceFusion settings
+        # FaceFusion settings - get mask values first
         faceswap_model=facefusion_settings.get("model", "inswapper_128"),
         faceswap_occluder=facefusion_settings.get("occluder", "xseg_1"),
         faceswap_mask_blur=float(facefusion_settings.get("mask_blur", 0.3)),
-        faceswap_region_mask=facefusion_settings.get("region_mask", False),
+        # Auto-enable region_mask when mouth is excluded from mask_areas
+        faceswap_region_mask=facefusion_settings.get("region_mask", False) or ("mouth" not in facefusion_settings.get("mask_areas", "mouth")),
         faceswap_score_threshold=float(facefusion_settings.get("score_threshold", 0.5)),
         faceswap_pixel_boost=facefusion_settings.get("pixel_boost", "512x512"),
         faceswap_selector_mode=facefusion_settings.get("selector_mode", "reference"),
