@@ -612,6 +612,8 @@ async def create_new_job(job: JobCreate):
         faceswap_pixel_boost=params.get("faceswap_pixel_boost"),
         faceswap_selector_mode=params.get("faceswap_selector_mode"),
         faceswap_detector_model=params.get("faceswap_detector_model"),
+        faceswap_mask_areas=params.get("faceswap_mask_areas"),
+        faceswap_mask_regions=params.get("faceswap_mask_regions"),
         fade_to_black=params.get("fade_to_black", False)
     )
 
@@ -1484,6 +1486,8 @@ async def update_segment_prompt_endpoint(
     faceswap_pixel_boost: Optional[str] = Form(None),  # Pixel boost resolution
     faceswap_selector_mode: Optional[str] = Form(None),  # Face selector mode (one, many, reference)
     faceswap_detector_model: Optional[str] = Form(None),  # Face detector model
+    faceswap_mask_areas: Optional[str] = Form(None),  # Comma-separated: upper-face,lower-face,mouth
+    faceswap_mask_regions: Optional[str] = Form(None),  # Comma-separated: skin,nose,mouth,upper-lip,lower-lip
     fade_to_black: Optional[bool] = Form(False),  # Apply fade-to-black transition at segment end
     custom_start_image: Optional[str] = Form(None),  # Custom start image path from image repo
     segment_duration: Optional[float] = Form(None)  # Per-segment duration in seconds (overrides job-level)
@@ -1510,6 +1514,8 @@ async def update_segment_prompt_endpoint(
         faceswap_pixel_boost: Pixel boost resolution (512x512, 768x768, 1024x1024).
         faceswap_selector_mode: Face selector mode (one, many, reference).
         faceswap_detector_model: Face detector model (retinaface, scrfd, etc.).
+        faceswap_mask_areas: Comma-separated face mask areas (upper-face, lower-face, mouth).
+        faceswap_mask_regions: Comma-separated face mask regions (skin, nose, mouth, upper-lip, lower-lip).
         fade_to_black: Apply fade-to-black transition at the end of this segment.
         custom_start_image: Path to custom start image from image repo (overrides default).
         segment_duration: Duration in seconds for this segment (overrides job-level setting).
@@ -1614,6 +1620,8 @@ async def update_segment_prompt_endpoint(
             faceswap_pixel_boost=faceswap_pixel_boost,
             faceswap_selector_mode=faceswap_selector_mode,
             faceswap_detector_model=faceswap_detector_model,
+            faceswap_mask_areas=faceswap_mask_areas,
+            faceswap_mask_regions=faceswap_mask_regions,
             fade_to_black=fade_to_black or False,
             custom_start_image=custom_start_image,
             duration=segment_duration
@@ -1636,6 +1644,8 @@ async def update_segment_prompt_endpoint(
             faceswap_occluder=faceswap_occluder,
             faceswap_mask_blur=faceswap_mask_blur,
             faceswap_region_mask=faceswap_region_mask,
+            faceswap_mask_areas=faceswap_mask_areas,
+            faceswap_mask_regions=faceswap_mask_regions,
             faceswap_score_threshold=faceswap_score_threshold,
             faceswap_pixel_boost=faceswap_pixel_boost,
             faceswap_selector_mode=faceswap_selector_mode,

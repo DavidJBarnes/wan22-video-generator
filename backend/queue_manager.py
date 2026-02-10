@@ -761,6 +761,8 @@ class QueueManager:
             faceswap_selector_mode=get_setting("facefusion_selector_mode", "reference"),
             faceswap_detector_model=get_setting("facefusion_detector_model", "retinaface"),
             faceswap_reference_distance=float(get_setting("facefusion_reference_distance", "0.8")),
+            faceswap_mask_areas=faceswap_params.get("mask_areas") if faceswap_params.get("mask_areas") is not None else get_setting("faceswap_mask_areas", "upper-face,lower-face,mouth"),
+            faceswap_mask_regions=faceswap_params.get("mask_regions") if faceswap_params.get("mask_regions") is not None else get_setting("faceswap_mask_regions", "skin,nose,mouth,upper-lip,lower-lip"),
         )
 
         # Capture workflow settings snapshot for later export/reconstruction
@@ -786,6 +788,8 @@ class QueueManager:
                 "selector_mode": get_setting("facefusion_selector_mode", "reference"),
                 "detector_model": get_setting("facefusion_detector_model", "retinaface"),
                 "reference_distance": float(get_setting("facefusion_reference_distance", "0.8")),
+                "mask_areas": faceswap_params.get("mask_areas") if faceswap_params.get("mask_areas") is not None else get_setting("faceswap_mask_areas", "upper-face,lower-face,mouth"),
+                "mask_regions": faceswap_params.get("mask_regions") if faceswap_params.get("mask_regions") is not None else get_setting("faceswap_mask_regions", "skin,nose,mouth,upper-lip,lower-lip"),
             },
         }
         update_segment_workflow_settings(job_id, segment_index, workflow_settings)
