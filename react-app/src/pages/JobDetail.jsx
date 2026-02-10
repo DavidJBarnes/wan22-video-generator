@@ -1339,16 +1339,16 @@ export default function JobDetail() {
 
                 {/* Prompt Section */}
                 <div className="segment-prompt">
-                  {/* Models Display */}
+                  {/* Models Display - show segment's stored model, fallback to global for legacy */}
                   <div style={{ marginBottom: '8px', fontSize: '12px', color: '#666' }}>
                     <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
                       <span>
                         <strong style={{ color: '#2e7d32' }}>High:</strong>{' '}
-                        {modelSettings.highNoiseModel || 'N/A'}
+                        {seg.high_noise_model || modelSettings.highNoiseModel || 'N/A'}
                       </span>
                       <span>
                         <strong style={{ color: '#1565c0' }}>Low:</strong>{' '}
-                        {modelSettings.lowNoiseModel || 'N/A'}
+                        {seg.low_noise_model || modelSettings.lowNoiseModel || 'N/A'}
                       </span>
                     </div>
                   </div>
