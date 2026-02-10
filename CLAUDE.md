@@ -251,6 +251,12 @@ ln -sf ~/backups/comfyui_queue.db backend/comfyui_queue.db
 
 - **Never commit binary files** such as videos (.mp4, .webm), images (.jpg, .png), or other media assets
 - **No personal names or explicit material** in code or commits - use generic placeholders (e.g., "Face 1", "face_01.png")
+- **Always check for merge conflicts before pushing**. Before pushing any branch, fetch and merge main to ensure your branch can be merged cleanly. Never push code that will create a merge conflict:
+  ```bash
+  git fetch origin main
+  git merge origin/main  # Resolve any conflicts locally first
+  git push
+  ```
 
 ## Repository Rules
 
