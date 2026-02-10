@@ -93,6 +93,10 @@ export default function JobDetail() {
     depthModel: 'depth_anything_v2',
     encodingPreset: 'balanced'
   });
+  const [modelSettings, setModelSettings] = useState({
+    highNoiseModel: '',
+    lowNoiseModel: ''
+  });
   const autoFinalizeTriggeredRef = useRef(false);
 
   // Memoize expensive segment calculations - must be before early returns
@@ -299,6 +303,10 @@ export default function JobDetail() {
           upscaleThreshold: parseInt(s.vr_upscale_threshold) || 1500,
           depthModel: s.vr_depth_model || 'depth_anything_v2',
           encodingPreset: s.vr_encoding_preset || 'balanced'
+        });
+        setModelSettings({
+          highNoiseModel: s.high_noise_model || 'wan2.2_i2v_high_noise_14B_fp16.safetensors',
+          lowNoiseModel: s.low_noise_model || 'wan2.2_i2v_low_noise_14B_fp16.safetensors'
         });
       } catch (error) {
         console.error('Failed to load VR settings:', error);
@@ -1263,6 +1271,19 @@ export default function JobDetail() {
 
                 {/* Prompt Section */}
                 <div className="segment-prompt">
+                  {/* Models Display */}
+                  <div style={{ marginBottom: '8px', fontSize: '12px', color: '#666' }}>
+                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                      <span>
+                        <strong style={{ color: '#2e7d32' }}>High:</strong>{' '}
+                        {modelSettings.highNoiseModel || 'N/A'}
+                      </span>
+                      <span>
+                        <strong style={{ color: '#1565c0' }}>Low:</strong>{' '}
+                        {modelSettings.lowNoiseModel || 'N/A'}
+                      </span>
+                    </div>
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
                     <div style={{ flex: 1 }}><strong>Prompt:</strong> {seg.prompt || 'TBD'}</div>
                     {seg.prompt && (
