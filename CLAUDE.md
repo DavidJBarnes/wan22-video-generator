@@ -284,6 +284,42 @@ Always check `git status` before committing to ensure no image files are staged.
 
 ## Development Notes
 
+### CRITICAL: Never Hardcode Configurable Values
+
+**All user-configurable values must be read from the Settings system at runtime, never hardcoded.**
+
+This applies to:
+- Preset definitions (faceswap presets, encoding presets, etc.)
+- Default parameter values that users can override
+- Any value that appears in the Settings page
+
+**Bad example** (hardcoded values in preset that override user settings):
+```python
+presets = {
+    "clean_face": {
+        "model": "inswapper_128",
+        "maskAreas": "upper-face,lower-face,mouth",  # BAD: hardcoded, overrides Settings
+    }
+}
+```
+
+**Good example** (preset only defines what it needs, other values fall back to Settings):
+```python
+presets = {
+    "clean_face": {
+        "model": "inswapper_128",
+        # maskAreas NOT included - will use value from Settings page
+    }
+}
+```
+
+**The pattern:**
+1. Presets/templates should only include values that are *specific to that preset*
+2. Values that users might want to change globally should be read from `get_setting()` at runtime
+3. If a preset value is `None`/missing, the code should fall back to the global setting
+
+This ensures users can control settings globally without preset definitions silently overriding their choices.
+
 ### Manual Setup (if not using startup scripts)
 
 ```bash
