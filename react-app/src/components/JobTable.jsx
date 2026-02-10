@@ -19,6 +19,7 @@ import API from '../api/client';
 import { formatDate, showToast, hasFaceswap } from '../utils/helpers';
 import StatusChip from './StatusChip';
 import PaginationControl from './PaginationControl';
+import { JobThumbnail } from './VideoPlayer';
 
 /**
  * Reusable job table component used on Queue and Dashboard pages.
@@ -133,7 +134,7 @@ export default function JobTable({
               <TableCell style={{ fontWeight: 'bold' }}>Faceswap</TableCell>
               <TableCell style={{ fontWeight: 'bold' }}>Segment Run</TableCell>
               <TableCell style={{ fontWeight: 'bold' }}>Status</TableCell>
-              <TableCell style={{ fontWeight: 'bold' }}>Segments</TableCell>
+              <TableCell style={{ fontWeight: 'bold' }}>Duration</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -212,11 +213,9 @@ export default function JobTable({
                         </TableCell>
                       )}
                       <TableCell>
-                        <img
+                        <JobThumbnail
+                          jobId={job.id}
                           className="thumbnail"
-                          src={API.getJobThumbnail(job.id)}
-                          onError={(e) => e.target.style.display = 'none'}
-                          alt=""
                         />
                       </TableCell>
                       <TableCell>{job.name}</TableCell>
@@ -228,12 +227,11 @@ export default function JobTable({
                         <StatusChip status={job.status} />
                       </TableCell>
                       <TableCell>
-                        {job.completed_segments ?? 0} completed
-                        {(job.deleted_segments ?? 0) > 0 && (
-                          <span style={{ color: '#d32f2f', marginLeft: '8px' }}>
-                            + {job.deleted_segments} deleted
-                          </span>
-                        )}
+                        {job.total_duration > 0 ? (
+                          job.total_duration >= 60
+                            ? `${Math.floor(job.total_duration / 60)}m ${Math.round(job.total_duration % 60)}s`
+                            : `${Math.round(job.total_duration)}s`
+                        ) : '-'}
                       </TableCell>
                     </TableRow>
                   );

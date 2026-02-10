@@ -8,6 +8,7 @@ import KeyboardDoubleArrowDownIcon from '@mui/icons-material/KeyboardDoubleArrow
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import DownloadIcon from '@mui/icons-material/Download';
 import API from '../api/client';
 import { useLoras } from '../contexts/LoraContext';
 import { formatDate, showToast } from '../utils/helpers';
@@ -18,6 +19,7 @@ import LoraEditModal from '../components/LoraEditModal';
 import SegmentNotesModal from '../components/SegmentNotesModal';
 import MergeConfigModal from '../components/MergeConfigModal';
 import StatusChip from '../components/StatusChip';
+import { JobVideoPlayer, SegmentVideoPlayer } from '../components/VideoPlayer';
 import './JobDetail.css';
 
 // Helper functions moved to module level for memoization
@@ -68,6 +70,8 @@ export default function JobDetail() {
   const { loras: loraLibrary } = useLoras();
   const [selectedLoraForEdit, setSelectedLoraForEdit] = useState(null);
   const [segmentVideoIndex, setSegmentVideoIndex] = useState(null);
+  const [segmentVideoPath, setSegmentVideoPath] = useState(null);
+  const [segmentVideoDisplayNum, setSegmentVideoDisplayNum] = useState(null);
   const [segmentVideoKey, setSegmentVideoKey] = useState(null);
   const [progress, setProgress] = useState(null);
   const [elapsedTime, setElapsedTime] = useState(null);
@@ -109,6 +113,25 @@ export default function JobDetail() {
     segments
       .filter(s => s.status === 'completed' && s.execution_time && !s.deleted_at)
       .reduce((sum, s) => sum + s.execution_time, 0),
+    [segments]
+  );
+
+  // Calculate total video duration (actual for completed, configured for pending)
+  const totalVideoDuration = useMemo(() => {
+    const jobDuration = job?.parameters?.segment_duration || 5;
+    const activeSegments = segments.filter(s => !s.deleted_at);
+
+    return activeSegments.reduce((sum, s) => {
+      // Use actual_duration if available (from ffprobe), otherwise configured duration
+      if (s.actual_duration) return sum + s.actual_duration;
+      if (s.duration) return sum + s.duration;
+      return sum + jobDuration;
+    }, 0);
+  }, [segments, job?.parameters?.segment_duration]);
+
+  // Check if any duration is estimated (pending segments without actual_duration)
+  const hasPendingSegments = useMemo(() =>
+    segments.some(s => !s.deleted_at && s.status !== 'completed'),
     [segments]
   );
 
@@ -327,6 +350,16 @@ export default function JobDetail() {
       setSegments(segmentsData);
       setLogs(logsData.logs || []);
       setLoading(false);
+
+      // Debug: log segment data to help diagnose video loading issues
+      console.log(`[JobDetail] Loaded ${segmentsData.length} segments:`,
+        segmentsData.map(s => ({
+          idx: s.segment_index,
+          status: s.status,
+          deleted: !!s.deleted_at,
+          videoPath: s.video_path || 'none'
+        }))
+      );
 
       // Calculate next segment index for prompt submission
       const segmentWithoutPrompt = segmentsData.find(s => !s.prompt && s.status === 'pending');
@@ -695,8 +728,19 @@ export default function JobDetail() {
   function buildDefaultFaceswap(segment, jobParams) {
     // First try to get from segment (previous segment's settings)
     if (segment && segment.faceswap_enabled) {
+      // Parse faceswap_params JSON to get method (stored as JSON string in database)
+      let method = 'reactor';
+      if (segment.faceswap_params) {
+        try {
+          const params = JSON.parse(segment.faceswap_params);
+          method = params.method || 'reactor';
+        } catch (e) {
+          console.warn('Failed to parse faceswap_params:', e);
+        }
+      }
       return {
         enabled: Boolean(segment.faceswap_enabled),
+        method,
         image: segment.faceswap_image || '',
         facesOrder: segment.faceswap_faces_order || 'left-right',
         facesIndex: segment.faceswap_faces_index || '0',
@@ -707,6 +751,7 @@ export default function JobDetail() {
     if (jobParams && jobParams.faceswap_enabled) {
       return {
         enabled: Boolean(jobParams.faceswap_enabled),
+        method: jobParams.faceswap_method || 'reactor',
         image: jobParams.faceswap_image || '',
         facesOrder: jobParams.faceswap_faces_order || 'left-right',
         facesIndex: jobParams.faceswap_faces_index || '0',
@@ -748,14 +793,13 @@ export default function JobDetail() {
           <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
             {/* Left side: Video and buttons */}
             <div style={{ flex: '0 0 auto' }}>
-              <video
+              <JobVideoPlayer
                 key={`video-${id}-${job.completed_at}`}
+                jobId={id}
+                filename={job.output_images?.[0]}
                 controls
                 style={{ width: '100%', maxWidth: width >= height ? '500px' : '300px', borderRadius: '4px' }}
-                src={API.getJobVideo(id)}
-              >
-                Your browser does not support video playback.
-              </video>
+              />
               <div style={{ marginTop: '12px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 <Button
                   variant="contained"
@@ -1002,8 +1046,14 @@ export default function JobDetail() {
             <div className="value">{width}x{height}</div>
           </div>
           <div className="detail-meta-item">
-            <label>Segment Duration</label>
-            <div className="value">{segmentDuration}s per segment</div>
+            <label>Total Video Time</label>
+            <div className="value">
+              {hasPendingSegments ? '~' : ''}
+              {totalVideoDuration >= 60
+                ? `${Math.floor(totalVideoDuration / 60)}m ${Math.round(totalVideoDuration % 60)}s`
+                : `${Math.round(totalVideoDuration)}s`
+              }
+            </div>
           </div>
           <div className="detail-meta-item">
             <label>Output FPS</label>
@@ -1160,6 +1210,12 @@ export default function JobDetail() {
                     <strong style={isDeleted ? { textDecoration: 'line-through', color: '#999' } : {}}>
                       Segment {displayNumber}
                     </strong>
+                    <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666', fontWeight: 'normal' }}>
+                      ({seg.actual_duration
+                        ? `${seg.actual_duration.toFixed(1)}s`
+                        : `~${seg.duration || job?.parameters?.segment_duration || 5}s`
+                      })
+                    </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <StatusChip status={isDeleted ? 'deleted' : seg.status} />
@@ -1174,6 +1230,18 @@ export default function JobDetail() {
                       >
                         Edit
                       </Button>
+                    )}
+                    {!isDeleted && seg.has_workflow_settings && (
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          window.location.href = `/api/jobs/${id}/segments/${seg.segment_index}/workflow`;
+                        }}
+                        title="Download ComfyUI Workflow"
+                        sx={{ color: 'text.secondary' }}
+                      >
+                        <DownloadIcon fontSize="small" />
+                      </IconButton>
                     )}
                     {canRestore && (
                       <Button
@@ -1365,13 +1433,25 @@ export default function JobDetail() {
                   {/* Per-segment Faceswap Info */}
                   <div style={{ marginTop: '8px' }}>
                     <strong>Face Swap:</strong>{' '}
-                    {seg.faceswap_enabled ? (
-                      <span style={{ color: '#7b1fa2' }}>
-                        {seg.faceswap_source_image
-                          ? 'From Frame'
-                          : getFaceswapDisplayName(seg.faceswap_image) || 'Enabled'}
-                      </span>
-                    ) : (
+                    {seg.faceswap_enabled ? (() => {
+                      // Parse method from faceswap_params JSON
+                      let method = 'reactor';
+                      if (seg.faceswap_params) {
+                        try {
+                          const params = JSON.parse(seg.faceswap_params);
+                          method = params.method || 'reactor';
+                        } catch (e) {}
+                      }
+                      const methodLabel = method === 'facefusion' ? 'FF' : 'RA';
+                      const sourceName = seg.faceswap_source_image
+                        ? 'From Frame'
+                        : getFaceswapDisplayName(seg.faceswap_image) || 'Enabled';
+                      return (
+                        <span style={{ color: '#7b1fa2' }}>
+                          {sourceName} <span style={{ opacity: 0.7, fontSize: '0.85em' }}>({methodLabel})</span>
+                        </span>
+                      );
+                    })() : (
                       <span style={{ color: '#999' }}>N/A</span>
                     )}
                   </div>
@@ -1392,7 +1472,16 @@ export default function JobDetail() {
                       <button
                         type="button"
                         onClick={() => {
+                          console.log(`[JobDetail] Clicked segment video:`, {
+                            displayNumber,
+                            segmentIndex: seg.segment_index,
+                            videoPath: seg.video_path,
+                            segmentId: seg.id,
+                            status: seg.status
+                          });
                           setSegmentVideoIndex(seg.segment_index);
+                          setSegmentVideoPath(seg.video_path);
+                          setSegmentVideoDisplayNum(displayNumber);
                           setSegmentVideoKey(Date.now());
                         }}
                         style={{
@@ -1689,6 +1778,7 @@ export default function JobDetail() {
           defaultLoras={buildDefaultLoras(lastCompletedSegment)}
           defaultFaceswap={buildDefaultFaceswap(lastCompletedSegment, job?.parameters)}
           defaultStartImageUrl={lastCompletedSegment?.end_frame_url || null}
+          defaultDuration={lastCompletedSegment?.duration || job?.parameters?.segment_duration || 5}
           jobInputImage={job?.input_image}
           segments={segments}
           onClose={() => setShowPromptModal(false)}
@@ -1708,6 +1798,7 @@ export default function JobDetail() {
           defaultFaceswap={buildDefaultFaceswap(editingSegment, job?.parameters)}
           defaultStartImageUrl={editingSegment.start_image_url || null}
           defaultCustomStartImage={editingSegment.custom_start_image || null}
+          defaultDuration={editingSegment.duration || job?.parameters?.segment_duration || 5}
           isEditing={true}
           jobInputImage={job?.input_image}
           segments={segments}
@@ -1797,15 +1888,18 @@ export default function JobDetail() {
       {segmentVideoIndex !== null && (
         <div
           className="lightbox-overlay"
-          onClick={() => setSegmentVideoIndex(null)}
+          onClick={() => { setSegmentVideoIndex(null); setSegmentVideoPath(null); setSegmentVideoDisplayNum(null); }}
         >
           <div
             className="lightbox-content"
             onClick={(e) => e.stopPropagation()}
             style={{ maxWidth: '800px' }}
           >
-            <video
-              src={`${API.getSegmentVideo(id, segmentVideoIndex)}?t=${segmentVideoKey}`}
+            <SegmentVideoPlayer
+              key={`seg-${segmentVideoIndex}-${segmentVideoKey}`}
+              jobId={id}
+              segmentIndex={segmentVideoIndex}
+              videoPath={segmentVideoPath}
               controls
               autoPlay
               playsInline
@@ -1813,12 +1907,12 @@ export default function JobDetail() {
             />
             <button
               className="lightbox-close"
-              onClick={() => setSegmentVideoIndex(null)}
+              onClick={() => { setSegmentVideoIndex(null); setSegmentVideoPath(null); setSegmentVideoDisplayNum(null); }}
             >
               ×
             </button>
             <div className="lightbox-info">
-              Segment {segmentVideoIndex + 1} • Click outside or press × to close
+              Segment {segmentVideoDisplayNum} (file: segment_{segmentVideoIndex}) • Click outside or press × to close
             </div>
           </div>
         </div>

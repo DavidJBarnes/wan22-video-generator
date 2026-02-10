@@ -324,8 +324,10 @@ class ComfyUIClient:
         duration_sec: float = 5.0,
         target_fps: int = 30,
         start_image_filename: str = "",
-        high_noise_model: str = "wan2.2_i2v_high_noise_14B_fp16.safetensors",
-        low_noise_model: str = "wan2.2_i2v_low_noise_14B_fp16.safetensors",
+        high_noise_model: str = "",
+        low_noise_model: str = "",
+        vae_model: str = "",
+        text_encoder: str = "",
         seed: Optional[int] = None,
         loras: Optional[List[Dict[str, str]]] = None,
         output_prefix: str = "",
@@ -333,6 +335,15 @@ class ComfyUIClient:
         faceswap_image: str = "",
         faceswap_faces_order: str = "left-right",
         faceswap_faces_index: str = "0",
+        # Method selection: 'reactor' or 'facefusion'
+        faceswap_method: str = "reactor",
+        # ReActor-specific parameters
+        reactor_swap_model: str = "inswapper_128.onnx",
+        reactor_face_detection: str = "retinaface_resnet50",
+        reactor_face_restore: str = "codeformer-v0.1.0.pth",
+        reactor_restore_visibility: float = 1.0,
+        reactor_codeformer_weight: float = 0.8,
+        # FaceFusion-specific parameters (for occlusion handling)
         faceswap_model: str = "inswapper_128",
         faceswap_occluder: str = "xseg_1",
         faceswap_mask_blur: float = 0.3,
@@ -377,6 +388,8 @@ class ComfyUIClient:
             start_image_filename=start_image_filename,
             high_noise_model=high_noise_model,
             low_noise_model=low_noise_model,
+            vae_model=vae_model,
+            text_encoder=text_encoder,
             seed=seed,
             loras=loras,
             output_prefix=output_prefix,
@@ -384,6 +397,12 @@ class ComfyUIClient:
             faceswap_image=faceswap_image,
             faceswap_faces_order=faceswap_faces_order,
             faceswap_faces_index=faceswap_faces_index,
+            faceswap_method=faceswap_method,
+            reactor_swap_model=reactor_swap_model,
+            reactor_face_detection=reactor_face_detection,
+            reactor_face_restore=reactor_face_restore,
+            reactor_restore_visibility=reactor_restore_visibility,
+            reactor_codeformer_weight=reactor_codeformer_weight,
             faceswap_model=faceswap_model,
             faceswap_occluder=faceswap_occluder,
             faceswap_mask_blur=faceswap_mask_blur,
@@ -412,8 +431,10 @@ class ComfyUIClient:
         input_image: Optional[str] = None,
         duration_sec: float = 5.0,
         target_fps: int = 30,
-        high_noise_model: str = "wan2.2_i2v_high_noise_14B_fp16.safetensors",
-        low_noise_model: str = "wan2.2_i2v_low_noise_14B_fp16.safetensors",
+        high_noise_model: str = "",
+        low_noise_model: str = "",
+        vae_model: str = "",
+        text_encoder: str = "",
     ) -> Dict[str, Any]:
         """Build a workflow from template with given parameters."""
         import copy
@@ -432,6 +453,8 @@ class ComfyUIClient:
                 start_image_filename=input_image or "",
                 high_noise_model=high_noise_model,
                 low_noise_model=low_noise_model,
+                vae_model=vae_model,
+                text_encoder=text_encoder,
             )
 
         # Get base template for simple workflows
@@ -520,7 +543,7 @@ class ComfyUIClient:
 
         Returns a dict with:
         - status: "pending", "running", "completed", "not_found", "error", or "unknown"
-        - data: output data if completed
+        - data: output data if completed or error (contains full history data)
         - error: error message if error/unknown (includes "connect" for connection errors)
         """
         try:
@@ -529,9 +552,30 @@ class ComfyUIClient:
             if response.status_code == 200:
                 data = response.json()
                 if prompt_id in data:
+                    prompt_data = data[prompt_id]
+                    # Check for execution errors before reporting as "completed"
+                    execution_error = self.extract_execution_error_from_data(prompt_data)
+                    if execution_error:
+                        # Format error message
+                        exc_type = execution_error.get("exception_type", "Unknown")
+                        exc_msg = execution_error.get("exception_message", "Unknown error")
+                        node_id = execution_error.get("node_id")
+                        node_type = execution_error.get("node_type")
+
+                        if node_id:
+                            error_msg = f"Node {node_id} ({node_type}): {exc_type}: {exc_msg}"
+                        else:
+                            error_msg = f"{exc_type}: {exc_msg}"
+
+                        return {
+                            "status": "error",
+                            "data": prompt_data,
+                            "error": error_msg,
+                            "error_details": execution_error
+                        }
                     return {
                         "status": "completed",
-                        "data": data[prompt_id]
+                        "data": prompt_data
                     }
 
             # Not in history - check if it's in the queue
@@ -589,6 +633,41 @@ class ComfyUIClient:
                 "connected": False,
                 "error": str(e)
             }
+
+    def extract_execution_error_from_data(self, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Extract execution error details from ComfyUI completion data.
+
+        Returns dict with error details if an execution error occurred, None otherwise.
+        Dict keys: exception_type, exception_message, node_id, node_type, traceback
+        """
+        if not data:
+            return None
+
+        status_info = data.get("status", {})
+
+        # Check if status indicates error
+        if status_info.get("status_str") == "error":
+            messages = status_info.get("messages", [])
+            for msg in messages:
+                if isinstance(msg, list) and len(msg) >= 2 and msg[0] == "execution_error":
+                    error_data = msg[1] if isinstance(msg[1], dict) else {}
+                    return {
+                        "exception_type": error_data.get("exception_type", "Unknown"),
+                        "exception_message": error_data.get("exception_message", "Unknown error"),
+                        "node_id": error_data.get("node_id"),
+                        "node_type": error_data.get("node_type"),
+                        "traceback": error_data.get("traceback", [])
+                    }
+            # Status is error but no detailed message found
+            return {
+                "exception_type": "ExecutionError",
+                "exception_message": "Execution failed (no details available)",
+                "node_id": None,
+                "node_type": None,
+                "traceback": []
+            }
+
+        return None
 
     def extract_execution_time_from_data(self, data: Dict[str, Any]) -> Optional[float]:
         """Extract execution time from already-fetched ComfyUI completion data."""

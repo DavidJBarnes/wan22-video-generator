@@ -13,7 +13,7 @@ import tempfile
 import httpx
 from pathlib import Path
 
-from video_utils import get_segment_video_path, optimize_video_for_web, OUTPUT_DIR, extract_frame, get_video_info
+from video_utils import get_segment_video_path, optimize_video_for_web, OUTPUT_DIR, extract_frame, get_video_info, get_video_info_batch
 
 from database import (
     get_all_jobs,
@@ -74,9 +74,11 @@ from database import (
     create_prompt_list,
     update_prompt_list,
     delete_prompt_list,
-    get_prompt_lists_by_names
+    get_prompt_lists_by_names,
+    parse_loras
 )
 from comfyui_client import ComfyUIClient
+from workflow_templates import build_wan_i2v_workflow
 from queue_manager import queue_manager
 from progress_tracker import progress_tracker
 from config import (
@@ -84,7 +86,6 @@ from config import (
     DEFAULT_WIDTH,
     DEFAULT_HEIGHT,
     DEFAULT_TARGET_FPS,
-    MODELS,
     GENERATION_PARAMS,
     DEFAULT_NEGATIVE_PROMPT
 )
@@ -333,6 +334,8 @@ def enrich_job_with_segments(job: Dict[str, Any]) -> Dict[str, Any]:
     """Add computed segment fields to a job dict."""
     job_id = job["id"]
     segments = db_get_job_segments(job_id)
+    params = job.get("parameters") or {}
+    default_segment_duration = float(params.get("segment_duration", 5))
 
     # Get total segments from actual segments or from parameters
     if segments:
@@ -340,15 +343,32 @@ def enrich_job_with_segments(job: Dict[str, Any]) -> Dict[str, Any]:
         deleted = sum(1 for s in segments if s.get("deleted_at"))
         # Completed excludes deleted segments
         completed = sum(1 for s in segments if s.get("status") == "completed" and not s.get("deleted_at"))
+        # Check if any non-deleted segment has faceswap enabled
+        has_faceswap = any(s.get("faceswap_enabled") and not s.get("deleted_at") for s in segments)
+        # Calculate total duration from COMPLETED, non-deleted segments only
+        total_duration = 0.0
+        for s in segments:
+            if s.get("deleted_at") or s.get("status") != "completed":
+                continue
+            if s.get("actual_duration"):
+                total_duration += s["actual_duration"]
+            elif s.get("duration"):
+                total_duration += s["duration"]
+            else:
+                total_duration += default_segment_duration
     else:
-        params = job.get("parameters") or {}
         total = int(params.get("total_segments", 1))
         completed = 0
         deleted = 0
+        has_faceswap = bool(params.get("faceswap_enabled"))
+        total_duration = 0.0
 
     job["total_segments"] = total
     job["completed_segments"] = completed
     job["deleted_segments"] = deleted
+    job["has_faceswap"] = has_faceswap
+    # Only show duration if there are completed segments
+    job["total_duration"] = round(total_duration, 1) if completed > 0 else None
     # Progress based on non-deleted segments
     active_total = total - deleted
     job["progress_percent"] = round((completed / active_total) * 100) if active_total > 0 else 0
@@ -578,6 +598,7 @@ async def create_new_job(job: JobCreate):
         high_loras=high_loras if high_loras else None,
         low_loras=low_loras if low_loras else None,
         faceswap_enabled=params.get("faceswap_enabled", False),
+        faceswap_method=params.get("faceswap_method", "reactor"),
         faceswap_image=params.get("faceswap_image", ""),
         faceswap_faces_order=params.get("faceswap_faces_order", "left-right"),
         faceswap_faces_index=params.get("faceswap_faces_index", "0"),
@@ -635,7 +656,7 @@ async def update_job_endpoint(job_id: int, job_data: JobUpdate):
     full_prompt = build_full_prompt(job_data.prompt) if job_data.prompt is not None else None
 
     # Update the job
-    success = update_job_parameters(
+    result = update_job_parameters(
         job_id,
         name=job_data.name,
         prompt=full_prompt,
@@ -643,8 +664,15 @@ async def update_job_endpoint(job_id: int, job_data: JobUpdate):
         parameters=job_data.parameters
     )
 
+    # Handle both old (bool) and new (tuple) return format
+    if isinstance(result, tuple):
+        success, error_msg = result
+    else:
+        success = result
+        error_msg = "Failed to update job"
+
     if not success:
-        raise HTTPException(status_code=400, detail="Failed to update job")
+        raise HTTPException(status_code=400, detail=error_msg or "Failed to update job")
 
     # Also update the first segment's prompt if job prompt changed
     if full_prompt is not None:
@@ -1065,7 +1093,18 @@ async def get_segment_video(job_id: int, segment_index: int):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    video_path = get_segment_video_path(job_id, segment_index)
+    # Get the segment from the database and use its stored video_path
+    # This is more reliable than regenerating the path, especially if segments
+    # were deleted and recreated with different indices
+    segment = get_segment(job_id, segment_index)
+    if not segment:
+        raise HTTPException(status_code=404, detail="Segment not found")
+
+    video_path = segment.get("video_path")
+
+    # Fall back to generated path only if segment has no stored video_path
+    if not video_path:
+        video_path = get_segment_video_path(job_id, segment_index)
 
     if not video_path or not os.path.exists(video_path):
         raise HTTPException(status_code=404, detail="Segment video not found")
@@ -1161,6 +1200,174 @@ async def get_segment_frame(job_id: int, segment_index: int, frame: int = 0):
     )
 
 
+@router.get("/jobs/{job_id}/segments/{segment_index}/workflow")
+async def export_segment_workflow(job_id: int, segment_index: int):
+    """Export the ComfyUI workflow JSON for a specific segment.
+
+    Returns the complete workflow with all actual settings used when the
+    segment was processed, ready to import into ComfyUI for reproduction.
+
+    For segments processed after this feature was added, uses stored settings.
+    For older segments without stored settings, falls back to current settings.
+    """
+    import urllib.parse
+
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    segment = get_segment(job_id, segment_index)
+    if not segment:
+        raise HTTPException(status_code=404, detail=f"Segment {segment_index} not found")
+
+    # Only allow export for segments that have been processed
+    if segment.get("status") not in ("completed", "failed", "running", "awaiting_prompt"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot export workflow for segment with status '{segment.get('status')}'"
+        )
+
+    # Get job parameters
+    params = json.loads(job.get("parameters") or "{}") if isinstance(job.get("parameters"), str) else (job.get("parameters") or {})
+    segment_duration = float(params.get("segment_duration", 5.0))
+    target_fps = int(params.get("target_fps", 30))
+
+    # Determine start image filename
+    if segment_index == 0:
+        start_image_filename = job.get("input_image", "")
+    else:
+        start_image_url = segment.get("start_image_url", "")
+        if start_image_url and 'filename=' in start_image_url:
+            parsed = urllib.parse.urlparse(start_image_url)
+            url_params = urllib.parse.parse_qs(parsed.query)
+            start_image_filename = url_params.get('filename', [''])[0]
+        else:
+            start_image_filename = start_image_url
+
+    # Parse LoRAs from segment or job
+    high_lora_str = segment.get("high_lora") or job.get("high_lora")
+    low_lora_str = segment.get("low_lora") or job.get("low_lora")
+    high_loras = parse_loras(high_lora_str)
+    low_loras = parse_loras(low_lora_str)
+
+    # Build combined loras list for workflow
+    loras = None
+    if high_loras or low_loras:
+        loras = []
+        max_len = max(len(high_loras), len(low_loras))
+        for i in range(max_len):
+            high = high_loras[i] if i < len(high_loras) else {}
+            low = low_loras[i] if i < len(low_loras) else {}
+            loras.append({
+                "high_file": high.get("file", ""),
+                "low_file": low.get("file", ""),
+                "high_weight": high.get("weight", 1.0),
+                "low_weight": low.get("weight", 1.0),
+            })
+
+    # Get faceswap settings from segment
+    faceswap_enabled = bool(segment.get("faceswap_enabled"))
+    faceswap_image = segment.get("faceswap_image", "")
+    faceswap_faces_order = segment.get("faceswap_faces_order", "left-right")
+    faceswap_faces_index = segment.get("faceswap_faces_index", "0")
+
+    # Parse faceswap_params if present
+    faceswap_params_str = segment.get("faceswap_params")
+    faceswap_params = json.loads(faceswap_params_str) if faceswap_params_str else {}
+    faceswap_method = faceswap_params.get("method", "reactor")
+
+    # Get workflow settings - prefer stored snapshot, fall back to current settings
+    workflow_settings_str = segment.get("workflow_settings")
+    if workflow_settings_str:
+        ws = json.loads(workflow_settings_str)
+        high_noise_model = ws.get("high_noise_model", "")
+        low_noise_model = ws.get("low_noise_model", "")
+        vae_model = ws.get("vae_model", "")
+        text_encoder = ws.get("text_encoder", "")
+        reactor_settings = ws.get("reactor", {})
+        facefusion_settings = ws.get("facefusion", {})
+    else:
+        # Fall back to current settings for old segments
+        high_noise_model = get_setting("high_noise_model", "")
+        low_noise_model = get_setting("low_noise_model", "")
+        vae_model = get_setting("vae_model", "")
+        text_encoder = get_setting("text_encoder", "")
+        reactor_settings = {
+            "swap_model": get_setting("reactor_swap_model", "inswapper_128.onnx"),
+            "face_detection": get_setting("reactor_face_detection", "retinaface_resnet50"),
+            "face_restore": get_setting("reactor_face_restore", "codeformer-v0.1.0.pth"),
+            "restore_visibility": float(get_setting("reactor_restore_visibility", "1.0")),
+            "codeformer_weight": float(get_setting("reactor_codeformer_weight", "0.8")),
+        }
+        facefusion_settings = {
+            "model": get_setting("facefusion_model", "inswapper_128"),
+            "occluder": get_setting("facefusion_occluder", "xseg_1"),
+            "mask_blur": float(get_setting("facefusion_mask_blur", "0.3")),
+            "region_mask": get_setting("facefusion_region_mask", "false") == "true",
+            "score_threshold": float(get_setting("facefusion_score_threshold", "0.5")),
+            "pixel_boost": get_setting("facefusion_pixel_boost", "512x512"),
+            "selector_mode": get_setting("facefusion_selector_mode", "reference"),
+            "detector_model": get_setting("facefusion_detector_model", "retinaface"),
+            "reference_distance": float(get_setting("facefusion_reference_distance", "0.8")),
+        }
+
+    # Build output prefix from job id and name
+    job_name = job.get("name", f"job_{job_id}")
+    safe_name = re.sub(r'[^\w\-]', '_', job_name)
+    output_prefix = f"{job_id}_{safe_name}"
+
+    # Build the workflow
+    workflow = build_wan_i2v_workflow(
+        prompt=segment.get("prompt") or job.get("prompt", ""),
+        negative_prompt=job.get("negative_prompt", get_setting("default_negative_prompt", "")),
+        width=int(params.get("width", get_setting("default_width", "640"))),
+        height=int(params.get("height", get_setting("default_height", "640"))),
+        duration_sec=segment_duration,
+        target_fps=target_fps,
+        start_image_filename=start_image_filename,
+        high_noise_model=high_noise_model,
+        low_noise_model=low_noise_model,
+        vae_model=vae_model,
+        text_encoder=text_encoder,
+        seed=job.get("seed"),
+        loras=loras,
+        output_prefix=output_prefix,
+        faceswap_enabled=faceswap_enabled,
+        faceswap_image=faceswap_image,
+        faceswap_faces_order=faceswap_faces_order,
+        faceswap_faces_index=faceswap_faces_index,
+        faceswap_method=faceswap_method,
+        # ReActor settings
+        reactor_swap_model=reactor_settings.get("swap_model", "inswapper_128.onnx"),
+        reactor_face_detection=reactor_settings.get("face_detection", "retinaface_resnet50"),
+        reactor_face_restore=reactor_settings.get("face_restore", "codeformer-v0.1.0.pth"),
+        reactor_restore_visibility=float(reactor_settings.get("restore_visibility", 1.0)),
+        reactor_codeformer_weight=float(reactor_settings.get("codeformer_weight", 0.8)),
+        # FaceFusion settings
+        faceswap_model=facefusion_settings.get("model", "inswapper_128"),
+        faceswap_occluder=facefusion_settings.get("occluder", "xseg_1"),
+        faceswap_mask_blur=float(facefusion_settings.get("mask_blur", 0.3)),
+        faceswap_region_mask=facefusion_settings.get("region_mask", False),
+        faceswap_score_threshold=float(facefusion_settings.get("score_threshold", 0.5)),
+        faceswap_pixel_boost=facefusion_settings.get("pixel_boost", "512x512"),
+        faceswap_selector_mode=facefusion_settings.get("selector_mode", "reference"),
+        faceswap_detector_model=facefusion_settings.get("detector_model", "retinaface"),
+        faceswap_reference_distance=float(facefusion_settings.get("reference_distance", 0.8)),
+    )
+
+    # Return as downloadable JSON
+    workflow_json = json.dumps(workflow, indent=2)
+    filename = f"{job_id}_segment_{segment_index}_workflow.json"
+
+    return Response(
+        content=workflow_json,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
+
+
 @router.get("/jobs/{job_id}/segments")
 async def get_job_segments_endpoint(job_id: int):
     """Get segments for a job from the database."""
@@ -1170,6 +1377,21 @@ async def get_job_segments_endpoint(job_id: int):
 
     # Get real segments from database
     segments = db_get_job_segments(job_id)
+
+    # Add flag indicating if workflow can be accurately exported
+    for seg in segments:
+        seg["has_workflow_settings"] = bool(seg.get("workflow_settings"))
+
+    # Get actual video durations for completed segments (in parallel for efficiency)
+    completed_segments = [s for s in segments if s.get("status") == "completed" and s.get("video_path")]
+    if completed_segments:
+        video_paths = [s["video_path"] for s in completed_segments]
+        video_infos = get_video_info_batch(video_paths)
+
+        # Map durations back to segments
+        for seg, info in zip(completed_segments, video_infos):
+            if info and info.get("duration"):
+                seg["actual_duration"] = round(info["duration"], 2)
 
     return segments
 
@@ -1248,6 +1470,7 @@ async def update_segment_prompt_endpoint(
     loras: Optional[str] = Form(None),  # JSON array: '[{"high_file": "...", "low_file": "..."}]'
     auto_finalize: Optional[bool] = Form(False),  # Auto-finalize after this segment completes
     faceswap_enabled: Optional[bool] = Form(False),  # Enable faceswap for this segment
+    faceswap_method: Optional[str] = Form("reactor"),  # Faceswap method: reactor or facefusion
     faceswap_image: Optional[str] = Form(None),  # Face image filename
     faceswap_faces_order: Optional[str] = Form("left-right"),  # Faces order
     faceswap_faces_index: Optional[str] = Form("0"),  # Faces index
@@ -1262,7 +1485,8 @@ async def update_segment_prompt_endpoint(
     faceswap_selector_mode: Optional[str] = Form(None),  # Face selector mode (one, many, reference)
     faceswap_detector_model: Optional[str] = Form(None),  # Face detector model
     fade_to_black: Optional[bool] = Form(False),  # Apply fade-to-black transition at segment end
-    custom_start_image: Optional[str] = Form(None)  # Custom start image path from image repo
+    custom_start_image: Optional[str] = Form(None),  # Custom start image path from image repo
+    segment_duration: Optional[float] = Form(None)  # Per-segment duration in seconds (overrides job-level)
 ):
     """Create or update a segment with a prompt and resume job processing (on-demand workflow).
 
@@ -1288,6 +1512,7 @@ async def update_segment_prompt_endpoint(
         faceswap_detector_model: Face detector model (retinaface, scrfd, etc.).
         fade_to_black: Apply fade-to-black transition at the end of this segment.
         custom_start_image: Path to custom start image from image repo (overrides default).
+        segment_duration: Duration in seconds for this segment (overrides job-level setting).
     """
     job = get_job(job_id)
     if not job:
@@ -1295,8 +1520,8 @@ async def update_segment_prompt_endpoint(
 
     # Build full prompt - will skip prepending identity if already present
     full_prompt = build_full_prompt(prompt)
-    # Also build full template if provided (apply same identity prepending)
-    full_template = build_full_prompt(prompt_template) if prompt_template else None
+    # Template should preserve the user's exact input (including tags like <faces>)
+    # Do NOT apply build_full_prompt to it - just use as-is for prepopulating next segment
 
     # Parse LoRA selections from JSON string
     # Format: [{"high_file": "...", "high_weight": 1.0, "low_file": "...", "low_weight": 1.0}, ...]
@@ -1371,10 +1596,11 @@ async def update_segment_prompt_endpoint(
             segment_index,
             full_prompt,
             start_image_url,
-            prompt_template=full_template,
+            prompt_template=prompt_template,
             high_loras=high_loras if high_loras else None,
             low_loras=low_loras if low_loras else None,
             faceswap_enabled=faceswap_enabled or False,
+            faceswap_method=faceswap_method or "reactor",
             faceswap_image=faceswap_image or "",
             faceswap_faces_order=faceswap_faces_order or "left-right",
             faceswap_faces_index=faceswap_faces_index or "0",
@@ -1389,16 +1615,18 @@ async def update_segment_prompt_endpoint(
             faceswap_selector_mode=faceswap_selector_mode,
             faceswap_detector_model=faceswap_detector_model,
             fade_to_black=fade_to_black or False,
-            custom_start_image=custom_start_image
+            custom_start_image=custom_start_image,
+            duration=segment_duration
         )
     else:
         # Segment exists - update its prompt, LoRA, and faceswap settings
         update_segment_prompt(
             job_id, segment_index, full_prompt,
-            prompt_template=full_template,
+            prompt_template=prompt_template,
             high_loras=high_loras if high_loras else None,
             low_loras=low_loras if low_loras else None,
             faceswap_enabled=faceswap_enabled,
+            faceswap_method=faceswap_method,
             faceswap_image=faceswap_image,
             faceswap_faces_order=faceswap_faces_order,
             faceswap_faces_index=faceswap_faces_index,
@@ -1413,7 +1641,8 @@ async def update_segment_prompt_endpoint(
             faceswap_selector_mode=faceswap_selector_mode,
             faceswap_detector_model=faceswap_detector_model,
             fade_to_black=fade_to_black,
-            custom_start_image=custom_start_image
+            custom_start_image=custom_start_image,
+            duration=segment_duration
         )
 
     # Update auto_finalize in job parameters
@@ -1587,7 +1816,6 @@ async def get_settings():
     settings.setdefault("default_height", str(DEFAULT_HEIGHT))
     settings.setdefault("default_target_fps", str(DEFAULT_TARGET_FPS))
     settings.setdefault("default_negative_prompt", DEFAULT_NEGATIVE_PROMPT)
-    settings.setdefault("models", MODELS)
     settings.setdefault("generation_params", GENERATION_PARAMS)
 
     # Job naming presets (stored as JSON arrays)
@@ -2151,7 +2379,11 @@ async def browse_image_repo(path: str = "", tag: Optional[str] = None):
                             continue
                         if img_file.is_file() and img_file.suffix.lower() in ['.jpg', '.jpeg', '.png']:
                             img_rel = img_file.relative_to(repo_root_path)
-                            preview_images.append(str(img_rel).replace("\\", "/"))
+                            img_stat = img_file.stat()
+                            preview_images.append({
+                                "path": str(img_rel).replace("\\", "/"),
+                                "mtime": img_stat.st_mtime
+                            })
                             if len(preview_images) >= 3:
                                 break
                 except (PermissionError, OSError):
@@ -2166,10 +2398,12 @@ async def browse_image_repo(path: str = "", tag: Optional[str] = None):
                 # Only include jpg and png files
                 if item.suffix.lower() in ['.jpg', '.jpeg', '.png']:
                     rel_path = item.relative_to(repo_root_path)
+                    stat = item.stat()
                     images.append({
                         "name": item.name,
                         "path": str(rel_path).replace("\\", "/"),  # Normalize path separators
-                        "size": item.stat().st_size
+                        "size": stat.st_size,
+                        "mtime": stat.st_mtime  # For local thumbnail hash computation
                     })
     except PermissionError:
         raise HTTPException(status_code=403, detail="Permission denied accessing directory")
@@ -3223,3 +3457,48 @@ async def delete_vr_video_endpoint(vr_video_id: int):
     delete_vr_video(vr_video_id)
 
     return {"deleted": True, "file_deleted": file_deleted}
+
+
+# ============== Sync Endpoints ==============
+
+SYNC_SCRIPT = Path.home() / "projects" / "scripts" / "sync.sh"
+
+
+@router.post("/sync/run")
+async def run_sync():
+    """Run the sync script to pull data from remote server."""
+    if not SYNC_SCRIPT.exists():
+        raise HTTPException(status_code=500, detail=f"Sync script not found: {SYNC_SCRIPT}")
+
+    try:
+        # Run sync script and capture output
+        result = subprocess.run(
+            ["bash", str(SYNC_SCRIPT)],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+
+        return {
+            "success": result.returncode == 0,
+            "returncode": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr
+        }
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="Sync script timed out after 5 minutes")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sync/status")
+async def get_sync_status():
+    """Check if sync script exists and is executable."""
+    exists = SYNC_SCRIPT.exists()
+    executable = os.access(SYNC_SCRIPT, os.X_OK) if exists else False
+
+    return {
+        "script_path": str(SYNC_SCRIPT),
+        "exists": exists,
+        "executable": executable
+    }

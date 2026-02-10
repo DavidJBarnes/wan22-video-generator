@@ -17,8 +17,14 @@ export default function Settings() {
 
   // Form fields
   const [apiUrl, setApiUrl] = useState('');
+  const [localServerUrl, setLocalServerUrl] = useState('');
   const [comfyuiUrl, setComfyuiUrl] = useState('');
   const [imageRepoPath, setImageRepoPath] = useState('');
+  // ComfyUI model settings
+  const [highNoiseModel, setHighNoiseModel] = useState('');
+  const [lowNoiseModel, setLowNoiseModel] = useState('');
+  const [vaeModel, setVaeModel] = useState('');
+  const [textEncoder, setTextEncoder] = useState('');
   const [defaultTargetFps, setDefaultTargetFps] = useState(30);
   const [defaultNegativePrompt, setDefaultNegativePrompt] = useState('');
   const [queueWaitTimeout, setQueueWaitTimeout] = useState(30);
@@ -30,60 +36,27 @@ export default function Settings() {
   const [promptIdentity, setPromptIdentity] = useState('');
   const [slideshowDelay, setSlideshowDelay] = useState(5);
 
-  // FaceFusion face swap settings
-  const [faceswapPreset, setFaceswapPreset] = useState('clean_face');
-  const [faceswapModel, setFaceswapModel] = useState('inswapper_128');
-  const [faceswapOccluder, setFaceswapOccluder] = useState('xseg_1');
-  const [faceswapMaskBlur, setFaceswapMaskBlur] = useState(0.3);
-  const [faceswapRegionMask, setFaceswapRegionMask] = useState(false);
-  const [faceswapScoreThreshold, setFaceswapScoreThreshold] = useState(0.5);
-  const [faceswapPixelBoost, setFaceswapPixelBoost] = useState('512x512');
-  const [faceswapSelectorMode, setFaceswapSelectorMode] = useState('reference');
-  const [faceswapDetectorModel, setFaceswapDetectorModel] = useState('retinaface');
-  const [faceswapReferenceDistance, setFaceswapReferenceDistance] = useState(0.8);
-  // FaceFusion presets loaded from database
-  const [faceswapPresets, setFaceswapPresets] = useState({});
+  // ReActor face swap settings
+  const [reactorSwapModel, setReactorSwapModel] = useState('inswapper_128.onnx');
+  const [reactorFaceDetection, setReactorFaceDetection] = useState('retinaface_resnet50');
+  const [reactorFaceRestore, setReactorFaceRestore] = useState('codeformer-v0.1.0.pth');
+  const [reactorRestoreVisibility, setReactorRestoreVisibility] = useState(1.0);
+  const [reactorCodeformerWeight, setReactorCodeformerWeight] = useState(0.8);
 
-  // Apply preset settings (uses presets loaded from database)
-  const applyPreset = (presetKey) => {
-    if (presetKey === 'custom') {
-      setFaceswapPreset('custom');
-      return;
-    }
-    const preset = faceswapPresets[presetKey];
-    if (preset) {
-      setFaceswapPreset(presetKey);
-      setFaceswapModel(preset.model);
-      setFaceswapOccluder(preset.occluder);
-      setFaceswapMaskBlur(preset.maskBlur);
-      setFaceswapRegionMask(preset.regionMask);
-      setFaceswapScoreThreshold(preset.scoreThreshold);
-      setFaceswapPixelBoost(preset.pixelBoost);
-      setFaceswapSelectorMode(preset.selectorMode);
-      setFaceswapDetectorModel(preset.detectorModel);
-      setFaceswapReferenceDistance(preset.referenceFaceDistance ?? 0.8);
-    }
-  };
+  // FaceFusion face swap settings (optimized for occlusion handling)
+  const [facefusionModel, setFacefusionModel] = useState('inswapper_128');
+  const [facefusionOccluder, setFacefusionOccluder] = useState('xseg_1');
+  const [facefusionMaskBlur, setFacefusionMaskBlur] = useState(0.3);
+  const [facefusionRegionMask, setFacefusionRegionMask] = useState(false);
+  const [facefusionScoreThreshold, setFacefusionScoreThreshold] = useState(0.5);
+  const [facefusionPixelBoost, setFacefusionPixelBoost] = useState('512x512');
+  const [facefusionSelectorMode, setFacefusionSelectorMode] = useState('reference');
+  const [facefusionDetectorModel, setFacefusionDetectorModel] = useState('retinaface');
+  const [facefusionReferenceDistance, setFacefusionReferenceDistance] = useState(0.8);
 
-  // Check if current settings match a preset
-  const detectPreset = () => {
-    for (const [key, preset] of Object.entries(faceswapPresets)) {
-      if (key === 'custom') continue;
-      if (
-        faceswapModel === preset.model &&
-        faceswapOccluder === preset.occluder &&
-        Math.abs(faceswapMaskBlur - preset.maskBlur) < 0.01 &&
-        faceswapRegionMask === preset.regionMask &&
-        Math.abs(faceswapScoreThreshold - preset.scoreThreshold) < 0.01 &&
-        faceswapPixelBoost === preset.pixelBoost &&
-        faceswapSelectorMode === preset.selectorMode &&
-        faceswapDetectorModel === preset.detectorModel
-      ) {
-        return key;
-      }
-    }
-    return 'custom';
-  };
+  // Sync state
+  const [syncRunning, setSyncRunning] = useState(false);
+  const [syncOutput, setSyncOutput] = useState('');
 
   // VR 180 stereo settings (validated for Quest 3S)
   const [vrEyeSeparation, setVrEyeSeparation] = useState(0.015);
@@ -106,16 +79,40 @@ export default function Settings() {
     loadHiddenLoras();
   }, []);
 
+  async function handleRunSync() {
+    setSyncRunning(true);
+    setSyncOutput('');
+    try {
+      const result = await API.request('/sync/run', { method: 'POST' });
+      setSyncOutput(result.stdout || result.stderr || 'Sync completed');
+      if (result.success) {
+        showToast('Sync completed successfully', 'success');
+      } else {
+        showToast('Sync completed with errors', 'warning');
+      }
+    } catch (error) {
+      setSyncOutput(error.message || 'Sync failed');
+      showToast('Sync failed', 'error');
+    }
+    setSyncRunning(false);
+  }
+
   async function loadSettings() {
     try {
       const data = await API.getSettings();
       const s = data.settings || data;
       setSettings(s);
 
-      // api_url is client-side only, stored in localStorage via API client
+      // api_url and local_server_url are client-side only, stored in localStorage via API client
       setApiUrl(API.getBaseUrl() === '/api' ? '' : API.getBaseUrl());
+      setLocalServerUrl(API.getLocalServerUrl() || '');
       setComfyuiUrl(s.comfyui_url || 'http://localhost:8188');
       setImageRepoPath(s.image_repo_path || '');
+      // ComfyUI model settings
+      setHighNoiseModel(s.high_noise_model || '');
+      setLowNoiseModel(s.low_noise_model || '');
+      setVaeModel(s.vae_model || '');
+      setTextEncoder(s.text_encoder || '');
       setDefaultTargetFps(parseInt(s.default_target_fps) || 30);
       setDefaultNegativePrompt(s.default_negative_prompt || 'blurry, low quality, distorted');
       setQueueWaitTimeout(Math.round((parseInt(s.queue_wait_timeout) || 1800) / 60)); // Convert seconds to minutes
@@ -134,22 +131,23 @@ export default function Settings() {
       setPromptIdentity(s.prompt_identity || '');
       setSlideshowDelay(parseInt(s.slideshow_delay) || 5);
 
-      // FaceFusion settings
-      setFaceswapPreset(s.faceswap_preset || 'clean_face');
-      setFaceswapModel(s.faceswap_model || 'inswapper_128');
-      setFaceswapOccluder(s.faceswap_occluder || 'xseg_1');
-      setFaceswapMaskBlur(parseFloat(s.faceswap_mask_blur) || 0.3);
-      setFaceswapRegionMask(s.faceswap_region_mask === 'true');
-      setFaceswapScoreThreshold(parseFloat(s.faceswap_score_threshold) || 0.5);
-      setFaceswapPixelBoost(s.faceswap_pixel_boost || '512x512');
-      setFaceswapSelectorMode(s.faceswap_selector_mode || 'reference');
-      setFaceswapDetectorModel(s.faceswap_detector_model || 'retinaface');
-      setFaceswapReferenceDistance(parseFloat(s.faceswap_reference_distance) || 0.8);
-      // Load FaceFusion presets from database
-      try {
-        const presets = JSON.parse(s.faceswap_presets || '{}');
-        setFaceswapPresets(presets);
-      } catch { setFaceswapPresets({}); }
+      // ReActor settings
+      setReactorSwapModel(s.reactor_swap_model || 'inswapper_128.onnx');
+      setReactorFaceDetection(s.reactor_face_detection || 'retinaface_resnet50');
+      setReactorFaceRestore(s.reactor_face_restore || 'codeformer-v0.1.0.pth');
+      setReactorRestoreVisibility(parseFloat(s.reactor_restore_visibility) || 1.0);
+      setReactorCodeformerWeight(parseFloat(s.reactor_codeformer_weight) || 0.8);
+
+      // FaceFusion settings (for occlusion handling)
+      setFacefusionModel(s.facefusion_model || 'inswapper_128');
+      setFacefusionOccluder(s.facefusion_occluder || 'xseg_1');
+      setFacefusionMaskBlur(parseFloat(s.facefusion_mask_blur) || 0.3);
+      setFacefusionRegionMask(s.facefusion_region_mask === 'true');
+      setFacefusionScoreThreshold(parseFloat(s.facefusion_score_threshold) || 0.5);
+      setFacefusionPixelBoost(s.facefusion_pixel_boost || '512x512');
+      setFacefusionSelectorMode(s.facefusion_selector_mode || 'reference');
+      setFacefusionDetectorModel(s.facefusion_detector_model || 'retinaface');
+      setFacefusionReferenceDistance(parseFloat(s.facefusion_reference_distance) || 0.8);
 
       // VR settings (validated for Quest 3S)
       setVrEyeSeparation(parseFloat(s.vr_eye_separation) || 0.015);
@@ -230,6 +228,11 @@ export default function Settings() {
       const settingsPayload = {
         comfyui_url: comfyuiUrl || 'http://localhost:8188',
         image_repo_path: imageRepoPath,
+        // ComfyUI model settings
+        high_noise_model: highNoiseModel,
+        low_noise_model: lowNoiseModel,
+        vae_model: vaeModel,
+        text_encoder: textEncoder,
         default_target_fps: String(defaultTargetFps),
         default_negative_prompt: defaultNegativePrompt,
         queue_wait_timeout: String(queueWaitTimeout * 60), // Convert minutes to seconds
@@ -253,23 +256,29 @@ export default function Settings() {
         vr_video_upscale_enabled: String(vrVideoUpscaleEnabled),
         vr_depth_model: vrDepthModel,
         vr_encoding_preset: vrEncodingPreset,
+        // ReActor settings
+        reactor_swap_model: reactorSwapModel,
+        reactor_face_detection: reactorFaceDetection,
+        reactor_face_restore: reactorFaceRestore,
+        reactor_restore_visibility: String(reactorRestoreVisibility),
+        reactor_codeformer_weight: String(reactorCodeformerWeight),
         // FaceFusion settings
-        faceswap_preset: faceswapPreset,
-        faceswap_model: faceswapModel,
-        faceswap_occluder: faceswapOccluder,
-        faceswap_mask_blur: String(faceswapMaskBlur),
-        faceswap_region_mask: String(faceswapRegionMask),
-        faceswap_score_threshold: String(faceswapScoreThreshold),
-        faceswap_pixel_boost: faceswapPixelBoost,
-        faceswap_selector_mode: faceswapSelectorMode,
-        faceswap_detector_model: faceswapDetectorModel,
-        faceswap_reference_distance: String(faceswapReferenceDistance)
+        facefusion_model: facefusionModel,
+        facefusion_occluder: facefusionOccluder,
+        facefusion_mask_blur: String(facefusionMaskBlur),
+        facefusion_region_mask: String(facefusionRegionMask),
+        facefusion_score_threshold: String(facefusionScoreThreshold),
+        facefusion_pixel_boost: facefusionPixelBoost,
+        facefusion_selector_mode: facefusionSelectorMode,
+        facefusion_detector_model: facefusionDetectorModel,
+        facefusion_reference_distance: String(facefusionReferenceDistance)
       };
 
       await API.updateSettings(settingsPayload);
 
-      // Update client-side API URL after successful save
+      // Update client-side settings after successful save
       API.setBaseUrl(apiUrl);
+      API.setLocalServerUrl(localServerUrl);
 
       showToast('Settings saved successfully', 'success');
       setSaving(false);
@@ -373,6 +382,66 @@ export default function Settings() {
               Max time for ComfyUI to generate a single video segment. Increase for high-resolution or high-FPS videos.
             </small>
           </div>
+
+          <h3 style={{ marginTop: '24px', marginBottom: '16px', fontSize: '16px', borderTop: '1px solid #333', paddingTop: '16px' }}>Model Configuration</h3>
+          <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
+            Specify the model filenames as they appear in your ComfyUI models folder. Jobs will fail if these are not configured.
+          </p>
+          <div className="form-group">
+            <label>High Noise UNET Model</label>
+            <select
+              value={highNoiseModel}
+              onChange={(e) => setHighNoiseModel(e.target.value)}
+            >
+              <option value="">-- Select High Noise Model --</option>
+              <option value="wan2.2_i2v_high_noise_14B_fp16.safetensors">wan2.2_i2v_high_noise_14B_fp16.safetensors</option>
+              <option value="wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors">wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors</option>
+              <option value="wan22RemixT2VI2V_i2vHighV20.safetensors">wan22RemixT2VI2V_i2vHighV20.safetensors</option>
+              <option value="wan22RemixT2VI2V_i2vHighV21.safetensors">wan22RemixT2VI2V_i2vHighV21.safetensors</option>
+            </select>
+            <small style={{ color: '#666', fontSize: '12px' }}>
+              UNET model for the first sampling pass (high noise). Located in models/diffusion_models/
+            </small>
+          </div>
+          <div className="form-group">
+            <label>Low Noise UNET Model</label>
+            <select
+              value={lowNoiseModel}
+              onChange={(e) => setLowNoiseModel(e.target.value)}
+            >
+              <option value="">-- Select Low Noise Model --</option>
+              <option value="wan2.2_i2v_low_noise_14B_fp16.safetensors">wan2.2_i2v_low_noise_14B_fp16.safetensors</option>
+              <option value="wan22RemixT2VI2V_i2vLowV20.safetensors">wan22RemixT2VI2V_i2vLowV20.safetensors</option>
+              <option value="wan22RemixT2VI2V_i2vLowV21.safetensors">wan22RemixT2VI2V_i2vLowV21.safetensors</option>
+            </select>
+            <small style={{ color: '#666', fontSize: '12px' }}>
+              UNET model for the second sampling pass (low noise). Located in models/diffusion_models/
+            </small>
+          </div>
+          <div className="form-group">
+            <label>VAE Model</label>
+            <input
+              type="text"
+              value={vaeModel}
+              onChange={(e) => setVaeModel(e.target.value)}
+              placeholder="e.g., wan_2.1_vae.safetensors"
+            />
+            <small style={{ color: '#666', fontSize: '12px' }}>
+              VAE model for encoding/decoding. Located in models/vae/
+            </small>
+          </div>
+          <div className="form-group">
+            <label>Text Encoder (CLIP)</label>
+            <input
+              type="text"
+              value={textEncoder}
+              onChange={(e) => setTextEncoder(e.target.value)}
+              placeholder="e.g., umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+            />
+            <small style={{ color: '#666', fontSize: '12px' }}>
+              Text encoder model (T5/CLIP). Located in models/text_encoders/ or models/clip/
+            </small>
+          </div>
         </div>
 
         {/* API Configuration */}
@@ -402,6 +471,66 @@ export default function Settings() {
             <small style={{ color: '#666', fontSize: '12px' }}>
               Backend API URL (e.g., http://2070.zero:9090/api). Click "Apply & Reload" to save and refresh.
             </small>
+          </div>
+
+          <div className="form-group" style={{ marginTop: '16px' }}>
+            <label>Local Video Server URL</label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="text"
+                value={localServerUrl}
+                onChange={(e) => setLocalServerUrl(e.target.value)}
+                placeholder="e.g., http://localhost:8765"
+                style={{ flex: 1 }}
+              />
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => {
+                  API.setLocalServerUrl(localServerUrl);
+                  showToast(localServerUrl ? 'Local server URL saved' : 'Local server URL cleared', 'success');
+                }}
+              >
+                Apply
+              </Button>
+            </div>
+            <small style={{ color: '#666', fontSize: '12px' }}>
+              Optional: URL of local server serving synced videos (e.g., from rsync).
+              Videos load from local first, fall back to remote.
+            </small>
+          </div>
+
+          <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #333' }}>
+            <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>Data Sync</h3>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <Button
+                variant="contained"
+                onClick={handleRunSync}
+                disabled={syncRunning}
+              >
+                {syncRunning ? 'Syncing...' : 'Run Sync'}
+              </Button>
+              {syncRunning && <CircularProgress size={20} />}
+            </div>
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '8px', display: 'block' }}>
+              Runs ~/projects/scripts/sync.sh to pull data from remote server.
+            </small>
+            {syncOutput && (
+              <pre style={{
+                marginTop: '12px',
+                padding: '12px',
+                backgroundColor: '#1e1e1e',
+                color: '#d4d4d4',
+                borderRadius: '4px',
+                fontSize: '12px',
+                maxHeight: '200px',
+                overflow: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all'
+              }}>
+                {syncOutput}
+              </pre>
+            )}
           </div>
         </div>
 
@@ -623,67 +752,145 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* FaceFusion Face Swap Settings */}
+        {/* ReActor Face Swap Settings */}
         <div className="card settings-section">
-          <h2>FaceFusion Face Swap</h2>
+          <h2>ReActor Face Swap</h2>
           <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
-            Default parameters for face swapping with occlusion detection.
+            Default parameters for ReActor face swapping. Best for most shots without occlusions.
           </p>
 
-          {/* Preset Selector */}
-          <div className="form-group" style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#f5f5f5', borderRadius: '8px' }}>
-            <label style={{ fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>Preset</label>
-            <select
-              value={faceswapPreset}
-              onChange={(e) => applyPreset(e.target.value)}
-              style={{ width: '100%' }}
-            >
-              {Object.entries(faceswapPresets).map(([key, preset]) => (
-                <option key={key} value={key}>{preset.label}</option>
-              ))}
-              <option value="custom">Custom - Manual configuration</option>
-            </select>
+          <div className="settings-grid">
+            <div className="form-group">
+              <label>Swap Model</label>
+              <select
+                value={reactorSwapModel}
+                onChange={(e) => setReactorSwapModel(e.target.value)}
+              >
+                <option value="inswapper_128.onnx">InSwapper 128 (recommended)</option>
+                <option value="inswapper_128_fp16.onnx">InSwapper 128 FP16 (faster)</option>
+              </select>
+              <small style={{ color: '#666', fontSize: '12px' }}>
+                Face swap model. InSwapper 128 provides best quality.
+              </small>
+            </div>
+
+            <div className="form-group">
+              <label>Face Detection</label>
+              <select
+                value={reactorFaceDetection}
+                onChange={(e) => setReactorFaceDetection(e.target.value)}
+              >
+                <option value="retinaface_resnet50">RetinaFace ResNet50 (recommended)</option>
+                <option value="retinaface_mobile0.25">RetinaFace Mobile (faster)</option>
+                <option value="YOLOv5l">YOLOv5 Large</option>
+                <option value="YOLOv5n">YOLOv5 Nano (fastest)</option>
+              </select>
+              <small style={{ color: '#666', fontSize: '12px' }}>
+                Face detection model. RetinaFace provides most stable results.
+              </small>
+            </div>
           </div>
+
+          <div className="settings-grid" style={{ marginTop: '12px' }}>
+            <div className="form-group">
+              <label>Face Restore Model</label>
+              <select
+                value={reactorFaceRestore}
+                onChange={(e) => setReactorFaceRestore(e.target.value)}
+              >
+                <option value="codeformer-v0.1.0.pth">CodeFormer (recommended)</option>
+                <option value="GFPGANv1.3.pth">GFPGAN v1.3</option>
+                <option value="GFPGANv1.4.pth">GFPGAN v1.4</option>
+                <option value="none">None (faster)</option>
+              </select>
+              <small style={{ color: '#666', fontSize: '12px' }}>
+                Post-processing to restore face detail and quality.
+              </small>
+            </div>
+
+            <div className="form-group">
+              <label>Restore Visibility: {reactorRestoreVisibility}</label>
+              <input
+                type="range"
+                value={reactorRestoreVisibility}
+                onChange={(e) => setReactorRestoreVisibility(parseFloat(e.target.value))}
+                min="0"
+                max="1"
+                step="0.1"
+                style={{ width: '100%' }}
+              />
+              <small style={{ color: '#666', fontSize: '12px' }}>
+                How much face restoration to apply (0 = none, 1 = full).
+              </small>
+            </div>
+          </div>
+
+          <div className="form-group" style={{ marginTop: '12px' }}>
+            <label>CodeFormer Weight: {reactorCodeformerWeight}</label>
+            <input
+              type="range"
+              value={reactorCodeformerWeight}
+              onChange={(e) => setReactorCodeformerWeight(parseFloat(e.target.value))}
+              min="0"
+              max="1"
+              step="0.1"
+              style={{ width: '100%' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#666', fontSize: '11px' }}>
+              <span>0 (more fidelity)</span>
+              <span>1 (more quality)</span>
+            </div>
+            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+              Balance between fidelity to swapped face (0) and restoration quality (1). Only used with CodeFormer.
+            </small>
+          </div>
+        </div>
+
+        {/* FaceFusion Face Swap Settings */}
+        <div className="card settings-section">
+          <h2>FaceFusion Face Swap (Occlusions)</h2>
+          <p style={{ color: '#666', fontSize: '14px', marginBottom: '16px' }}>
+            Settings for FaceFusion face swapping. Use for shots with hands, food, or other objects in front of the face.
+          </p>
 
           <div className="settings-grid">
             <div className="form-group">
               <label>Face Swapper Model</label>
               <select
-                value={faceswapModel}
-                onChange={(e) => { setFaceswapModel(e.target.value); setFaceswapPreset('custom'); }}
+                value={facefusionModel}
+                onChange={(e) => setFacefusionModel(e.target.value)}
               >
-                <option value="inswapper_128">InSwapper 128 (recommended)</option>
+                <option value="hyperswap_1c_256">HyperSwap 256 (best quality)</option>
+                <option value="inswapper_128">InSwapper 128</option>
                 <option value="inswapper_128_fp16">InSwapper 128 FP16 (faster)</option>
-                <option value="hyperswap_1c_256">HyperSwap 1C 256</option>
-                <option value="hyperswap">HyperSwap Standard</option>
               </select>
               <small style={{ color: '#666', fontSize: '12px' }}>
-                Model used for face swapping. InSwapper 128 provides best identity preservation.
+                Model used for face swapping.
               </small>
             </div>
 
             <div className="form-group">
               <label>Occlusion Detection Model</label>
               <select
-                value={faceswapOccluder}
-                onChange={(e) => { setFaceswapOccluder(e.target.value); setFaceswapPreset('custom'); }}
+                value={facefusionOccluder}
+                onChange={(e) => setFacefusionOccluder(e.target.value)}
               >
                 <option value="xseg_1">XSeg 1 (faster)</option>
                 <option value="xseg_2">XSeg 2</option>
                 <option value="xseg_3">XSeg 3 (best quality)</option>
               </select>
               <small style={{ color: '#666', fontSize: '12px' }}>
-                Model for detecting occlusions (hands, tongue, etc.) to protect them during face swap.
+                Model for detecting occlusions (hands, tongue, etc.).
               </small>
             </div>
           </div>
 
           <div className="form-group" style={{ marginTop: '12px' }}>
-            <label>Face Mask Blur: {faceswapMaskBlur}</label>
+            <label>Face Mask Blur: {facefusionMaskBlur}</label>
             <input
               type="range"
-              value={faceswapMaskBlur}
-              onChange={(e) => { setFaceswapMaskBlur(parseFloat(e.target.value)); setFaceswapPreset('custom'); }}
+              value={facefusionMaskBlur}
+              onChange={(e) => setFacefusionMaskBlur(parseFloat(e.target.value))}
               min="0"
               max="1"
               step="0.05"
@@ -693,32 +900,29 @@ export default function Settings() {
               <span>0 (sharp)</span>
               <span>1.0 (blurred)</span>
             </div>
-            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
-              Blur amount for face mask edges. Lower values create sharper transitions.
-            </small>
           </div>
 
           <div className="form-group" style={{ marginTop: '12px' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
               <input
                 type="checkbox"
-                checked={faceswapRegionMask}
-                onChange={(e) => { setFaceswapRegionMask(e.target.checked); setFaceswapPreset('custom'); }}
+                checked={facefusionRegionMask}
+                onChange={(e) => setFacefusionRegionMask(e.target.checked)}
                 style={{ width: 'auto', margin: 0 }}
               />
               Enable Region Masking
             </label>
             <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
-              Use region-specific masks (skin, nose, mouth, lips) for more precise face blending.
+              Use region-specific masks for more precise face blending.
             </small>
           </div>
 
           <div className="form-group" style={{ marginTop: '12px' }}>
-            <label>Face Detection Score: {faceswapScoreThreshold}</label>
+            <label>Face Detection Score: {facefusionScoreThreshold}</label>
             <input
               type="range"
-              value={faceswapScoreThreshold}
-              onChange={(e) => { setFaceswapScoreThreshold(parseFloat(e.target.value)); setFaceswapPreset('custom'); }}
+              value={facefusionScoreThreshold}
+              onChange={(e) => setFacefusionScoreThreshold(parseFloat(e.target.value))}
               min="0.1"
               max="0.9"
               step="0.05"
@@ -728,80 +932,59 @@ export default function Settings() {
               <span>0.1 (lenient)</span>
               <span>0.9 (strict)</span>
             </div>
-            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
-              Minimum confidence score for face detection. Lower values detect more faces but may include false positives.
-            </small>
           </div>
 
-          <div className="form-group" style={{ marginTop: '12px' }}>
-            <label>Pixel Boost (Face Resolution)</label>
-            <select
-              value={faceswapPixelBoost}
-              onChange={(e) => { setFaceswapPixelBoost(e.target.value); setFaceswapPreset('custom'); }}
-              style={{ width: '100%' }}
-            >
-              <option value="256x256">256x256 - Fast, lower quality</option>
-              <option value="512x512">512x512 - Balanced (default)</option>
-              <option value="768x768">768x768 - Higher quality, slower</option>
-              <option value="1024x1024">1024x1024 - Best quality, slowest</option>
-            </select>
-            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
-              Resolution at which face swapping is performed. Higher values produce sharper, more detailed faces but require more VRAM and processing time. Use 512x512 for most cases, 768x768+ for close-up shots where face detail matters.
-            </small>
-          </div>
-
-          <div className="form-group" style={{ marginTop: '12px' }}>
-            <label>Face Selector Mode</label>
-            <select
-              value={faceswapSelectorMode}
-              onChange={(e) => { setFaceswapSelectorMode(e.target.value); setFaceswapPreset('custom'); }}
-              style={{ width: '100%' }}
-            >
-              <option value="one">One - Select by position (may jitter)</option>
-              <option value="reference">Reference - Track by similarity (recommended)</option>
-              <option value="many">Many - Swap all detected faces</option>
-            </select>
-            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
-              How faces are selected for swapping. "Reference" mode tracks the same face across frames using similarity matching, reducing jitter. "One" selects by position which can vary frame-to-frame.
-            </small>
-          </div>
-
-          <div className="form-group" style={{ marginTop: '12px' }}>
-            <label>Face Detector Model</label>
-            <select
-              value={faceswapDetectorModel}
-              onChange={(e) => { setFaceswapDetectorModel(e.target.value); setFaceswapPreset('custom'); }}
-              style={{ width: '100%' }}
-            >
-              <option value="retinaface">RetinaFace - More stable/consistent (recommended)</option>
-              <option value="scrfd">SCRFD - Fast and accurate</option>
-              <option value="yolo_face">YOLO Face - YOLO-based detection</option>
-              <option value="yunet">YuNet - Lightweight</option>
-              <option value="many">Many - Multiple detectors (most robust, slowest)</option>
-            </select>
-            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
-              Face detection model. RetinaFace tends to give more consistent landmark positions across frames, reducing jitter in video face swaps.
-            </small>
-          </div>
-
-          <div className="form-group" style={{ marginTop: '12px' }}>
-            <label>Reference Face Distance: {faceswapReferenceDistance}</label>
-            <input
-              type="range"
-              value={faceswapReferenceDistance}
-              onChange={(e) => { setFaceswapReferenceDistance(parseFloat(e.target.value)); setFaceswapPreset('custom'); }}
-              min="0.4"
-              max="1.0"
-              step="0.05"
-              style={{ width: '100%' }}
-            />
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#666', fontSize: '11px' }}>
-              <span>0.4 (strict)</span>
-              <span>1.0 (lenient)</span>
+          <div className="settings-grid" style={{ marginTop: '12px' }}>
+            <div className="form-group">
+              <label>Pixel Boost</label>
+              <select
+                value={facefusionPixelBoost}
+                onChange={(e) => setFacefusionPixelBoost(e.target.value)}
+              >
+                <option value="256x256">256x256 - Fast</option>
+                <option value="512x512">512x512 - Balanced</option>
+                <option value="768x768">768x768 - High quality</option>
+              </select>
             </div>
-            <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
-              Similarity threshold for reference mode face matching. Higher values allow more variation in face angle/expression, helping track faces at different angles. Only used when Face Selector Mode is "Reference".
-            </small>
+
+            <div className="form-group">
+              <label>Face Selector Mode</label>
+              <select
+                value={facefusionSelectorMode}
+                onChange={(e) => setFacefusionSelectorMode(e.target.value)}
+              >
+                <option value="reference">Reference (recommended)</option>
+                <option value="one">One - By position</option>
+                <option value="many">Many - All faces</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="settings-grid" style={{ marginTop: '12px' }}>
+            <div className="form-group">
+              <label>Face Detector</label>
+              <select
+                value={facefusionDetectorModel}
+                onChange={(e) => setFacefusionDetectorModel(e.target.value)}
+              >
+                <option value="retinaface">RetinaFace (recommended)</option>
+                <option value="scrfd">SCRFD</option>
+                <option value="yolo_face">YOLO Face</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Reference Distance: {facefusionReferenceDistance}</label>
+              <input
+                type="range"
+                value={facefusionReferenceDistance}
+                onChange={(e) => setFacefusionReferenceDistance(parseFloat(e.target.value))}
+                min="0.4"
+                max="1.0"
+                step="0.05"
+                style={{ width: '100%' }}
+              />
+            </div>
           </div>
         </div>
 

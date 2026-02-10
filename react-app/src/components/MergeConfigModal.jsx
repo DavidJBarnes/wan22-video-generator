@@ -233,11 +233,15 @@ export default function MergeConfigModal({ open, onClose, jobId, segments, onFin
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             {/* Show N-1 transition cards for N segments (skip segment 0) */}
             {completedSegments.slice(1).map((segment, idx) => {
-              const prevSegment = completedSegments[idx]; // Previous segment
-              const segIdx = segment.segment_index;
+              const prevSegment = completedSegments[idx]; // Previous segment in filtered list
+              const segIdx = segment.segment_index; // DB index for API calls
               const offset = offsets[segIdx.toString()] || 0;
               const info = segmentInfo[segIdx] || { frameCount: 120, fps: 24 };
               const maxOffset = info.frameCount - 1; // Allow up to all but 1 frame
+
+              // Display numbers are 1-based positions in the filtered list
+              const prevDisplayNum = idx + 1;
+              const currDisplayNum = idx + 2;
 
               return (
                 <Box
@@ -250,21 +254,21 @@ export default function MergeConfigModal({ open, onClose, jobId, segments, onFin
                   }}
                 >
                   <Typography variant="subtitle2" sx={{ mb: 2 }}>
-                    Transition: Segment {prevSegment.segment_index + 1} → Segment {segIdx + 1}
+                    Transition: Segment {prevDisplayNum} → Segment {currDisplayNum}
                   </Typography>
 
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                     {/* Previous segment end frame */}
                     <Box sx={{ textAlign: 'center' }}>
                       <Typography variant="caption" color="text.secondary">
-                        Seg {prevSegment.segment_index + 1} End
+                        Seg {prevDisplayNum} End
                       </Typography>
                       <Box sx={thumbnailContainerStyle}>
                         {prevSegment.end_frame_url ? (
                           <Box
                             component="img"
                             src={prevSegment.end_frame_url}
-                            alt={`Segment ${prevSegment.segment_index + 1} end`}
+                            alt={`Segment ${prevDisplayNum} end`}
                             sx={thumbnailImageStyle}
                             onError={(e) => {
                               e.target.style.display = 'none';
@@ -285,14 +289,14 @@ export default function MergeConfigModal({ open, onClose, jobId, segments, onFin
                     {/* Current segment start frame (with offset) */}
                     <Box sx={{ textAlign: 'center' }}>
                       <Typography variant="caption" color="text.secondary">
-                        Seg {segIdx + 1} Start {offset > 0 ? `(+${offset} frames)` : ''}
+                        Seg {currDisplayNum} Start {offset > 0 ? `(+${offset} frames)` : ''}
                       </Typography>
                       <Box sx={thumbnailContainerStyle}>
                         <Box
                           component="img"
                           key={`${segIdx}-${offset}`}
                           src={API.getSegmentFrame(jobId, segIdx, offset)}
-                          alt={`Segment ${segIdx + 1} start`}
+                          alt={`Segment ${currDisplayNum} start`}
                           sx={thumbnailImageStyle}
                           onError={(e) => {
                             e.target.style.display = 'none';

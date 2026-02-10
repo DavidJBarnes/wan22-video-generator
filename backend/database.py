@@ -347,6 +347,18 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Add workflow_settings column for storing execution-time settings snapshot
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN workflow_settings TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
+        # Add duration column for per-segment duration (seconds)
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN duration REAL")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Add priority column for queue ordering (lower number = higher priority)
         try:
             cursor.execute("ALTER TABLE jobs ADD COLUMN priority INTEGER DEFAULT 0")
@@ -1191,10 +1203,42 @@ def update_job_parameters(
     prompt: Optional[str] = None,
     negative_prompt: Optional[str] = None,
     parameters: Optional[Dict[str, Any]] = None
-):
-    """Update job name, prompt, and parameters (only for pending jobs)."""
+) -> tuple:
+    """Update job name, prompt, and parameters (only for pending jobs).
+
+    Returns:
+        Tuple of (success: bool, error_message: str or None)
+    """
     with get_connection() as conn:
         cursor = conn.cursor()
+
+        # Check if dimensions are being changed when active completed segments exist
+        if parameters is not None and ('width' in parameters or 'height' in parameters):
+            # Get current job parameters
+            cursor.execute("SELECT parameters FROM jobs WHERE id = ?", (job_id,))
+            row = cursor.fetchone()
+            if row and row[0]:
+                try:
+                    current_params = json.loads(row[0])
+                except:
+                    current_params = {}
+
+                current_width = current_params.get('width')
+                current_height = current_params.get('height')
+                new_width = parameters.get('width', current_width)
+                new_height = parameters.get('height', current_height)
+
+                # Check if dimensions are actually changing
+                if (new_width != current_width or new_height != current_height):
+                    # Check for active (non-deleted) completed segments
+                    cursor.execute("""
+                        SELECT COUNT(*) FROM job_segments
+                        WHERE job_id = ? AND status = 'completed' AND deleted_at IS NULL
+                    """, (job_id,))
+                    completed_count = cursor.fetchone()[0]
+
+                    if completed_count > 0:
+                        return False, f"Cannot change dimensions ({current_width}x{current_height} → {new_width}x{new_height}) because {completed_count} completed segment(s) exist. Delete them first or create a new job."
 
         updates = []
         params = []
@@ -1216,7 +1260,7 @@ def update_job_parameters(
             params.append(json.dumps(parameters))
 
         if not updates:
-            return False
+            return False, "No updates provided"
 
         params.append(job_id)
 
@@ -1225,7 +1269,9 @@ def update_job_parameters(
             params
         )
 
-        return cursor.rowcount > 0
+        if cursor.rowcount > 0:
+            return True, None
+        return False, "Job not found or not in editable state"
 
 
 def get_job_merge_offsets(job_id: int) -> Optional[Dict[str, int]]:
@@ -1411,6 +1457,7 @@ def create_first_segment(
     high_loras: Optional[List[str]] = None,
     low_loras: Optional[List[str]] = None,
     faceswap_enabled: bool = False,
+    faceswap_method: str = "reactor",
     faceswap_image: Optional[str] = None,
     faceswap_faces_order: str = "left-right",
     faceswap_faces_index: str = "0",
@@ -1424,7 +1471,8 @@ def create_first_segment(
     faceswap_pixel_boost: Optional[str] = None,
     faceswap_selector_mode: Optional[str] = None,
     faceswap_detector_model: Optional[str] = None,
-    fade_to_black: bool = False
+    fade_to_black: bool = False,
+    duration: Optional[float] = None
 ):
     """Create the first segment for a job (on-demand workflow).
 
@@ -1452,13 +1500,15 @@ def create_first_segment(
         faceswap_selector_mode: Face selector mode (one, many, reference)
         faceswap_detector_model: Face detector model
         fade_to_black: Whether to apply fade-to-black transition at segment end
+        duration: Segment duration in seconds (overrides job-level setting)
     """
-    # Build faceswap_params JSON if any preset settings are provided
+    # Build faceswap_params JSON - always include method, plus any preset settings
     faceswap_params = None
-    if any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
+    if faceswap_method or any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
             faceswap_region_mask is not None, faceswap_score_threshold is not None,
             faceswap_pixel_boost, faceswap_selector_mode, faceswap_detector_model]):
         faceswap_params = json.dumps({
+            "method": faceswap_method or "reactor",
             "preset": faceswap_preset,
             "model": faceswap_model,
             "occluder": faceswap_occluder,
@@ -1475,12 +1525,12 @@ def create_first_segment(
         cursor.execute("""
             INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora,
                                       faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index,
-                                      faceswap_source_image, faceswap_params, fade_to_black, created_at)
-            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      faceswap_source_image, faceswap_params, fade_to_black, duration, created_at)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (job_id, 0, initial_prompt, start_image_url,
               serialize_loras(high_loras), serialize_loras(low_loras),
               1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index,
-              faceswap_source_image, faceswap_params, 1 if fade_to_black else 0, utc_now_iso()))
+              faceswap_source_image, faceswap_params, 1 if fade_to_black else 0, duration, utc_now_iso()))
 
 
 def create_next_segment(
@@ -1492,6 +1542,7 @@ def create_next_segment(
     high_loras: Optional[List[str]] = None,
     low_loras: Optional[List[str]] = None,
     faceswap_enabled: bool = False,
+    faceswap_method: str = "reactor",
     faceswap_image: Optional[str] = None,
     faceswap_faces_order: str = "left-right",
     faceswap_faces_index: str = "0",
@@ -1506,7 +1557,8 @@ def create_next_segment(
     faceswap_selector_mode: Optional[str] = None,
     faceswap_detector_model: Optional[str] = None,
     fade_to_black: bool = False,
-    custom_start_image: Optional[str] = None
+    custom_start_image: Optional[str] = None,
+    duration: Optional[float] = None
 ):
     """Create the next segment for a job (on-demand workflow).
 
@@ -1536,16 +1588,18 @@ def create_next_segment(
         faceswap_detector_model: Face detector model
         fade_to_black: Whether to apply fade-to-black transition at segment end
         custom_start_image: Optional path to custom start image from image repo (overrides default)
+        duration: Segment duration in seconds (overrides job-level setting)
     """
     # Store template as-is, or use prompt if no template provided
     template = prompt_template if prompt_template is not None else prompt
 
-    # Build faceswap_params JSON if any preset settings are provided
+    # Build faceswap_params JSON - always include method, plus any preset settings
     faceswap_params = None
-    if any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
+    if faceswap_method or any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
             faceswap_region_mask is not None, faceswap_score_threshold is not None,
             faceswap_pixel_boost, faceswap_selector_mode, faceswap_detector_model]):
         faceswap_params = json.dumps({
+            "method": faceswap_method or "reactor",
             "preset": faceswap_preset,
             "model": faceswap_model,
             "occluder": faceswap_occluder,
@@ -1562,12 +1616,12 @@ def create_next_segment(
         cursor.execute("""
             INSERT INTO job_segments (job_id, segment_index, status, prompt, prompt_template, start_image_url, high_lora, low_lora,
                                       faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index,
-                                      faceswap_source_image, faceswap_params, fade_to_black, custom_start_image, created_at)
-            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      faceswap_source_image, faceswap_params, fade_to_black, custom_start_image, duration, created_at)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (job_id, segment_index, prompt, template, start_image_url,
               serialize_loras(high_loras), serialize_loras(low_loras),
               1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index,
-              faceswap_source_image, faceswap_params, 1 if fade_to_black else 0, custom_start_image, utc_now_iso()))
+              faceswap_source_image, faceswap_params, 1 if fade_to_black else 0, custom_start_image, duration, utc_now_iso()))
 
 
 def create_segments_for_job(
@@ -1742,6 +1796,7 @@ def update_segment_prompt(
     high_loras: Optional[List[str]] = None,
     low_loras: Optional[List[str]] = None,
     faceswap_enabled: Optional[bool] = None,
+    faceswap_method: Optional[str] = None,
     faceswap_image: Optional[str] = None,
     faceswap_faces_order: Optional[str] = None,
     faceswap_faces_index: Optional[str] = None,
@@ -1756,7 +1811,8 @@ def update_segment_prompt(
     faceswap_selector_mode: Optional[str] = None,
     faceswap_detector_model: Optional[str] = None,
     fade_to_black: Optional[bool] = None,
-    custom_start_image: Optional[str] = None
+    custom_start_image: Optional[str] = None,
+    duration: Optional[float] = None
 ):
     """Update a segment's prompt and optionally its LoRA and faceswap settings.
 
@@ -1785,6 +1841,7 @@ def update_segment_prompt(
         fade_to_black: Whether to apply fade-to-black transition at segment end, or None to not update
         custom_start_image: Path to custom start image from image repo, or None to not update.
                            Use empty string to clear custom image and revert to default.
+        duration: Segment duration in seconds, or None to not update
     """
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -1822,11 +1879,12 @@ def update_segment_prompt(
             # Empty string means clear (revert to job-level default), otherwise store the URL
             params.append(faceswap_source_image if faceswap_source_image else None)
 
-        # Build faceswap_params JSON if any preset settings are provided
-        if any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
+        # Build faceswap_params JSON - always include method, plus any preset settings
+        if faceswap_method or any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
                 faceswap_region_mask is not None, faceswap_score_threshold is not None,
                 faceswap_pixel_boost, faceswap_selector_mode, faceswap_detector_model]):
             faceswap_params = json.dumps({
+                "method": faceswap_method or "reactor",
                 "preset": faceswap_preset,
                 "model": faceswap_model,
                 "occluder": faceswap_occluder,
@@ -1848,6 +1906,10 @@ def update_segment_prompt(
             updates.append("custom_start_image = ?")
             # Empty string means clear (revert to default), otherwise store the path
             params.append(custom_start_image if custom_start_image else None)
+
+        if duration is not None:
+            updates.append("duration = ?")
+            params.append(duration)
 
         params.extend([job_id, segment_index])
 
@@ -1955,6 +2017,31 @@ def update_segment_fade_to_black(job_id: int, segment_index: int, fade_to_black:
         cursor.execute(
             "UPDATE job_segments SET fade_to_black = ? WHERE job_id = ? AND segment_index = ?",
             (1 if fade_to_black else 0, job_id, segment_index)
+        )
+        return cursor.rowcount > 0
+
+
+def update_segment_workflow_settings(job_id: int, segment_index: int, workflow_settings: Dict[str, Any]) -> bool:
+    """Store the workflow settings snapshot used when processing a segment.
+
+    This captures all settings at execution time so the workflow can be
+    accurately reconstructed later for export.
+
+    Args:
+        job_id: The job ID
+        segment_index: The segment index
+        workflow_settings: Dict containing all settings used for this segment:
+            - high_noise_model, low_noise_model, vae_model, text_encoder
+            - reactor: dict of all ReActor settings
+            - facefusion: dict of all FaceFusion settings
+
+    Returns True if the segment was updated, False otherwise.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE job_segments SET workflow_settings = ? WHERE job_id = ? AND segment_index = ?",
+            (json.dumps(workflow_settings), job_id, segment_index)
         )
         return cursor.rowcount > 0
 

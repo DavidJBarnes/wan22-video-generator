@@ -32,6 +32,7 @@ export default function SubmitPromptModal({
   defaultFaceswap = null,  // {enabled, image, facesOrder, facesIndex} from previous segment or job
   defaultStartImageUrl = null,  // URL of previous segment's end frame (for display)
   defaultCustomStartImage = null,  // Path of custom start image if already set
+  defaultDuration = null,  // Default duration in seconds (from job or previous segment)
   isEditing = false,  // Whether editing an existing segment
   jobInputImage = null,  // Job's initial input image filename
   segments = [],  // All segments for building historical image gallery
@@ -39,6 +40,8 @@ export default function SubmitPromptModal({
   onSuccess
 }) {
   const [prompt, setPrompt] = useState(defaultPrompt);
+  // Segment duration (defaults to job-level or 5s)
+  const [segmentDuration, setSegmentDuration] = useState(defaultDuration || 5);
   // Three LoRA slots, each with lora object and weights
   const [selectedLoras, setSelectedLoras] = useState([
     { lora: null, highWeight: 1, lowWeight: 1 },
@@ -53,16 +56,13 @@ export default function SubmitPromptModal({
 
   // Faceswap state (initialized from defaults)
   const [faceswapEnabled, setFaceswapEnabled] = useState(defaultFaceswap?.enabled || false);
+  const [faceswapMethod, setFaceswapMethod] = useState(defaultFaceswap?.method || 'reactor');
   const [faceswapImage, setFaceswapImage] = useState(defaultFaceswap?.image || FACESWAP_FACES[0]?.value || '');
   const [faceswapFacesOrder, setFaceswapFacesOrder] = useState(defaultFaceswap?.facesOrder || 'left-right');
   const [faceswapFacesIndex, setFaceswapFacesIndex] = useState(defaultFaceswap?.facesIndex || '0');
   // Faceswap source selection: 'preset' for static face images, 'segment' for segment frames
   const [faceswapSourceType, setFaceswapSourceType] = useState(defaultFaceswap?.sourceImage ? 'segment' : 'preset');
   const [faceswapSourceImage, setFaceswapSourceImage] = useState(defaultFaceswap?.sourceImage || '');
-  // Faceswap preset selection (clean_face, occlusion, quality)
-  const [faceswapPreset, setFaceswapPreset] = useState(defaultFaceswap?.preset || 'clean_face');
-  // Faceswap presets loaded from database
-  const [faceswapPresets, setFaceswapPresets] = useState({});
   const [segmentFrames, setSegmentFrames] = useState([]);
   const [hoverPreview, setHoverPreview] = useState(null);  // {url, x, y} for hover preview
 
@@ -194,22 +194,6 @@ export default function SubmitPromptModal({
     loadPromptListNames();
   }, []);
 
-  // Load faceswap presets from settings
-  useEffect(() => {
-    async function loadFaceswapPresets() {
-      try {
-        const data = await API.getSettings();
-        const s = data.settings || data;
-        if (s.faceswap_presets) {
-          const presets = JSON.parse(s.faceswap_presets);
-          setFaceswapPresets(presets);
-        }
-      } catch (error) {
-        console.error('Failed to load faceswap presets:', error);
-      }
-    }
-    loadFaceswapPresets();
-  }, []);
 
   // Build faceswap frames list - use API frames if available, fallback to job input image
   const faceswapFrames = useMemo(() => {
@@ -310,25 +294,15 @@ export default function SubmitPromptModal({
           low_weight: slot.lowWeight
         }));
 
-      // Build faceswap options with preset settings (loaded from database)
-      const presetSettings = faceswapPresets[faceswapPreset] || faceswapPresets.clean_face || {};
+      // Build faceswap options with method selection
       const faceswapOptions = {
         enabled: faceswapEnabled,
+        method: faceswapMethod,
         image: faceswapEnabled && faceswapSourceType === 'preset' ? faceswapImage : '',
         facesOrder: faceswapEnabled ? faceswapFacesOrder : 'left-right',
         facesIndex: faceswapEnabled ? faceswapFacesIndex : '0',
         // Include segment frame source if selected
-        sourceImage: faceswapEnabled && faceswapSourceType === 'segment' ? faceswapSourceImage : '',
-        // Preset settings for FaceFusion
-        preset: faceswapPreset,
-        model: presetSettings.model,
-        occluder: presetSettings.occluder,
-        maskBlur: presetSettings.maskBlur,
-        regionMask: presetSettings.regionMask,
-        scoreThreshold: presetSettings.scoreThreshold,
-        pixelBoost: presetSettings.pixelBoost,
-        selectorMode: presetSettings.selectorMode,
-        detectorModel: presetSettings.detectorModel
+        sourceImage: faceswapEnabled && faceswapSourceType === 'segment' ? faceswapSourceImage : ''
       };
 
       // Send both resolved prompt and original template (with tags intact)
@@ -342,7 +316,8 @@ export default function SubmitPromptModal({
         faceswapOptions,
         false,  // fadeToBlack - controlled via segment timeline, not modal
         customStartImage,  // Custom start image path (or null for default)
-        originalTemplate  // Original prompt with tags intact (for prepopulating next segment)
+        originalTemplate,  // Original prompt with tags intact (for prepopulating next segment)
+        segmentDuration  // Per-segment duration
       );
 
       showToast(isEditing ? 'Segment updated successfully' : 'Prompt submitted successfully', 'success');
@@ -485,6 +460,24 @@ export default function SubmitPromptModal({
             </button>
           </div>
 
+          {/* Segment Duration */}
+          <div className="form-group">
+            <FormControl variant="outlined" size="small" sx={{ minWidth: 150 }}>
+              <InputLabel>Duration</InputLabel>
+              <Select
+                value={segmentDuration}
+                onChange={(e) => setSegmentDuration(e.target.value)}
+                label="Duration"
+              >
+                <MenuItem value={3}>3 seconds</MenuItem>
+                <MenuItem value={5}>5 seconds</MenuItem>
+                <MenuItem value={8}>8 seconds</MenuItem>
+                <MenuItem value={10}>10 seconds</MenuItem>
+                <MenuItem value={15}>15 seconds</MenuItem>
+              </Select>
+            </FormControl>
+          </div>
+
           {/* LoRAs - 3 columns */}
           <div className="modal-lora-grid">
             {[0, 1, 2].map((idx) => (
@@ -569,25 +562,28 @@ export default function SubmitPromptModal({
                   onChange={(e) => setFaceswapEnabled(e.target.checked)}
                 />
               }
-              label={<span style={{ fontWeight: 500 }}>Enable Face Swap (FaceFusion)</span>}
+              label={<span style={{ fontWeight: 500 }}>Enable Face Swap</span>}
             />
             {faceswapEnabled && (
               <>
-                {/* Preset selector */}
-                <FormControl fullWidth variant="outlined" size="small" sx={{ mt: 1, mb: 1 }}>
-                  <InputLabel>Preset</InputLabel>
-                  <Select
-                    value={faceswapPreset}
-                    onChange={(e) => setFaceswapPreset(e.target.value)}
-                    label="Preset"
+                {/* Method selector */}
+                <div style={{ display: 'flex', gap: '8px', marginTop: '8px', marginBottom: '8px' }}>
+                  <Button
+                    variant={faceswapMethod === 'reactor' ? 'contained' : 'outlined'}
+                    size="small"
+                    onClick={() => setFaceswapMethod('reactor')}
                   >
-                    {Object.entries(faceswapPresets).map(([key, preset]) => (
-                      <MenuItem key={key} value={key}>
-                        {preset.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                    ReActor
+                  </Button>
+                  <Button
+                    variant={faceswapMethod === 'facefusion' ? 'contained' : 'outlined'}
+                    size="small"
+                    onClick={() => setFaceswapMethod('facefusion')}
+                    color="secondary"
+                  >
+                    FaceFusion (occlusions)
+                  </Button>
+                </div>
 
                 {/* Source type selector */}
                 <div style={{ display: 'flex', gap: '8px', marginTop: '8px', marginBottom: '8px' }}>
