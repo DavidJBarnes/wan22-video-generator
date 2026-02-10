@@ -680,6 +680,13 @@ class APIClient {
       if (faceswapOptions.detectorModel) {
         formData.append('faceswap_detector_model', faceswapOptions.detectorModel);
       }
+      // Mask settings (these control which facial regions are swapped)
+      if (faceswapOptions.maskAreas) {
+        formData.append('faceswap_mask_areas', faceswapOptions.maskAreas);
+      }
+      if (faceswapOptions.maskRegions) {
+        formData.append('faceswap_mask_regions', faceswapOptions.maskRegions);
+      }
     }
 
     // Custom start image (overrides default previous segment's last frame)
