@@ -1311,6 +1311,8 @@ async def export_segment_workflow(job_id: int, segment_index: int):
             "selector_mode": get_setting("facefusion_selector_mode", "reference"),
             "detector_model": get_setting("facefusion_detector_model", "retinaface"),
             "reference_distance": float(get_setting("facefusion_reference_distance", "0.8")),
+            "mask_areas": get_setting("faceswap_mask_areas", "upper-face,lower-face,mouth"),
+            "mask_regions": get_setting("faceswap_mask_regions", "skin,nose,mouth,upper-lip,lower-lip"),
         }
 
     # Build output prefix from job id and name
@@ -1355,6 +1357,8 @@ async def export_segment_workflow(job_id: int, segment_index: int):
         faceswap_selector_mode=facefusion_settings.get("selector_mode", "reference"),
         faceswap_detector_model=facefusion_settings.get("detector_model", "retinaface"),
         faceswap_reference_distance=float(facefusion_settings.get("reference_distance", 0.8)),
+        faceswap_mask_areas=facefusion_settings.get("mask_areas", "upper-face,lower-face,mouth"),
+        faceswap_mask_regions=facefusion_settings.get("mask_regions", "skin,nose,mouth,upper-lip,lower-lip"),
     )
 
     # Return as downloadable JSON
