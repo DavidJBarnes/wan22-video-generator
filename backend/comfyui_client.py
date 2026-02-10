@@ -353,6 +353,8 @@ class ComfyUIClient:
         faceswap_selector_mode: str = "reference",
         faceswap_detector_model: str = "retinaface",
         faceswap_reference_distance: float = 0.8,
+        faceswap_mask_areas: str = "upper-face,lower-face,mouth",
+        faceswap_mask_regions: str = "skin,nose,mouth,upper-lip,lower-lip",
     ) -> Dict[str, Any]:
         """Build a Wan2.2 i2v workflow using the pre-converted API template.
 
@@ -412,6 +414,8 @@ class ComfyUIClient:
             faceswap_selector_mode=faceswap_selector_mode,
             faceswap_detector_model=faceswap_detector_model,
             faceswap_reference_distance=faceswap_reference_distance,
+            faceswap_mask_areas=faceswap_mask_areas,
+            faceswap_mask_regions=faceswap_mask_regions,
         )
 
     def build_workflow(
