@@ -657,6 +657,8 @@ def init_db():
             "faceswap_selector_mode": "reference",
             "faceswap_detector_model": "retinaface",
             "faceswap_reference_distance": "0.8",
+            "faceswap_mask_areas": "upper-face,lower-face,mouth",
+            "faceswap_mask_regions": "skin,nose,mouth,upper-lip,lower-lip",
             # FaceFusion preset definitions (JSON)
             "faceswap_presets": json.dumps({
                 "clean_face": {
@@ -669,7 +671,9 @@ def init_db():
                     "pixelBoost": "512x512",
                     "selectorMode": "reference",
                     "detectorModel": "retinaface",
-                    "referenceFaceDistance": 0.8
+                    "referenceFaceDistance": 0.8,
+                    "maskAreas": "upper-face,lower-face,mouth",
+                    "maskRegions": "skin,nose,mouth,upper-lip,lower-lip"
                 },
                 "occlusion": {
                     "label": "Occlusion - Hands/objects blocking face",
@@ -681,7 +685,9 @@ def init_db():
                     "pixelBoost": "768x768",
                     "selectorMode": "reference",
                     "detectorModel": "retinaface",
-                    "referenceFaceDistance": 0.8
+                    "referenceFaceDistance": 0.8,
+                    "maskAreas": "upper-face,lower-face,mouth",
+                    "maskRegions": "skin,nose,mouth,upper-lip,lower-lip"
                 },
                 "quality": {
                     "label": "High Quality - Close-ups, maximum detail (slower)",
@@ -693,7 +699,9 @@ def init_db():
                     "pixelBoost": "1024x1024",
                     "selectorMode": "reference",
                     "detectorModel": "retinaface",
-                    "referenceFaceDistance": 0.8
+                    "referenceFaceDistance": 0.8,
+                    "maskAreas": "upper-face,lower-face,mouth",
+                    "maskRegions": "skin,nose,mouth,upper-lip,lower-lip"
                 }
             })
         }
@@ -1471,6 +1479,8 @@ def create_first_segment(
     faceswap_pixel_boost: Optional[str] = None,
     faceswap_selector_mode: Optional[str] = None,
     faceswap_detector_model: Optional[str] = None,
+    faceswap_mask_areas: Optional[str] = None,
+    faceswap_mask_regions: Optional[str] = None,
     fade_to_black: bool = False,
     duration: Optional[float] = None
 ):
@@ -1499,6 +1509,8 @@ def create_first_segment(
         faceswap_pixel_boost: Pixel boost resolution
         faceswap_selector_mode: Face selector mode (one, many, reference)
         faceswap_detector_model: Face detector model
+        faceswap_mask_areas: Comma-separated face mask areas (upper-face, lower-face, mouth)
+        faceswap_mask_regions: Comma-separated face mask regions (skin, nose, mouth, upper-lip, lower-lip)
         fade_to_black: Whether to apply fade-to-black transition at segment end
         duration: Segment duration in seconds (overrides job-level setting)
     """
@@ -1506,7 +1518,8 @@ def create_first_segment(
     faceswap_params = None
     if faceswap_method or any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
             faceswap_region_mask is not None, faceswap_score_threshold is not None,
-            faceswap_pixel_boost, faceswap_selector_mode, faceswap_detector_model]):
+            faceswap_pixel_boost, faceswap_selector_mode, faceswap_detector_model,
+            faceswap_mask_areas, faceswap_mask_regions]):
         faceswap_params = json.dumps({
             "method": faceswap_method or "reactor",
             "preset": faceswap_preset,
@@ -1517,7 +1530,9 @@ def create_first_segment(
             "score_threshold": faceswap_score_threshold,
             "pixel_boost": faceswap_pixel_boost,
             "selector_mode": faceswap_selector_mode,
-            "detector_model": faceswap_detector_model
+            "detector_model": faceswap_detector_model,
+            "mask_areas": faceswap_mask_areas,
+            "mask_regions": faceswap_mask_regions
         })
 
     with get_connection() as conn:
@@ -1556,6 +1571,8 @@ def create_next_segment(
     faceswap_pixel_boost: Optional[str] = None,
     faceswap_selector_mode: Optional[str] = None,
     faceswap_detector_model: Optional[str] = None,
+    faceswap_mask_areas: Optional[str] = None,
+    faceswap_mask_regions: Optional[str] = None,
     fade_to_black: bool = False,
     custom_start_image: Optional[str] = None,
     duration: Optional[float] = None
@@ -1586,6 +1603,8 @@ def create_next_segment(
         faceswap_pixel_boost: Pixel boost resolution
         faceswap_selector_mode: Face selector mode (one, many, reference)
         faceswap_detector_model: Face detector model
+        faceswap_mask_areas: Comma-separated face mask areas (upper-face, lower-face, mouth)
+        faceswap_mask_regions: Comma-separated face mask regions (skin, nose, mouth, upper-lip, lower-lip)
         fade_to_black: Whether to apply fade-to-black transition at segment end
         custom_start_image: Optional path to custom start image from image repo (overrides default)
         duration: Segment duration in seconds (overrides job-level setting)
@@ -1597,7 +1616,8 @@ def create_next_segment(
     faceswap_params = None
     if faceswap_method or any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
             faceswap_region_mask is not None, faceswap_score_threshold is not None,
-            faceswap_pixel_boost, faceswap_selector_mode, faceswap_detector_model]):
+            faceswap_pixel_boost, faceswap_selector_mode, faceswap_detector_model,
+            faceswap_mask_areas, faceswap_mask_regions]):
         faceswap_params = json.dumps({
             "method": faceswap_method or "reactor",
             "preset": faceswap_preset,
@@ -1608,7 +1628,9 @@ def create_next_segment(
             "score_threshold": faceswap_score_threshold,
             "pixel_boost": faceswap_pixel_boost,
             "selector_mode": faceswap_selector_mode,
-            "detector_model": faceswap_detector_model
+            "detector_model": faceswap_detector_model,
+            "mask_areas": faceswap_mask_areas,
+            "mask_regions": faceswap_mask_regions
         })
 
     with get_connection() as conn:
@@ -1810,6 +1832,8 @@ def update_segment_prompt(
     faceswap_pixel_boost: Optional[str] = None,
     faceswap_selector_mode: Optional[str] = None,
     faceswap_detector_model: Optional[str] = None,
+    faceswap_mask_areas: Optional[str] = None,
+    faceswap_mask_regions: Optional[str] = None,
     fade_to_black: Optional[bool] = None,
     custom_start_image: Optional[str] = None,
     duration: Optional[float] = None
@@ -1838,6 +1862,8 @@ def update_segment_prompt(
         faceswap_pixel_boost: Pixel boost resolution
         faceswap_selector_mode: Face selector mode (one, many, reference)
         faceswap_detector_model: Face detector model
+        faceswap_mask_areas: Comma-separated face mask areas (upper-face, lower-face, mouth)
+        faceswap_mask_regions: Comma-separated face mask regions (skin, nose, mouth, upper-lip, lower-lip)
         fade_to_black: Whether to apply fade-to-black transition at segment end, or None to not update
         custom_start_image: Path to custom start image from image repo, or None to not update.
                            Use empty string to clear custom image and revert to default.
@@ -1882,7 +1908,8 @@ def update_segment_prompt(
         # Build faceswap_params JSON - always include method, plus any preset settings
         if faceswap_method or any([faceswap_preset, faceswap_model, faceswap_occluder, faceswap_mask_blur is not None,
                 faceswap_region_mask is not None, faceswap_score_threshold is not None,
-                faceswap_pixel_boost, faceswap_selector_mode, faceswap_detector_model]):
+                faceswap_pixel_boost, faceswap_selector_mode, faceswap_detector_model,
+                faceswap_mask_areas, faceswap_mask_regions]):
             faceswap_params = json.dumps({
                 "method": faceswap_method or "reactor",
                 "preset": faceswap_preset,
@@ -1893,7 +1920,9 @@ def update_segment_prompt(
                 "score_threshold": faceswap_score_threshold,
                 "pixel_boost": faceswap_pixel_boost,
                 "selector_mode": faceswap_selector_mode,
-                "detector_model": faceswap_detector_model
+                "detector_model": faceswap_detector_model,
+                "mask_areas": faceswap_mask_areas,
+                "mask_regions": faceswap_mask_regions
             })
             updates.append("faceswap_params = ?")
             params.append(faceswap_params)

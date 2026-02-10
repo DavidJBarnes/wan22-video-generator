@@ -260,6 +260,8 @@ def build_wan_i2v_workflow(
     faceswap_selector_mode: str = "reference",
     faceswap_detector_model: str = "retinaface",
     faceswap_reference_distance: float = 0.8,
+    faceswap_mask_areas: str = "upper-face,lower-face,mouth",
+    faceswap_mask_regions: str = "skin,nose,mouth,upper-lip,lower-lip",
 ) -> Dict[str, Any]:
     """Build a Wan2.2 i2v workflow by injecting values into the pre-converted template.
 
@@ -475,8 +477,8 @@ def build_wan_i2v_workflow(
                 "use_occlusion_mask": True,        # ENABLE OCCLUSION DETECTION
                 "use_area_mask": False,            # Don't use area mask
                 "use_region_mask": faceswap_region_mask,    # Configurable region mask
-                "face_mask_areas": "upper-face,lower-face,mouth",
-                "face_mask_regions": "skin,nose,mouth,upper-lip,lower-lip",
+                "face_mask_areas": faceswap_mask_areas,
+                "face_mask_regions": faceswap_mask_regions,
                 "face_mask_padding": "0,0,0,0"     # No padding
             }
 

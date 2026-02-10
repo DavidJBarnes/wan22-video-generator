@@ -53,6 +53,8 @@ export default function Settings() {
   const [facefusionSelectorMode, setFacefusionSelectorMode] = useState('reference');
   const [facefusionDetectorModel, setFacefusionDetectorModel] = useState('retinaface');
   const [facefusionReferenceDistance, setFacefusionReferenceDistance] = useState(0.8);
+  const [facefusionMaskAreas, setFacefusionMaskAreas] = useState('upper-face,lower-face,mouth');
+  const [facefusionMaskRegions, setFacefusionMaskRegions] = useState('skin,nose,mouth,upper-lip,lower-lip');
 
   // Sync state
   const [syncRunning, setSyncRunning] = useState(false);
@@ -148,6 +150,8 @@ export default function Settings() {
       setFacefusionSelectorMode(s.facefusion_selector_mode || 'reference');
       setFacefusionDetectorModel(s.facefusion_detector_model || 'retinaface');
       setFacefusionReferenceDistance(parseFloat(s.facefusion_reference_distance) || 0.8);
+      setFacefusionMaskAreas(s.faceswap_mask_areas || 'upper-face,lower-face,mouth');
+      setFacefusionMaskRegions(s.faceswap_mask_regions || 'skin,nose,mouth,upper-lip,lower-lip');
 
       // VR settings (validated for Quest 3S)
       setVrEyeSeparation(parseFloat(s.vr_eye_separation) || 0.015);
@@ -271,7 +275,9 @@ export default function Settings() {
         facefusion_pixel_boost: facefusionPixelBoost,
         facefusion_selector_mode: facefusionSelectorMode,
         facefusion_detector_model: facefusionDetectorModel,
-        facefusion_reference_distance: String(facefusionReferenceDistance)
+        facefusion_reference_distance: String(facefusionReferenceDistance),
+        faceswap_mask_areas: facefusionMaskAreas,
+        faceswap_mask_regions: facefusionMaskRegions
       };
 
       await API.updateSettings(settingsPayload);
@@ -984,6 +990,97 @@ export default function Settings() {
                 step="0.05"
                 style={{ width: '100%' }}
               />
+            </div>
+          </div>
+
+          <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #333' }}>
+            <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>Face Mask Configuration</h3>
+            <p style={{ color: '#666', fontSize: '12px', marginBottom: '16px' }}>
+              Control which facial regions are included in the swap. Exclude mouth for eating/talking scenes to prevent artifacts.
+            </p>
+
+            <div className="form-group">
+              <label>Mask Areas</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+                {['upper-face', 'lower-face', 'mouth'].map(area => (
+                  <label key={area} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', padding: '4px 8px', backgroundColor: facefusionMaskAreas.split(',').includes(area) ? '#1976d2' : '#333', borderRadius: '4px', color: '#fff', fontSize: '12px' }}>
+                    <input
+                      type="checkbox"
+                      checked={facefusionMaskAreas.split(',').includes(area)}
+                      onChange={(e) => {
+                        const areas = facefusionMaskAreas.split(',').filter(a => a);
+                        if (e.target.checked) {
+                          if (!areas.includes(area)) areas.push(area);
+                        } else {
+                          const idx = areas.indexOf(area);
+                          if (idx > -1) areas.splice(idx, 1);
+                        }
+                        setFacefusionMaskAreas(areas.join(','));
+                      }}
+                      style={{ display: 'none' }}
+                    />
+                    {area}
+                  </label>
+                ))}
+              </div>
+              <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                Face areas to include in the swap. Uncheck "mouth" for eating/drinking scenes.
+              </small>
+            </div>
+
+            <div className="form-group" style={{ marginTop: '12px' }}>
+              <label>Mask Regions</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+                {['skin', 'nose', 'mouth', 'upper-lip', 'lower-lip', 'left-eyebrow', 'right-eyebrow', 'left-eye', 'right-eye'].map(region => (
+                  <label key={region} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', padding: '4px 8px', backgroundColor: facefusionMaskRegions.split(',').includes(region) ? '#2e7d32' : '#333', borderRadius: '4px', color: '#fff', fontSize: '12px' }}>
+                    <input
+                      type="checkbox"
+                      checked={facefusionMaskRegions.split(',').includes(region)}
+                      onChange={(e) => {
+                        const regions = facefusionMaskRegions.split(',').filter(r => r);
+                        if (e.target.checked) {
+                          if (!regions.includes(region)) regions.push(region);
+                        } else {
+                          const idx = regions.indexOf(region);
+                          if (idx > -1) regions.splice(idx, 1);
+                        }
+                        setFacefusionMaskRegions(regions.join(','));
+                      }}
+                      style={{ display: 'none' }}
+                    />
+                    {region}
+                  </label>
+                ))}
+              </div>
+              <small style={{ color: '#666', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                Specific facial regions to include. Uncheck lip/mouth regions for talking scenes.
+              </small>
+            </div>
+
+            <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#1e1e1e', borderRadius: '4px' }}>
+              <strong style={{ fontSize: '12px', color: '#999' }}>Presets:</strong>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => {
+                    setFacefusionMaskAreas('upper-face,lower-face,mouth');
+                    setFacefusionMaskRegions('skin,nose,mouth,upper-lip,lower-lip');
+                  }}
+                >
+                  Full Face
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => {
+                    setFacefusionMaskAreas('upper-face,lower-face');
+                    setFacefusionMaskRegions('skin,nose');
+                  }}
+                >
+                  Preserve Mouth
+                </Button>
+              </div>
             </div>
           </div>
         </div>
