@@ -497,3 +497,9 @@ Always create a relevant git branch (fix/* or feature/*) before starting work. N
 - The application is deployed on 2070.zero, but all code changes and testing should be done locally
 - If remote access is needed, ask the user first
 
+## Server Modification Rules
+- NEVER make direct changes to the server (database schema, data, files) without a corresponding code change in the repository
+- Database schema changes must be done through migrations in `database.py` `init_db()`, not manual SQL commands
+- If a migration didn't run, fix the deployment/restart process - don't manually patch the database
+- All fixes must be reproducible through the codebase, not one-off server commands
+
