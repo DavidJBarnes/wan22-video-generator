@@ -671,9 +671,7 @@ def init_db():
                     "pixelBoost": "512x512",
                     "selectorMode": "reference",
                     "detectorModel": "retinaface",
-                    "referenceFaceDistance": 0.8,
-                    "maskAreas": "upper-face,lower-face,mouth",
-                    "maskRegions": "skin,nose,mouth,upper-lip,lower-lip"
+                    "referenceFaceDistance": 0.8
                 },
                 "occlusion": {
                     "label": "Occlusion - Hands/objects blocking face",
@@ -685,9 +683,7 @@ def init_db():
                     "pixelBoost": "768x768",
                     "selectorMode": "reference",
                     "detectorModel": "retinaface",
-                    "referenceFaceDistance": 0.8,
-                    "maskAreas": "upper-face,lower-face,mouth",
-                    "maskRegions": "skin,nose,mouth,upper-lip,lower-lip"
+                    "referenceFaceDistance": 0.8
                 },
                 "quality": {
                     "label": "High Quality - Close-ups, maximum detail (slower)",
@@ -699,9 +695,7 @@ def init_db():
                     "pixelBoost": "1024x1024",
                     "selectorMode": "reference",
                     "detectorModel": "retinaface",
-                    "referenceFaceDistance": 0.8,
-                    "maskAreas": "upper-face,lower-face,mouth",
-                    "maskRegions": "skin,nose,mouth,upper-lip,lower-lip"
+                    "referenceFaceDistance": 0.8
                 }
             })
         }
@@ -711,6 +705,33 @@ def init_db():
                 "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
                 (key, value)
             )
+
+        # Migration: Remove hardcoded maskAreas/maskRegions from faceswap_presets
+        # This allows these settings to be controlled globally via Settings page
+        cursor.execute("SELECT value FROM settings WHERE key = 'migration_preset_mask_cleanup_done'")
+        if not cursor.fetchone():
+            cursor.execute("SELECT value FROM settings WHERE key = 'faceswap_presets'")
+            row = cursor.fetchone()
+            if row:
+                try:
+                    presets = json.loads(row["value"])
+                    updated = False
+                    for preset_name, preset_config in presets.items():
+                        if "maskAreas" in preset_config:
+                            del preset_config["maskAreas"]
+                            updated = True
+                        if "maskRegions" in preset_config:
+                            del preset_config["maskRegions"]
+                            updated = True
+                    if updated:
+                        cursor.execute(
+                            "UPDATE settings SET value = ? WHERE key = 'faceswap_presets'",
+                            (json.dumps(presets),)
+                        )
+                        print("[Migration] Removed maskAreas/maskRegions from faceswap_presets (now uses global settings)")
+                except json.JSONDecodeError:
+                    pass  # Invalid JSON, skip migration
+            cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('migration_preset_mask_cleanup_done', 'true')")
 
 
 # ============== Job Functions ==============
