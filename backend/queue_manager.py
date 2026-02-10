@@ -699,11 +699,18 @@ class QueueManager:
         if job_seed is not None:
             logger.info(f"[Job {job_id}] Using fixed seed {job_seed} for segment {segment_index}")
 
-        # Validate required model settings
-        high_noise_model = get_setting("high_noise_model")
-        low_noise_model = get_setting("low_noise_model")
+        # Get model settings - use segment's stored settings first (snapshot from when queued),
+        # fall back to global settings for legacy segments or if not set
+        high_noise_model = segment.get("high_noise_model") or get_setting("high_noise_model")
+        low_noise_model = segment.get("low_noise_model") or get_setting("low_noise_model")
         vae_model = get_setting("vae_model")
         text_encoder = get_setting("text_encoder")
+
+        # Log which model source is being used
+        if segment.get("high_noise_model"):
+            logger.info(f"[Job {job_id}] Segment {segment_index} using stored model: {high_noise_model}")
+        else:
+            logger.info(f"[Job {job_id}] Segment {segment_index} using global settings model: {high_noise_model}")
 
         missing_models = []
         if not high_noise_model:

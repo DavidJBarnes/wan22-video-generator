@@ -591,12 +591,19 @@ async def create_new_job(job: JobCreate):
             detail="Faceswap is enabled but no face was selected. Please select a preset face or a source frame."
         )
 
+    # Snapshot current model settings - these are persisted with the segment
+    # so changing settings later won't affect already-queued segments
+    current_high_noise_model = get_setting("high_noise_model")
+    current_low_noise_model = get_setting("low_noise_model")
+
     create_first_segment(
         job_id,
         full_prompt,
         start_image_url,
         high_loras=high_loras if high_loras else None,
         low_loras=low_loras if low_loras else None,
+        high_noise_model=current_high_noise_model,
+        low_noise_model=current_low_noise_model,
         faceswap_enabled=params.get("faceswap_enabled", False),
         faceswap_method=params.get("faceswap_method", "reactor"),
         faceswap_image=params.get("faceswap_image", ""),
@@ -1610,6 +1617,10 @@ async def update_segment_prompt_endpoint(
                     comfyui_url = get_setting("comfyui_url", COMFYUI_SERVER_URL)
                     start_image_url = f"{comfyui_url}/view?filename={input_image}&subfolder=&type=input"
 
+        # Snapshot current model settings - persisted with the segment
+        current_high_noise_model = get_setting("high_noise_model")
+        current_low_noise_model = get_setting("low_noise_model")
+
         # Create new segment on-demand
         create_next_segment(
             job_id,
@@ -1619,6 +1630,8 @@ async def update_segment_prompt_endpoint(
             prompt_template=prompt_template,
             high_loras=high_loras if high_loras else None,
             low_loras=low_loras if low_loras else None,
+            high_noise_model=current_high_noise_model,
+            low_noise_model=current_low_noise_model,
             faceswap_enabled=faceswap_enabled or False,
             faceswap_method=faceswap_method or "reactor",
             faceswap_image=faceswap_image or "",
@@ -1641,12 +1654,18 @@ async def update_segment_prompt_endpoint(
             duration=segment_duration
         )
     else:
-        # Segment exists - update its prompt, LoRA, and faceswap settings
+        # Segment exists - update its prompt, LoRA, model, and faceswap settings
+        # Snapshot current model settings when updating segment
+        current_high_noise_model = get_setting("high_noise_model")
+        current_low_noise_model = get_setting("low_noise_model")
+
         update_segment_prompt(
             job_id, segment_index, full_prompt,
             prompt_template=prompt_template,
             high_loras=high_loras if high_loras else None,
             low_loras=low_loras if low_loras else None,
+            high_noise_model=current_high_noise_model,
+            low_noise_model=current_low_noise_model,
             faceswap_enabled=faceswap_enabled,
             faceswap_method=faceswap_method,
             faceswap_image=faceswap_image,

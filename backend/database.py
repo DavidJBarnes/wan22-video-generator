@@ -287,6 +287,16 @@ def init_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+        # Add model columns to persist model selection per segment
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN high_noise_model TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        try:
+            cursor.execute("ALTER TABLE job_segments ADD COLUMN low_noise_model TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
         # Add faceswap columns for per-segment faceswap settings
         try:
             cursor.execute("ALTER TABLE job_segments ADD COLUMN faceswap_enabled INTEGER DEFAULT 0")
@@ -1485,6 +1495,8 @@ def create_first_segment(
     start_image_url: str,
     high_loras: Optional[List[str]] = None,
     low_loras: Optional[List[str]] = None,
+    high_noise_model: Optional[str] = None,
+    low_noise_model: Optional[str] = None,
     faceswap_enabled: bool = False,
     faceswap_method: str = "reactor",
     faceswap_image: Optional[str] = None,
@@ -1516,6 +1528,8 @@ def create_first_segment(
         start_image_url: ComfyUI image URL for the starting image
         high_loras: List of high noise LoRA filenames (max 2)
         low_loras: List of low noise LoRA filenames (max 2)
+        high_noise_model: UNET model for high noise pass (snapshot from settings)
+        low_noise_model: UNET model for low noise pass (snapshot from settings)
         faceswap_enabled: Whether to enable face swapping for this segment
         faceswap_image: Filename of the face image to swap in
         faceswap_faces_order: Order to process faces (left-right, right-left, etc.)
@@ -1560,11 +1574,13 @@ def create_first_segment(
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO job_segments (job_id, segment_index, status, prompt, start_image_url, high_lora, low_lora,
+                                      high_noise_model, low_noise_model,
                                       faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index,
                                       faceswap_source_image, faceswap_params, fade_to_black, duration, created_at)
-            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (job_id, 0, initial_prompt, start_image_url,
               serialize_loras(high_loras), serialize_loras(low_loras),
+              high_noise_model, low_noise_model,
               1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index,
               faceswap_source_image, faceswap_params, 1 if fade_to_black else 0, duration, utc_now_iso()))
 
@@ -1577,6 +1593,8 @@ def create_next_segment(
     prompt_template: Optional[str] = None,
     high_loras: Optional[List[str]] = None,
     low_loras: Optional[List[str]] = None,
+    high_noise_model: Optional[str] = None,
+    low_noise_model: Optional[str] = None,
     faceswap_enabled: bool = False,
     faceswap_method: str = "reactor",
     faceswap_image: Optional[str] = None,
@@ -1610,6 +1628,8 @@ def create_next_segment(
         prompt_template: The original prompt with tags intact (for prepopulating next segment)
         high_loras: List of high noise LoRA filenames (max 2)
         low_loras: List of low noise LoRA filenames (max 2)
+        high_noise_model: UNET model for high noise pass (snapshot from settings)
+        low_noise_model: UNET model for low noise pass (snapshot from settings)
         faceswap_enabled: Whether to enable face swapping for this segment
         faceswap_image: Filename of the face image to swap in
         faceswap_faces_order: Order to process faces (left-right, right-left, etc.)
@@ -1658,11 +1678,13 @@ def create_next_segment(
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO job_segments (job_id, segment_index, status, prompt, prompt_template, start_image_url, high_lora, low_lora,
+                                      high_noise_model, low_noise_model,
                                       faceswap_enabled, faceswap_image, faceswap_faces_order, faceswap_faces_index,
                                       faceswap_source_image, faceswap_params, fade_to_black, custom_start_image, duration, created_at)
-            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (job_id, segment_index, prompt, template, start_image_url,
               serialize_loras(high_loras), serialize_loras(low_loras),
+              high_noise_model, low_noise_model,
               1 if faceswap_enabled else 0, faceswap_image, faceswap_faces_order, faceswap_faces_index,
               faceswap_source_image, faceswap_params, 1 if fade_to_black else 0, custom_start_image, duration, utc_now_iso()))
 
@@ -1838,6 +1860,8 @@ def update_segment_prompt(
     prompt_template: Optional[str] = None,
     high_loras: Optional[List[str]] = None,
     low_loras: Optional[List[str]] = None,
+    high_noise_model: Optional[str] = None,
+    low_noise_model: Optional[str] = None,
     faceswap_enabled: Optional[bool] = None,
     faceswap_method: Optional[str] = None,
     faceswap_image: Optional[str] = None,
@@ -1868,6 +1892,8 @@ def update_segment_prompt(
         prompt_template: The original prompt with tags intact, or None to use prompt value
         high_loras: List of high noise LoRA filenames (max 2), or None to not update
         low_loras: List of low noise LoRA filenames (max 2), or None to not update
+        high_noise_model: UNET model for high noise pass, or None to not update
+        low_noise_model: UNET model for low noise pass, or None to not update
         faceswap_enabled: Whether to enable face swapping, or None to not update
         faceswap_image: Face image filename, or None to not update
         faceswap_faces_order: Faces order, or None to not update
@@ -1904,6 +1930,14 @@ def update_segment_prompt(
         if low_loras is not None:
             updates.append("low_lora = ?")
             params.append(serialize_loras(low_loras))
+
+        if high_noise_model is not None:
+            updates.append("high_noise_model = ?")
+            params.append(high_noise_model)
+
+        if low_noise_model is not None:
+            updates.append("low_noise_model = ?")
+            params.append(low_noise_model)
 
         if faceswap_enabled is not None:
             updates.append("faceswap_enabled = ?")
