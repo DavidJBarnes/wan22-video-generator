@@ -724,6 +724,19 @@ class QueueManager:
             self._notify_update(job_id, "failed")
             return
 
+        # Get mask settings from global Settings
+        faceswap_mask_areas = get_setting("faceswap_mask_areas", "upper-face,lower-face,mouth")
+        faceswap_mask_regions = get_setting("faceswap_mask_regions", "skin,nose,mouth,upper-lip,lower-lip")
+
+        # Auto-enable region_mask when mouth is excluded from mask_areas
+        # This provides double protection against mouth occlusion artifacts
+        mouth_excluded = "mouth" not in faceswap_mask_areas
+        manual_region_mask = get_setting("faceswap_region_mask", "false") == "true"
+        faceswap_region_mask_enabled = manual_region_mask or mouth_excluded
+
+        if mouth_excluded:
+            logger.info(f"[Job {job_id}] Mouth excluded from mask_areas, auto-enabling region_mask")
+
         workflow = client.build_wan_i2v_workflow(
             prompt=segment.get("prompt") or job.get("prompt", ""),
             negative_prompt=job.get("negative_prompt", get_setting("default_negative_prompt", "")),
@@ -755,15 +768,16 @@ class QueueManager:
             faceswap_model=get_setting("facefusion_model", "inswapper_128"),
             faceswap_occluder=get_setting("facefusion_occluder", "xseg_1"),
             faceswap_mask_blur=float(get_setting("facefusion_mask_blur", "0.3")),
-            faceswap_region_mask=(get_setting("facefusion_region_mask", "false") == "true"),
+            # Auto-enable region_mask when mouth is excluded from mask_areas for better occlusion handling
+            faceswap_region_mask=faceswap_region_mask_enabled,
             faceswap_score_threshold=float(get_setting("facefusion_score_threshold", "0.5")),
             faceswap_pixel_boost=get_setting("facefusion_pixel_boost", "512x512"),
             faceswap_selector_mode=get_setting("facefusion_selector_mode", "reference"),
             faceswap_detector_model=get_setting("facefusion_detector_model", "retinaface"),
             faceswap_reference_distance=float(get_setting("facefusion_reference_distance", "0.8")),
             # Mask settings ALWAYS come from global Settings (never per-segment)
-            faceswap_mask_areas=get_setting("faceswap_mask_areas", "upper-face,lower-face,mouth"),
-            faceswap_mask_regions=get_setting("faceswap_mask_regions", "skin,nose,mouth,upper-lip,lower-lip"),
+            faceswap_mask_areas=faceswap_mask_areas,
+            faceswap_mask_regions=faceswap_mask_regions,
         )
 
         # Capture workflow settings snapshot for later export/reconstruction
@@ -783,14 +797,14 @@ class QueueManager:
                 "model": get_setting("facefusion_model", "inswapper_128"),
                 "occluder": get_setting("facefusion_occluder", "xseg_1"),
                 "mask_blur": float(get_setting("facefusion_mask_blur", "0.3")),
-                "region_mask": get_setting("facefusion_region_mask", "false") == "true",
+                "region_mask": faceswap_region_mask_enabled,  # Use computed value (auto-enabled when mouth excluded)
                 "score_threshold": float(get_setting("facefusion_score_threshold", "0.5")),
                 "pixel_boost": get_setting("facefusion_pixel_boost", "512x512"),
                 "selector_mode": get_setting("facefusion_selector_mode", "reference"),
                 "detector_model": get_setting("facefusion_detector_model", "retinaface"),
                 "reference_distance": float(get_setting("facefusion_reference_distance", "0.8")),
-                "mask_areas": get_setting("faceswap_mask_areas", "upper-face,lower-face,mouth"),
-                "mask_regions": get_setting("faceswap_mask_regions", "skin,nose,mouth,upper-lip,lower-lip"),
+                "mask_areas": faceswap_mask_areas,  # Use computed value
+                "mask_regions": faceswap_mask_regions,  # Use computed value
             },
         }
         update_segment_workflow_settings(job_id, segment_index, workflow_settings)

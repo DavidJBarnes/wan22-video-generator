@@ -1301,18 +1301,27 @@ async def export_segment_workflow(job_id: int, segment_index: int):
             "restore_visibility": float(get_setting("reactor_restore_visibility", "1.0")),
             "codeformer_weight": float(get_setting("reactor_codeformer_weight", "0.8")),
         }
+        # Get mask settings
+        mask_areas = get_setting("faceswap_mask_areas", "upper-face,lower-face,mouth")
+        mask_regions = get_setting("faceswap_mask_regions", "skin,nose,mouth,upper-lip,lower-lip")
+
+        # Auto-enable region_mask when mouth is excluded from mask_areas
+        mouth_excluded = "mouth" not in mask_areas
+        manual_region_mask = get_setting("faceswap_region_mask", "false") == "true"
+        region_mask_enabled = manual_region_mask or mouth_excluded
+
         facefusion_settings = {
             "model": get_setting("facefusion_model", "inswapper_128"),
             "occluder": get_setting("facefusion_occluder", "xseg_1"),
             "mask_blur": float(get_setting("facefusion_mask_blur", "0.3")),
-            "region_mask": get_setting("facefusion_region_mask", "false") == "true",
+            "region_mask": region_mask_enabled,  # Auto-enabled when mouth excluded
             "score_threshold": float(get_setting("facefusion_score_threshold", "0.5")),
             "pixel_boost": get_setting("facefusion_pixel_boost", "512x512"),
             "selector_mode": get_setting("facefusion_selector_mode", "reference"),
             "detector_model": get_setting("facefusion_detector_model", "retinaface"),
             "reference_distance": float(get_setting("facefusion_reference_distance", "0.8")),
-            "mask_areas": get_setting("faceswap_mask_areas", "upper-face,lower-face,mouth"),
-            "mask_regions": get_setting("faceswap_mask_regions", "skin,nose,mouth,upper-lip,lower-lip"),
+            "mask_areas": mask_areas,
+            "mask_regions": mask_regions,
         }
 
     # Build output prefix from job id and name
