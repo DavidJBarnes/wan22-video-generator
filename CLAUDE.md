@@ -427,16 +427,38 @@ RIFE settings (node 200):
 - `clear_cache_after_n_frames: 25` (clears RAM during processing)
 - `ensemble: True` (better quality, uses more memory)
 
-## Testing
+## Testing - MANDATORY Before Any Commit
 
-Before reporting any task as complete, you must:
+**NEVER commit code, push to remote, or claim a fix works until you have verified it 100%.**
 
-1. **Run the code** - Execute the script/application and verify it starts without errors
-2. **Test the specific functionality** - If you wrote a function, call it with realistic inputs. If you built an endpoint, make a test request. If you created a UI component, render it.
-3. **Check edge cases** - Test at least one boundary condition or error path
-4. **Show me the output** - Include the actual terminal output, response, or screenshot in your completion message
+### Before Writing Any Fix
 
-Do not say "Done" or "Complete" until you've run the code and confirmed it works. If something fails during testing, fix it before reporting completion.
+1. **Trace the FULL data flow** - Follow the value from its origin (UI, database, config) through every function call to where it's used. Don't assume you found the problem at the first place you look.
+
+2. **Identify ALL sources** - A value might come from multiple places:
+   - Database settings
+   - Per-record JSON fields (e.g., `faceswap_params`)
+   - Preset/template definitions
+   - Hardcoded defaults in multiple files
+   - Function parameter defaults
+
+3. **Check the actual runtime behavior** - Read the code that runs at execution time, not just where defaults are defined. The bug is often in the ORDER of precedence (which source gets checked first).
+
+### Before Committing
+
+1. **Trace your fix through the full code path** - Manually verify that your change will actually be reached at runtime
+2. **Check for other places the same pattern exists** - If you fix it in one place, search for similar patterns elsewhere
+3. **Verify syntax** - Run `python -m py_compile` on changed Python files
+4. **Build frontend** - Run `npm run build` if you changed JS/JSX files
+
+### What "100% Verified" Means
+
+- You have traced the exact code path that will execute
+- You have confirmed your fix is in that code path
+- You have checked there are no other code paths that bypass your fix
+- You have NOT just fixed the first thing you found and hoped it works
+
+**If you're not 100% certain, say so.** It's better to ask for help debugging than to waste time with partial fixes.
 
 ## ComfyUI Error Handling
 
